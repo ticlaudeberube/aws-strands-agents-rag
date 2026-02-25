@@ -58,62 +58,82 @@ pip install -e ".[dev]"
 cp .env.example .env
 ```
 
-## Step 2: Start Milvus Docker Services (Using Milvus-Standalone - Recommended)
+## Step 2: Start Milvus Docker Services (Optimized Setup)
 
-The `milvus-standalone` folder contains an optimized Docker setup for local development.
+This project includes an optimized Docker setup in the `./docker/` directory with automatic performance tuning. This is the recommended approach.
 
 Open a terminal and run:
 
 ```bash
-# Navigate to milvus-standalone folder
-cd ../milvus-standalone
+# Navigate to docker directory
+cd docker
 
-# Start all services
-docker-compose up -d
+# Run optimization and start services (recommended for first time)
+chmod +x optimize.sh
+./optimize.sh --all
 
-# Check status (should see services running)
-docker-compose ps
-
-# View logs (Ctrl+C to exit)
-docker-compose logs -f
+# This will:
+# - Configure Docker daemon settings
+# - Optimize system parameters (Linux)
+# - Provide macOS setup recommendations
+# - Start all services with proper resource allocation
+# - Display service information
 ```
 
-Expected output should include:
-```
-etcd              Up
-minio             Up
-milvus            Up
-```
-
-**Verify Milvus is running:**
+**Check status:**
 
 ```bash
-# Check Milvus direct connection
-curl http://localhost:19530
+# Verify services are running
+docker-compose ps
 
-# Should respond (connection successful)
+# Expected output:
+# NAME            COMMAND                  SERVICE   STATUS
+# rag-etcd        "etcd -advertise-cli…"   etcd      Up (healthy)
+# rag-minio       "minio server /minio…"   minio     Up (healthy)
+# rag-milvus      "milvus run standalo…"   milvus    Up (healthy)
+# rag-api         "python api_server.py"   rag-api   Up (healthy)
+```
+
+**Access services:**
+
+```bash
+# Milvus gRPC: localhost:19530
+# Milvus WebUI: http://localhost:9091/webui
+# MinIO Console: http://localhost:9001
+# RAG API: http://localhost:8000
+
+# Test connections
+curl http://localhost:8000/health           # RAG API
+curl http://localhost:9091/healthz          # Milvus
 ```
 
 **Return to project root** for next steps:
+
 ```bash
-cd ../aws-stands-agents-rag
+cd ..
 ```
 
-**Alternative: Using Generic Docker Compose** (if milvus-standalone is not available)
+### Alternative: Quick Start (without optimizations)
+
+If you just want to start services without optimization:
+
 ```bash
-# Start all services
-docker-compose -f docker/docker-compose.yml up -d
+cd docker
+docker-compose up -d
+cd ..
+```
 
-# Check status
-docker-compose -f docker/docker-compose.yml ps
+### Alternative: Docker Compose Only
 
-# View logs
-docker-compose -f docker/docker-compose.yml logs -f milvus
+If you prefer not to use the optimization script:
 
-# Verify health
-curl http://localhost:9091/healthz
-
-# Access UI: http://localhost:9091/webui/
+```bash
+# Direct docker-compose
+cd docker
+docker-compose up -d
+docker-compose ps
+curl http://localhost:19530
+cd ..
 ```
 
 ## Step 3: Install and Start Ollama
@@ -165,19 +185,37 @@ Edit `.env` file with your settings:
 ```env
 # Ollama Configuration
 OLLAMA_HOST=http://localhost:11434
-OLLAMA_MODEL=mistral
-OLLAMA_EMBED_MODEL=all-minilm
+OLLAMA_MODEL=mistral:latest
+OLLAMA_EMBED_MODEL=nomic-embed-text:v1.5
 
 # Milvus Configuration
 MILVUS_HOST=localhost
 MILVUS_PORT=19530
 MILVUS_DB_NAME=knowledge_base
+LOADER_MILVUS_DB_NAME=knowledge_base
+
+# Collection Configuration
+OLLAMA_COLLECTION_NAME=milvus_rag_collection
+
+# Performance Settings
+AGENT_CACHE_SIZE=500                    # LRU cache size for embeddings and searches
+EMBEDDING_BATCH_SIZE=32                 # Batch size for bulk embedding operations
+MAX_CHUNK_LENGTH=400                    # Maximum text chunk length
+EMBEDDING_DIM=768                       # Embedding dimension
 
 # Application Configuration
 LOG_LEVEL=INFO
 BATCH_SIZE=10
-EMBEDDING_DIM=384
 ```
+
+**Key Configuration Notes:**
+
+- `OLLAMA_COLLECTION_NAME`: Used consistently across all loaders and services
+- `AGENT_CACHE_SIZE`: Higher values use more memory but improve performance for repeated queries
+- `EMBEDDING_BATCH_SIZE`: Larger batches are faster but use more memory
+- `MILVUS_HOST`: Use "milvus" if running Docker, "localhost" for local Milvus
+
+For more details, see [Collection Configuration Guide](COLLECTION_CONFIG.md).
 
 ## Step 5: Start API Server
 

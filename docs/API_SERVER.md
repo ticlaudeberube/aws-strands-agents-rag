@@ -4,11 +4,31 @@ The RAG Agent is exposed as an OpenAI-compatible REST API server. This allows yo
 
 ## Starting the Server
 
+### Option 1: Using Docker (Recommended)
+
+The API server runs automatically as part of the Docker setup:
+
+```bash
+cd docker
+./optimize.sh --all              # Starts all services including rag-api
+```
+
+The server will start on `http://localhost:8000` inside the container (exposed to localhost:8000)
+
+### Option 2: Manual Start
+
+For development, run directly:
+
 ```bash
 python api_server.py
 ```
 
 The server will start on `http://localhost:8000`
+
+**Prerequisites:**
+- Milvus running at `localhost:19530`
+- Ollama running at configured `OLLAMA_HOST`
+- Documents loaded in configured collection
 
 ## Endpoints
 
@@ -173,32 +193,100 @@ Or directly use the endpoint: `http://localhost:8000/v1/chat/completions`
 
 The API server uses settings from your `.env` file:
 
-```bash
-# Ollama
-OLLAMA_HOST=http://localhost:11434
-OLLAMA_MODEL=mistral
-OLLAMA_EMBED_MODEL=nomic-embed-text:v1.5
+```env
+# Ollama Configuration
+OLLAMA_HOST=http://localhost:11434         # Local development
+# OR for Docker:
+OLLAMA_HOST=http://host.docker.internal:11434  # Docker Desktop
 
-# Milvus
-MILVUS_HOST=localhost
+OLLAMA_MODEL=mistral:latest                # LLM model
+OLLAMA_EMBED_MODEL=nomic-embed-text:v1.5  # Embedding model
+
+# Milvus Configuration  
+MILVUS_HOST=localhost                      # Local development
+# OR for Docker:
+MILVUS_HOST=milvus                         # Docker service name
 MILVUS_PORT=19530
 MILVUS_DB_NAME=knowledge_base
-LOADER_MILVUS_DB_NAME=knowledge_base
 
-# Collection
-OLLAMA_COLLECTION_NAME=milvus_rag_collection
+# Collection Configuration
+OLLAMA_COLLECTION_NAME=milvus_rag_collection  # Must match loaded data
+
+# Performance Settings
+AGENT_CACHE_SIZE=500                       # LRU cache for embeddings/queries
+EMBEDDING_BATCH_SIZE=32                    # Batch size for embedding
+MAX_CHUNK_LENGTH=400                       # Text chunk size
+EMBEDDING_DIM=768                          # Embedding vector dimension
+
+# Application
+LOG_LEVEL=INFO
+BATCH_SIZE=10
+```
+
+### Docker-Specific Configuration
+
+When running the API server in Docker:
+
+```env
+# Use service names instead of localhost
+MILVUS_HOST=milvus
+MILVUS_PORT=19530
+
+# Connect to host Ollama (for Docker Desktop on macOS/Windows)
+OLLAMA_HOST=http://host.docker.internal:11434
+
+# For Linux or if Ollama is in another container
+# OLLAMA_HOST=http://ollama:11434  # if using separate Ollama container
 ```
 
 ## Requirements
 
-Before starting the server:
+### For Docker Deployment (Recommended)
 
-1. **Milvus is running** - Start with `cd ../milvus-standalone && docker-compose up -d` (or use `cd docker && docker-compose up -d` as alternative)
-2. **Ollama is running** - Ensure Ollama is available at `http://localhost:11434`
-3. **Documents are loaded** - Run `python document-loaders/load_milvus_docs_ollama.py`
-4. **Dependencies are installed** - FastAPI and uvicorn are included in pyproject.toml
+1. **Docker Compose Services** - Start with optimization script:
+   ```bash
+   cd docker
+   ./optimize.sh --all
+   ```
+   This starts Milvus, MinIO, etcd, and RAG API automatically
 
-> **Note**: The `milvus-standalone` folder provides an optimized Docker setup for local development and is recommended over the generic docker-compose approach.
+2. **Ollama** - Ensure Ollama is running on your host:
+   ```bash
+   ollama serve
+   ```
+
+3. **Documents Loaded** - Load documentation:
+   ```bash
+   python document-loaders/load_milvus_docs_ollama.py
+   ```
+
+### For Manual Deployment
+
+1. **Milvus** - Running at configured host/port
+2. **Ollama** - Running at configured `OLLAMA_HOST`
+3. **Documents** - Loaded in configured collection
+4. **Dependencies** - FastAPI and uvicorn installed
+
+### Environment Configuration
+
+The server reads from `.env` file:
+
+```bash
+# Connection Settings
+MILVUS_HOST=milvus                         # Use "milvus" for Docker, "localhost" for local
+MILVUS_PORT=19530
+OLLAMA_HOST=http://host.docker.internal:11434  # Docker desktop connects to host via this
+
+# Collection
+OLLAMA_COLLECTION_NAME=milvus_rag_collection
+
+# Performance
+AGENT_CACHE_SIZE=500
+EMBEDDING_BATCH_SIZE=32
+LOG_LEVEL=INFO
+```
+
+> **Docker Note**: When running in Docker container, use `MILVUS_HOST=milvus` (service name) and `OLLAMA_HOST=http://host.docker.internal:11434` (to connect back to host Ollama)
 
 ## Environment Variables
 

@@ -1,77 +1,86 @@
 import json
 import sys
 from pathlib import Path
+from tqdm import tqdm
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.config.settings import get_settings
-from core import get_client
+from src.tools import MilvusVectorDB
 
 settings = get_settings()
 collection_name = settings.ollama_collection_name
 db_name = settings.loader_milvus_db_name
 
-client = get_client(db_name=db_name)
+vector_db = MilvusVectorDB(
+    host=settings.milvus_host,
+    port=settings.milvus_port,
+    db_name=db_name,
+)
 
 def sync_embeddings():
-    """Sync embeddings from JSON file - adds, updates, and removes vectors"""
-    with open("./data/embeddings.json", "r", encoding="utf-8") as f:
-        data = json.load(f)
-    
-    if not data:
-        print("No data to sync")
+    """Sync embeddings from JSON file into Milvus collection"""
+    try:
+        with open("./data/embeddings.json", "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        print("❌ Error: ./data/embeddings.json not found")
+        print("   Please run: python document-loaders/load_milvus_docs_ollama.py")
         return
     
-    if not client.has_collection(collection_name):
-        dimension = len(data[0]['vector'])
-        client.create_collection(
-            collection_name=collection_name,
-            dimension=dimension,
-            metric_type="COSINE",
-            consistency_level="Session",
-        )
-        print(f"Created collection: {collection_name}")
-        existing_checksums = {}
-    else:
-        # Get existing data
-        existing = client.query(
-            collection_name=collection_name,
-            filter="",
-            output_fields=["id", "checksum"],
-            limit=16384
-        )
-        existing_checksums = {item["id"]: item["checksum"] for item in existing}
+    if not data:
+        print("❌ No data to sync")
+        return
     
-    # Prepare data for upsert
-    json_ids = {item["id"] for item in data}
-    existing_ids = set(existing_checksums.keys())
+    # Check if collection exists
+    existing_collections = vector_db.list_collections()
     
-    to_upsert = []
-    new_count = 0
-    updated_count = 0
+    if collection_name in existing_collections:
+        print(f"Collection '{collection_name}' already exists.")
+        choice = input("Do you want to (o)verwrite or (a)bort? [o/a]: ").lower().strip()
+        
+        if choice == 'a':
+            print("Sync aborted by user.")
+            return
+        elif choice == 'o':
+            print(f"Dropping collection '{collection_name}'...")
+            vector_db.delete_collection(collection_name)
     
-    for item in data:
-        item_id = item["id"]
-        if item_id not in existing_checksums:
-            new_count += 1
-            to_upsert.append(item)
-        elif existing_checksums[item_id] != item["checksum"]:
-            updated_count += 1
-            to_upsert.append(item)
+    # Extract embeddings, texts, and metadata from JSON
+    embeddings = [item["vector"] for item in data]
+    texts = [item["text"] for item in data]
+    metadata = [item.get("metadata", {}) for item in data]
     
-    # Delete vectors not in JSON
-    to_delete = existing_ids - json_ids
-    if to_delete:
-        client.delete(collection_name=collection_name, filter=f"id in {list(to_delete)}")
-        print(f"Deleted {len(to_delete)} vectors")
+    # Determine embedding dimension
+    embedding_dim = len(embeddings[0]) if embeddings else 384
     
-    # Upsert new/changed vectors
-    if to_upsert:
-        client.upsert(collection_name=collection_name, data=to_upsert)
-        print(f"Upserted {new_count} new, {updated_count} updated documents")
-    else:
-        print("No documents need updating")
+    # Create collection
+    print(f"Creating collection '{collection_name}' with dimension {embedding_dim}...")
+    vector_db.create_collection(
+        collection_name=collection_name,
+        embedding_dim=embedding_dim,
+    )
+    
+    # Insert embeddings
+    print(f"Inserting {len(embeddings)} embeddings...")
+    try:
+        with tqdm(total=len(embeddings), desc="Syncing embeddings", ncols=80) as pbar:
+            vector_db.insert_embeddings(
+                collection_name=collection_name,
+                embeddings=embeddings,
+                texts=texts,
+                metadata=metadata,
+            )
+            pbar.update(len(embeddings))
+        print(f"✅ Successfully synced {len(embeddings)} embeddings into collection '{collection_name}'")
+    except Exception as e:
+        print(f"❌ Error inserting embeddings: {e}")
+        raise
 
 if __name__ == "__main__":
-    sync_embeddings()
+    try:
+        sync_embeddings()
+    except Exception as e:
+        print(f"❌ Sync failed: {e}")
+        sys.exit(1)

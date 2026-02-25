@@ -49,91 +49,169 @@ aws-stands-agents-rag/
 │   └── interactive_chat.py      # Interactive Q&A chat
 │
 ├── 🐳 Docker (docker/)
-│   └── docker-compose.yml        # Alternative Milvus setup
+│   ├── docker-compose.yml        # Optimized Milvus, MinIO, etcd, RAG API
+│   ├── Dockerfile                # RAG API container definition
+│   ├── .dockerignore             # Docker build exclusions
+│   ├── optimize.sh               # Performance optimization script
+│   ├── daemon.json               # Docker daemon configuration
+│   └── README.md                 # Docker setup documentation
 │
-└── ⚙️ Milvus-Standalone (../milvus-standalone/)
-    ├── docker-compose.yml        # Optimized Milvus, etcd, and MinIO setup
-    ├── milvus.yaml              # Milvus configuration
-    └── optimize.sh              # Optimization script
+├── 📜 Scripts (scripts/)
+│   ├── check_setup.py            # System setup diagnostic
+│   ├── verify_collection.py      # Collection configuration verifier
+│   ├── migrate_docker.sh         # Migration from milvus-standalone
+│   ├── DOCKER_MIGRATION.md       # Docker migration guide
+│   └── setup.sh / setup.bat      # Project setup scripts
+│
+├── 📚 Document Loaders (document-loaders/)
+│   ├── load_milvus_docs_ollama.py  # Load Milvus documentation
+│   ├── add_sample_docs.py          # Add sample documents
+│   ├── download_milvus_docs.py     # Download documentation
+│   ├── sync_from_json.py           # Sync embeddings from JSON
+│   └── core/                        # Core loader utilities
+│
+├── 💬 Chatbots (chatbots/)
+│   ├── interactive_chat.py         # Terminal-based RAG chat
+│   └── react-chatbot/              # React web UI chatbot
+│
+└── ⚙️ Configuration & Examples
+    ├── .env.example              # Environment template
+    ├── pyproject.toml            # Project dependencies
+    └── README.md                 # Project overview
 ```
 
 ## 🎯 Key Components
 
 ### 1. **RAG Agent** (`src/agents/rag_agent.py`)
-- Uses Strands Agents framework
+- Uses Strands Agents framework for intelligent reasoning
 - Integrates Ollama for LLM and embeddings
-- Manages Milvus vector database
+- Manages Milvus vector database with advanced features
 - Methods:
-  - `retrieve_context()` - Get relevant documents
+  - `retrieve_context()` - Get relevant documents with pagination & filtering
   - `answer_question()` - Generate answers using RAG
+  - `search_by_source()` - Filter results by document source
+  - `paginated_search()` - Paginated retrieval with offset
   - `add_documents()` - Add documents to knowledge base
+  - `clear_caches()` - Clear LRU caches
+- **LRU Caching**: Configurable cache for embeddings, searches, and answers
 
 ### 2. **Vector Database** (`src/tools/milvus_client.py`)
-- Wrapper around Milvus client
-- Collection management
-- Embedding storage and retrieval
-- COSINE similarity search
-- Supports metadata
+- Milvus wrapper with optimized performance
+- Advanced features:
+  - Multiple index types (HNSW, IVF_FLAT, FLAT)
+  - Pagination support with `offset` parameter
+  - Metadata filtering with `filter_expr`
+  - Async search with `search_async()`
+  - Source-based filtering with `search_by_source()`
+  - Batch insertion with metadata extraction
+- Collection management and monitoring
+- COSINE/L2/IP similarity search
 
 ### 3. **LLM Integration** (`src/tools/ollama_client.py`)
 - Local Ollama integration
-- Text generation
-- Embedding generation
-- Health checking
+- Batch text embedding with parallel workers
+- Methods:
+  - `embed_text()` - Single text embedding
+  - `embed_texts()` - Batch embedding with parallel processing
+  - `generate()` - Text generation with streaming support
+  - `get_available_models()` - List available models
+  - `is_available()` - Health checking
 
-### 4. **Document Loaders** (`src/loaders/document_loader.py`)
-- File-based loading (txt, md)
-- URL-based loading
-- Text document loading
-- Automatic chunking with overlap
+### 4. **Document Loaders** (`document-loaders/`)
+- Load Milvus documentation: `load_milvus_docs_ollama.py`
+- Batch embedding with configurable batch size
+- Automatic progress tracking with tqdm
+- Support for multiple document sources
+- Metadata preservation for filtering
 
 ### 5. **Configuration** (`src/config/settings.py`)
 - Pydantic-based settings with validation
-- Environment variable support
-- Sensible defaults
-- Type checking
+- Environment variable support with `.env` file
+- New settings:
+  - `AGENT_CACHE_SIZE`: LRU cache configuration
+  - `EMBEDDING_BATCH_SIZE`: Batch processing size
+  - `OLLAMA_COLLECTION_NAME`: Consistent collection naming
+- Type checking and validation
+
+## 🐳 Docker Integration (`./docker/`)
+
+### Optimized Setup with `optimize.sh`
+- Automatic system parameter tuning
+- Docker daemon configuration
+- Performance optimizations for macOS and Linux
+- Health checks for all services
+- Resource allocation per service
+
+### Services
+- **Milvus**: Vector database (4 CPU, 8GB RAM)
+- **MinIO**: Object storage (2 CPU, 2GB RAM)
+- **etcd**: Configuration storage (1 CPU, 1GB RAM)
+- **RAG API**: Container for API server (2 CPU, 2GB RAM)
+
+### Migration
+See [Docker Migration Guide](../scripts/DOCKER_MIGRATION.md) to migrate from milvus-standalone
 
 ## 🚀 Quick Start (5 Minutes)
 
 ### Step 1: Setup (2 minutes)
 ```bash
 cd aws-stands-agents-rag
-./scripts/setup.sh           # Unix/macOS, or setup.bat on Windows
+pip install -e .                               # Install dependencies
+cp .env.example .env                           # Create environment file
 ```
 
-### Step 2: Start Milvus (Using Milvus-Standalone - 1 minute)
+### Step 2: Start Docker Services (2 minutes)
 ```bash
-# Navigate to milvus-standalone and start services
-cd ../milvus-standalone
-docker-compose up -d
-
-# Return to project root
-cd ../aws-stands-agents-rag
-
-# Alternative: Use generic start script
-# ./start-milvus.sh   # Unix/macOS, or start-milvus.bat on Windows
+cd docker
+chmod +x optimize.sh
+./optimize.sh --all                            # Optimize and start all services
+# This automatically optimizes system and Docker settings
+cd ..
 ```
 
+### Step 3: Start Ollama (1 minute)
 In a new terminal:
 ```bash
-ollama serve
-# In another terminal:
-ollama pull mistral nomic-embed-text:v1.5
+ollama serve                                   # Start Ollama server
 ```
 
-### Step 3: Start API Server (1 minute)
+In another terminal:
 ```bash
-python api_server.py                    # Start OpenAI-compatible API server
+ollama pull mistral                            # LLM model
+ollama pull nomic-embed-text:v1.5             # Embedding model
 ```
 
-### Step 4: Test API (1 minute)
+### Step 4: Start API Server (1 minute)
+Back in original terminal:
+```bash
+python api_server.py                          # Start OpenAI-compatible API server
+```
+
+### Step 5: Test System (1 minute)
 In a new terminal:
 ```bash
-python examples/interactive_chat.py     # Test with interactive chat
-# Or test with curl:
-# curl -X POST http://localhost:8000/v1/chat/completions \
-#   -H "Content-Type: application/json" \
-#   -d '{"messages": [{"role": "user", "content": "Hello"}]}'
+# Option 1: Interactive chat
+python chatbots/interactive_chat.py
+
+# Option 2: Load sample documents
+python document-loaders/load_milvus_docs_ollama.py
+
+# Option 3: Test API with curl
+curl -X POST http://localhost:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model": "rag-agent", "messages": [{"role": "user", "content": "What is RAG?"}]}'
+```
+
+### Verify Everything Works
+```bash
+# Check all services are running
+docker-compose -C docker ps
+
+# Check collection is created
+python scripts/verify_collection.py
+
+# Run diagnostics
+python scripts/check_setup.py
 ```
 
 ## 📋 Features Included
@@ -141,37 +219,60 @@ python examples/interactive_chat.py     # Test with interactive chat
 ✅ **Local LLM Support**
 - Ollama integration for text generation
 - Multiple model support (mistral, llama2, etc.)
+- Streaming support for long responses
 
-✅ **Vector Database**
-- Milvus for similarity search
-- Docker compose setup
-- Automatic collection management
+✅ **Advanced Vector Database**
+- Milvus for high-performance similarity search
+- Multiple index types (HNSW, IVF_FLAT, FLAT)
+- Pagination support for large result sets
+- Metadata filtering for targeted searches
+- Async search capabilities
+- Auto-optimized Docker setup
+
+✅ **Intelligent Search**
+- Pagination with offset support
+- Source-based filtering
+- Configurable similarity metrics (COSINE, L2, IP)
+- LRU caching for embeddings and queries
+
+✅ **Batch Processing**
+- Parallel embedding generation with configurable workers
+- Optimized batch sizes for memory/speed trade-off
+- Support for bulk document loading
 
 ✅ **Document Ingestion**
-- Multiple loader types
-- Automatic chunking
-- Metadata support
+- Multiple loader types in document-loaders/
+- Milvus docs loader with automatic embedding
+- Automatic chunking with overlap
+- Metadata support and extraction
+- Source tracking for retrieved documents
 
 ✅ **Strands Agents Integration**
 - Agent framework compatibility
 - Tool integration ready
 - Multi-agent support possible
+- Full access to agent capabilities
 
-✅ **Easy Configuration**
-- .env file support
+✅ **Performance Features**
+- LRU caching system (embeddings, searches, answers)
+- Batch embedding with parallel workers
+- Docker optimizations for memory and CPU
+- Health checks and automatic recovery
+- Configurable cache sizes and batch parameters
+
+✅ **Configuration & Monitoring**
+- .env file support with validation
 - Pydantic settings validation
-- Environment variable overrides
+- Diagnostic scripts (`check_setup.py`, `verify_collection.py`)
+- Collection configuration verification
+- Docker health checks
 
 ✅ **Production Ready**
-- Error handling
-- Logging throughout
-- Type hints
-- Documentation
-
-✅ **Examples & Tests**
-- 3 complete examples
-- Test-ready structure
-- Troubleshooting guides
+- Error handling and logging
+- Type hints throughout codebase
+- Comprehensive documentation
+- Docker Compose with resource limits
+- REST API with OpenAI-compatible endpoints
 
 ## 🔧 Technologies Used
 

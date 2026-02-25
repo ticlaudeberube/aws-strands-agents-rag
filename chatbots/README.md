@@ -17,7 +17,9 @@ python examples/interactive_chat.py
 Before running the chatbot, ensure:
 1. **Milvus is running** - Start with `docker-compose up -d` in the docker directory
 2. **Ollama is installed and running** - Make sure Ollama is available at the configured host (default: http://localhost:11434)
-3. **Documents are loaded** - Run `python document-loaders/load_milvus_docs_ollama.py` first to populate the vector database
+3. **Sync or load Documents embeddings** 
+- Run `python document-loaders/load_milvus_docs_ollama.py` first to populate the vector database and json cache
+- Run `python document-loaders/sync_from_json.py` to load the cached embeddings without reprocessing the whole documents
 
 ### Features
 

@@ -193,7 +193,7 @@ async def chat_completions(request: ChatCompletionRequest):
         logger.info(f"Query: {user_message[:100]}...")
         
         try:
-            answer = current_agent.answer_question(
+            answer, sources = current_agent.answer_question(
                 collection_name=current_settings.ollama_collection_name,
                 question=user_message,
                 top_k=5,
@@ -201,6 +201,7 @@ async def chat_completions(request: ChatCompletionRequest):
         except Exception as e:
             logger.error(f"RAG error: {e}")
             answer = f"Error: {str(e)}"
+            sources = []
         
         return {
             "id": f"chatcmpl-{datetime.now().timestamp()}",
@@ -219,24 +220,12 @@ async def chat_completions(request: ChatCompletionRequest):
                 "completion_tokens": len(answer.split()),
                 "total_tokens": len(user_message.split()) + len(answer.split()),
             },
+            "sources": sources,  # Include sources in response
         }
-        
-    except HTTPException:
-        raise
     except Exception as e:
-        logger.error(f"Error: {e}", exc_info=True)
+        logger.error(f"Chat completions error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-
-@app.post("/chat", tags=["chat"])
-async def chat(request: ChatCompletionRequest):
-    """Chat endpoint (alias)."""
-    return await chat_completions(request)
-
-
-# ============================================================================
-# Main
-# ============================================================================
 
 def main():
     """Start the API server."""

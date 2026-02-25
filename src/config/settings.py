@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     
     # Ollama Configuration
     ollama_host: str = "http://localhost:11434"
-    ollama_model: str = "llama3.2:1b"
+    ollama_model: str = "mistral:latest"
     ollama_embed_model: str = "nomic-embed-text:v1.5"
 
     # Milvus Configuration
@@ -36,6 +36,10 @@ class Settings(BaseSettings):
     ollama_num_threads: int = 6
     tokenizers_parallelism: bool = False
     pytorch_mps_high_watermark_ratio: float = 0.0
+    
+    # Caching Configuration
+    agent_cache_size: int = 500  # LRU cache size for embeddings, searches, and answers
+    embedding_batch_size: int = 32  # Batch size for bulk embedding operations
 
     # Application Configuration
     log_level: str = "INFO"

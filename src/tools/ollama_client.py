@@ -2,7 +2,8 @@
 
 import requests
 import logging
-from typing import List
+from typing import List, Optional
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 logger = logging.getLogger(__name__)
 
@@ -99,20 +100,51 @@ class OllamaClient:
         self,
         texts: List[str],
         model: str = "all-minilm",
+        batch_size: int = 32,
+        max_workers: Optional[int] = None,
     ) -> List[List[float]]:
-        """Generate embeddings for multiple texts.
+        """Generate embeddings for multiple texts with batch processing.
 
         Args:
             texts: List of texts to embed
             model: Ollama model name for embeddings
+            batch_size: Size of each batch for processing
+            max_workers: Maximum number of concurrent workers (defaults to 4)
 
         Returns:
-            List of embedding vectors
+            List of embedding vectors in same order as input
         """
-        embeddings = []
-        for text in texts:
-            embedding = self.embed_text(text, model)
-            embeddings.append(embedding)
+        if not texts:
+            return []
+        
+        # Default to 4 workers for parallel embedding requests
+        if max_workers is None:
+            max_workers = 4
+        
+        embeddings = [None] * len(texts)  # Pre-allocate to maintain order
+        
+        # Use ThreadPoolExecutor for parallel embedding requests
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Submit all tasks and track their original indices
+            future_to_index = {
+                executor.submit(self.embed_text, text, model): idx
+                for idx, text in enumerate(texts)
+            }
+            
+            # Collect results maintaining original order
+            completed = 0
+            for future in as_completed(future_to_index):
+                idx = future_to_index[future]
+                try:
+                    embeddings[idx] = future.result()
+                    completed += 1
+                    if completed % max(1, len(texts) // 10) == 0:
+                        logger.debug(f"Embedded {completed}/{len(texts)} texts")
+                except Exception as e:
+                    logger.error(f"Failed to embed text at index {idx}: {e}")
+                    raise
+        
+        logger.info(f"Batch embedded {len(texts)} texts using {max_workers} workers")
         return embeddings
 
     def generate(
@@ -120,6 +152,7 @@ class OllamaClient:
         prompt: str,
         model: str = "mistral",
         stream: bool = False,
+        temperature: float = 0.1,
     ) -> str:
         """Generate text using Ollama LLM.
 
@@ -127,6 +160,7 @@ class OllamaClient:
             prompt: Input prompt
             model: Ollama model name
             stream: Whether to stream response
+            temperature: Temperature for generation (0-2, lower=more deterministic)
 
         Returns:
             Generated text
@@ -134,7 +168,7 @@ class OllamaClient:
         try:
             response = requests.post(
                 self.generate_endpoint,
-                json={"prompt": prompt, "model": model, "stream": stream},
+                json={"prompt": prompt, "model": model, "stream": stream, "temperature": temperature},
                 timeout=120,
             )
             response.raise_for_status()

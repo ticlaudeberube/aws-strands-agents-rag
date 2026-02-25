@@ -1,14 +1,17 @@
 # AWS Strands Agents RAG
 
-A Retrieval-Augmented Generation (RAG) system using AWS Strands Agents, Ollama for local LLM/embeddings, and Milvus as a vector database.
+A high-performance Retrieval-Augmented Generation (RAG) system using AWS Strands Agents, Ollama for local LLM/embeddings, and Milvus as a vector database.
 
 ## Features
 
 - **Local LLM & Embeddings**: Uses Ollama for running language models and generating embeddings locally
-- **Vector Database**: Milvus for efficient similarity search on large datasets
+- **Vector Database**: Milvus with optimized indexing, caching, and performance tuning
+- **Advanced Search**: Pagination, filtering by source, and async search capabilities
+- **Batch Processing**: Efficient embedding generation with parallel workers
+- **Caching System**: LRU caching for embeddings, searches, and answers
 - **Strands Agents Integration**: AWS Strands Agents SDK for intelligent agent capabilities
 - **Multiple Document Loaders**: Support for files, URLs, and text documents
-- **Easy Deployment**: Docker Compose setup for Milvus and dependencies
+- **Optimized Deployment**: Integrated Docker setup with performance optimizations
 
 ## Architecture
 
@@ -27,14 +30,89 @@ A Retrieval-Augmented Generation (RAG) system using AWS Strands Agents, Ollama f
 └────────┘  └──────────┘  └─────────┘
 ```
 
+## How It Works
+
+### Query Processing Flow
+
+1. **Content Processing**
+   - Documents are loaded and split into chunks
+   - Ollama (local LLM) generates embeddings for each chunk
+   - Embeddings are stored in Milvus vector database with metadata (source, collection)
+
+2. **Query Execution**
+   - User asks a question → RAGAgent receives it
+   - Question is embedded using Ollama
+   - Milvus searches for semantically similar embeddings
+   - Top-K relevant chunks are retrieved as context
+
+3. **Answer Generation**
+   - Retrieved context + original question sent to Ollama LLM
+   - LLM generates an answer informed by the retrieved context
+   - Sources (document references) included in the response
+
+### Key Components
+
+- **RAGAgent** (`src/agents/rag_agent.py`): Orchestrates the RAG pipeline with intelligent caching
+- **MilvusVectorDB** (`src/tools/milvus_client.py`): Vector database wrapper for semantic search and storage
+- **OllamaClient** (`src/tools/ollama_client.py`): Local LLM for embeddings and text generation
+- **API Server** (`api_server.py`): FastAPI server exposing OpenAI-compatible endpoints
+- **Document Loaders** (`document-loaders/`): Tools to load, process, chunk, and embed documents
+- **Chatbots** (`chatbots/`): Interactive CLI and React web UI for querying
+
+### Performance Optimizations
+
+- **LRU Caching**: Embeddings, searches, and answers cached to avoid redundant computation
+- **Batch Processing**: Parallel embedding generation for efficient document indexing
+- **Optimized Milvus**: 2GB query cache, 50GB disk cache, COSINE similarity search
+- **Docker Setup**: Automated deployment with resource limits, health checks, and auto-recovery
+
+### Data Flow Diagram
+
+```mermaid
+graph TD
+    subgraph Index["🔧 INDEXING PIPELINE"]
+        A["📄 Documents"] --> B["📥 Document Loaders"]
+        B --> C["✂️ Split into Chunks"]
+        C --> D["🧮 Generate Embeddings<br/>Ollama LLM"]
+        D --> E["💾 Store in Milvus<br/>with metadata"]
+    end
+    
+    subgraph Query["❓ QUERY PIPELINE"]
+        F["👤 User Question"] --> G["🤖 RAGAgent"]
+        G --> H["🧮 Embed Question<br/>Ollama LLM"]
+        H --> I["🔍 Semantic Search<br/>COSINE Similarity"]
+        I --> J["📋 Retrieve Top-K<br/>Chunks + Sources"]
+        J --> K["💬 LLM Prompt<br/>Question + Context"]
+        K --> L["✍️ Generate Answer<br/>with Sources"]
+        L --> M["📤 Return Response<br/>API/Chatbot"]
+    end
+    
+    E -.->|Stored vectors| I
+    
+    subgraph Cache["⚡ LRU CACHE LAYER"]
+        N["Embedding Cache"]
+        O["Search Cache"]
+        P["Answer Cache"]
+    end
+    
+    H -.->|cached| N
+    I -.->|cached| O
+    L -.->|cached| P
+    
+    style Index fill:#e1f5ff
+    style Query fill:#fff3e0
+    style Cache fill:#f3e5f5
+```
+
 ## Prerequisites
 
 - Python 3.10+
-- Docker & Docker Compose (or use Milvus-standalone for optimized local setup)
+- Docker & Docker Compose
 - Ollama (running locally)
-- 4GB+ RAM recommended
+- 8GB+ RAM recommended (16GB+ for optimal performance)
+- At least 20GB disk space
 
-> **Note**: This project includes a `milvus-standalone` folder with an optimized Docker setup specifically for local development. It's recommended to use this over the generic docker-compose approach.
+> **New**: This project now includes an integrated, optimized Docker setup in `./docker/` directory with automatic performance optimizations, health checks, and proper resource allocation.
 
 ## Quick Start
 
@@ -50,40 +128,47 @@ cp .env.example .env
 # Edit .env with your configuration (optional, defaults provided)
 ```
 
-### 2. Start Milvus (Using Milvus-Standalone - Recommended)
+### 2. Start Milvus with Optimized Docker Setup (Recommended)
 
-The `milvus-standalone` folder contains an optimized Docker Compose setup for local development:
+The `./docker/` directory contains an optimized Docker Compose setup with automatic performance tuning:
 
 ```bash
-# Navigate to milvus-standalone folder
-cd ../milvus-standalone
+# Navigate to docker directory
+cd docker
 
-# Start Milvus services
-docker-compose up -d
+# Run optimization script (automatically optimizes and starts services)
+chmod +x optimize.sh
+./optimize.sh --all
 
-# Wait for services to start (check logs)
-docker-compose logs -f
-
-# Verify Milvus is running
-curl http://localhost:19530
+# Verify services are healthy
+docker-compose ps
 
 # Return to project root for next steps
-cd ../aws-stands-agents-rag
+cd ..
 ```
 
-**Milvus Standalone Features:**
-- Pre-configured for local development
-- Optimized resource usage
-- Includes etcd, MinIO, and Milvus services
-- Persistent volumes in `volumes/` directory
-- Configuration in `milvus.yaml`
+**What Gets Optimized:**
+- Memory limits per container (prevent resource exhaustion)
+- CPU allocation and pinning
+- tmpfs volumes for faster temporary files
+- Health checks with automatic recovery
+- Milvus-specific optimizations:
+  - 2GB query cache
+  - 50GB disk cache
+  - 8 parallel index builders
+  - COSINE similarity search
 
-**Alternative: Using Docker Compose** (if not using milvus-standalone)
+**Services:**
+- Milvus: localhost:19530
+- Milvus WebUI: http://localhost:9091/webui
+- MinIO Console: http://localhost:9001
+- etcd: localhost:2379
+
+**Alternative: Quick Start** (without full optimizations)
 ```bash
-# Only use this if milvus-standalone is not available
-docker-compose -f docker/docker-compose.yml up -d
-docker-compose -f docker/docker-compose.yml logs -f milvus
-curl http://localhost:9091/healthz
+cd docker
+docker-compose up -d
+cd ..
 ```
 
 ### 3. Install Ollama
@@ -151,19 +236,37 @@ uv run python examples/interactive_chat.py
 ```env
 # Ollama Configuration
 OLLAMA_HOST=http://localhost:11434
-OLLAMA_MODEL=mistral
-OLLAMA_EMBED_MODEL=all-minilm
+OLLAMA_MODEL=mistral:latest
+OLLAMA_EMBED_MODEL=nomic-embed-text:v1.5
 
 # Milvus Configuration
 MILVUS_HOST=localhost
 MILVUS_PORT=19530
 MILVUS_DB_NAME=knowledge_base
+LOADER_MILVUS_DB_NAME=knowledge_base
+
+# Collection Configuration
+OLLAMA_COLLECTION_NAME=milvus_rag_collection
+
+# Performance Settings
+AGENT_CACHE_SIZE=500                    # LRU cache size for embeddings & queries
+EMBEDDING_BATCH_SIZE=32                 # Batch size for bulk embedding operations
+MAX_CHUNK_LENGTH=400                    # Maximum length of text chunks
+EMBEDDING_DIM=768                       # Embedding vector dimension
 
 # Application Configuration
 LOG_LEVEL=INFO
 BATCH_SIZE=10
-EMBEDDING_DIM=384
 ```
+
+**Collection Configuration Note:**
+The `OLLAMA_COLLECTION_NAME` is used consistently across:
+- Data loaders (`document-loaders/load_milvus_docs_ollama.py`)
+- API server (`api_server.py`)
+- Interactive chat (`chatbots/interactive_chat.py`)
+- RAG agent (`src/agents/rag_agent.py`)
+
+See [Collection Configuration Guide](docs/COLLECTION_CONFIG.md) for more details.
 
 ## Project Structure
 
@@ -255,46 +358,80 @@ Pull more models: `ollama pull <model-name>`
 
 ## Docker Management
 
-### Using Milvus-Standalone (Recommended)
+### Quick Start with Optimized Setup
 
 ```bash
-cd ../milvus-standalone
+cd docker
 
-# Start services
-docker-compose up -d
+# Full optimization and start (recommended)
+./optimize.sh --all
 
-# Stop services
+# Or just start containers
+./optimize.sh --start
+
+# Monitor services
+docker-compose ps
+docker stats
+
+# View service logs
+docker-compose logs -f [service]
+docker-compose logs -f milvus
+docker-compose logs -f rag-api
+
+# Stop all services
 docker-compose down
 
-# View logs
-docker-compose logs -f
-
-# Clean up everything
+# Full cleanup
 docker-compose down -v
-
-# Access Milvus directly
-# Milvus runs on http://localhost:19530
-cd ../aws-stands-agents-rag
 ```
 
-### Using Alternative Docker Setup
+### Optimization Options
 
 ```bash
-# Start services
-docker-compose -f docker/docker-compose.yml up -d
+cd docker
 
-# Stop services
-docker-compose -f docker/docker-compose.yml down
+# Show available options
+./optimize.sh --help
 
-# View logs
-docker-compose -f docker/docker-compose.yml logs -f
-
-# Clean up everything
-docker-compose -f docker/docker-compose.yml down -v
-
-# Access Milvus UI
-# Navigate to http://localhost:9091/webui/
+# Options:
+# --daemon         Configure Docker daemon settings
+# --macos          macOS-specific recommendations
+# --linux          Linux system optimization
+# --cleanup        Clean Docker resources
+# --all            Full optimization + start (recommended)
+# --start          Start containers with existing config
+# --info           Show service information
+# --monitor        Show performance monitoring commands
 ```
+
+### Service Health Checks
+
+```bash
+# Check all services
+docker-compose ps
+
+# Test individual services
+curl http://localhost:8000/health           # RAG API
+curl http://localhost:19530                 # Milvus gRPC
+curl http://localhost:9091/healthz          # Milvus HTTP
+curl http://localhost:9000/minio/health     # MinIO
+```
+
+### For Linux Users
+
+Run the optimization script to configure system parameters:
+
+```bash
+cd docker
+./optimize.sh --linux
+./optimize.sh --start
+```
+
+This sets up:
+- File descriptor limits (65536)
+- Memory swappiness optimization
+- Virtual memory mapping for Milvus
+- Network optimizations
 
 ## Milvus Operations
 
@@ -371,37 +508,142 @@ docker-compose -f docker/docker-compose.yml restart
 
 ## Advanced Features
 
-### Custom Embedding Models
+### Pagination
+
 ```python
+from src.agents.rag_agent import RAGAgent
+
 agent = RAGAgent(settings=settings)
-embeddings = agent.ollama_client.embed_texts(
-    texts=["text1", "text2"],
-    model="nomic-embed-text"  # Different model
+
+# Get paginated results
+page = 0
+page_size = 5
+context, sources, total = agent.paginated_search(
+    collection_name="my_docs",
+    question="What is Milvus?",
+    page=page,
+    page_size=page_size
 )
 ```
 
-### Batch Processing
-```python
-from src.loaders import FileDocumentLoader, chunk_documents
+### Filtering by Source
 
-loader = FileDocumentLoader(paths)
-docs = loader.load()
-chunks = chunk_documents(docs, chunk_size=1000)
-agent.add_documents("collection", chunks)
+```python
+# Search only specific document source
+context, sources = agent.search_by_source(
+    collection_name="my_docs",
+    question="What is Milvus?",
+    source="milvus_docs",  # Filter by document source
+    top_k=5
+)
+```
+
+### Batch Embedding (Parallel)
+
+```python
+# Efficient batch embedding with parallel workers
+embeddings = agent.ollama_client.embed_texts(
+    texts=["text1", "text2", "text3", ...],
+    model="nomic-embed-text",
+    batch_size=32,        # Process 32 texts per batch
+    max_workers=4         # Use 4 parallel workers
+)
+```
+
+### Advanced Search with Metadata Filtering
+
+```python
+# Search database directly with filtering
+results = agent.vector_db.search(
+    collection_name="docs",
+    query_embedding=[...],
+    limit=10,
+    offset=0,             # Skip first N results (pagination)
+    filter_expr="source == 'milvus_docs'",  # Filter by metadata
+    search_params={"ef": 64}  # HNSW parameter
+)
+
+# Or search by source directly
+results = agent.vector_db.search_by_source(
+    collection_name="docs",
+    query_embedding=[...],
+    source="milvus_docs",
+    limit=5
+)
+```
+
+### Async Search
+
+```python
+import asyncio
+
+async def async_search():
+    # Non-blocking search
+    results = await agent.vector_db.search_async(
+        collection_name="docs",
+        query_embedding=[...],
+        limit=10,
+        offset=0
+    )
+    return results
+
+# Run async search
+results = asyncio.run(async_search())
+```
+
+### Custom Embedding Models
+
+```python
+agent = RAGAgent(settings=settings)
+
+# Use different embedding model
+embeddings = agent.ollama_client.embed_texts(
+    texts=["text1", "text2"],
+    model="all-mpnet-base-v2"  # Different model
+)
+```
+
+### Collection Management
+
+```python
+# Create collection with custom parameters
+agent.vector_db.create_collection(
+    collection_name="my_docs",
+    embedding_dim=768,
+    index_type="HNSW",      # or "IVF_FLAT", "FLAT"
+    metric_type="COSINE"    # or "L2", "IP"
+)
+
+# List all collections
+collections = agent.vector_db.list_collections()
+
+# Delete collection
+agent.vector_db.delete_collection("temp_collection")
 ```
 
 ### Metadata Support
+
 ```python
 agent.vector_db.insert_embeddings(
     collection_name="docs",
     embeddings=embeddings,
     texts=texts,
     metadata=[
-        {"source": "file1.txt", "page": 1},
-        {"source": "file2.txt", "page": 2},
+        {"source": "file1.txt", "page": 1, "author": "John"},
+        {"source": "file2.txt", "page": 2, "author": "Jane"},
     ]
 )
 ```
+
+## Documentation
+
+- [Getting Started Guide](docs/GETTING_STARTED.md) - Step-by-step setup instructions
+- [Collection Configuration](docs/COLLECTION_CONFIG.md) - Manage collections and configuration
+- [Docker Migration Guide](scripts/DOCKER_MIGRATION.md) - Migrate from legacy milvus-standalone setup
+- [Docker Setup](docker/README.md) - Detailed Docker and performance optimization
+- [Development Guide](docs/DEVELOPMENT.md) - Development and contribution guidelines
+- [API Server Documentation](docs/API_SERVER.md) - REST API reference
+- [Project Summary](docs/PROJECT_SUMMARY.md) - Complete project overview
 
 ## Integration with AWS Services
 
@@ -417,11 +659,18 @@ See [Strands Agents Deployment Guide](https://strandsagents.com/latest/documenta
 
 ## Performance Tips
 
-1. **Batch Embeddings**: Process documents in batches
-2. **Index Optimization**: Use AUTOINDEX for Milvus
-3. **Query Limits**: Start with `top_k=3-5` for fastest results
-4. **Model Selection**: Use smaller models for faster inference
-5. **Caching**: Cache embeddings for repeated queries
+1. **Batch Processing**: Use `embed_texts()` with `batch_size` and `max_workers` for parallel embedding
+2. **Caching**: Leverage built-in LRU caching (embeddings, searches, answers) - configure `AGENT_CACHE_SIZE`
+3. **Pagination**: Use `paginated_search()` for large result sets instead of loading all at once
+4. **Filtering**: Use source filters to narrow search scope and improve performance
+5. **Docker Optimization**: Run `./docker/optimize.sh --all` for automatic system and Docker tuning
+6. **Index Type**: Use HNSW (default) for balanced speed/accuracy, IVF_FLAT for large datasets
+7. **Model Selection**: Use smaller embedding models (e.g., all-minilm) for faster inference
+8. **Resource Allocation**: Docker setup allocates:
+   - Milvus: 4 CPU, 8GB RAM, 2GB cache
+   - MinIO: 2 CPU, 2GB RAM
+   - etcd: 1 CPU, 1GB RAM
+   - RAG API: 2 CPU, 2GB RAM
 
 ## Contributing
 

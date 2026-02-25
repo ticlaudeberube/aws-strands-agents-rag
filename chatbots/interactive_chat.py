@@ -84,7 +84,7 @@ def main():
             # Answer the question
             print("\nAssistant: ", end="", flush=True)
             try:
-                answer = agent.answer_question(
+                answer, sources = agent.answer_question(
                     collection_name=collection_name,
                     question=user_input,
                     top_k=5,

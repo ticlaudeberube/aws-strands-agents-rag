@@ -635,6 +635,39 @@ agent.vector_db.insert_embeddings(
 )
 ```
 
+## Testing
+
+This project includes a comprehensive test suite using pytest. For detailed testing information, see [tests/README.md](tests/README.md).
+
+### Quick Start with Testing
+
+```bash
+# Install dependencies with test support
+uv sync --all-extras
+
+# Run all tests
+uv run pytest
+
+# Run with coverage report
+uv run pytest --cov=src --cov-report=html
+
+# Run specific test file
+uv run pytest tests/test_rag_agent.py -v
+
+# Run in parallel for speed
+uv run pytest -n auto
+```
+
+### Test Coverage
+
+The test suite covers:
+- **OllamaClient**: Connection pooling, timeouts, embeddings, health checks
+- **RAGAgent**: Caching, retrieval, async operations, document management
+- **API Endpoints**: Health checks, chat completions, streaming responses
+- **Error Handling**: Timeouts, connection failures, invalid requests
+
+Target coverage: > 80% overall, > 90% for core modules
+
 ## Documentation
 
 - [Getting Started Guide](docs/GETTING_STARTED.md) - Step-by-step setup instructions

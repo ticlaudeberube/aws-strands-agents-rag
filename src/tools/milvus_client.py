@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 class MilvusVectorDB:
-    """Wrapper for Milvus vector database operations."""
+    """Wrapper for Milvus vector database operations with connection pooling."""
 
     def __init__(
         self,
@@ -19,8 +19,10 @@ class MilvusVectorDB:
         db_name: str = "default",
         user: str = "root",
         password: str = "Milvus",
+        timeout: int = 30,
+        pool_size: int = 10,
     ):
-        """Initialize Milvus client.
+        """Initialize Milvus client with connection pooling.
 
         Args:
             host: Milvus server host
@@ -28,10 +30,14 @@ class MilvusVectorDB:
             db_name: Database name to use
             user: Milvus username (default: root)
             password: Milvus password (default: Milvus)
+            timeout: Request timeout in seconds
+            pool_size: Connection pool size (not directly supported by MilvusClient, for future use)
         """
         uri = f"http://{host}:{port}"
         self.host = host
         self.port = port
+        self.timeout = timeout
+        self.pool_size = pool_size
         
         try:
             # Try with authentication first
@@ -39,6 +45,7 @@ class MilvusVectorDB:
                 uri=uri,
                 user=user,
                 password=password,
+                pool_size=pool_size,
             )
             logger.info(f"Connected to Milvus at {uri}")
         except ConnectionError as e:
@@ -49,7 +56,7 @@ class MilvusVectorDB:
             logger.warning(f"Auth failed, trying without credentials: {auth_error}")
             # Fall back to no auth
             try:
-                self.client = MilvusClient(uri=uri)
+                self.client = MilvusClient(uri=uri, pool_size=pool_size)
                 logger.info(f"Connected to Milvus at {uri} (without auth)")
             except Exception as e:
                 logger.error(f"❌ Cannot connect to Milvus at {uri}")

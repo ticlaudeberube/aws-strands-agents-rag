@@ -65,6 +65,10 @@ A high-performance Retrieval-Augmented Generation (RAG) system using AWS Strands
 - **Batch Processing**: Parallel embedding generation for efficient document indexing
 - **Optimized Milvus**: 2GB query cache, 50GB disk cache, COSINE similarity search
 - **Docker Setup**: Automated deployment with resource limits, health checks, and auto-recovery
+- **Connection Pooling**: HTTP connection pooling for Ollama and Milvus to reuse connections
+- **Request Timeouts**: Configurable timeouts for both Ollama and Milvus requests
+- **Async Support**: Non-blocking async methods for RAG operations
+- **Health Checks**: Comprehensive health check endpoints for service monitoring
 
 ### Data Flow Diagram
 
@@ -102,6 +106,71 @@ graph TD
     style Index fill:#e1f5ff
     style Query fill:#fff3e0
     style Cache fill:#f3e5f5
+```
+
+## Advanced Features
+
+### Connection Pooling & Timeouts
+- **HTTP Connection Pooling**: Reuses connections to Ollama and Milvus for better performance
+- **Configurable Timeouts**: Set request timeouts to prevent hanging on slow/down services
+  - `OLLAMA_TIMEOUT`: Default 30 seconds
+  - `MILVUS_TIMEOUT`: Default 30 seconds
+- **Connection Pool Sizes**: Configure pool sizes via environment variables
+  - `OLLAMA_POOL_SIZE`: Default 5 connections
+  - `MILVUS_POOL_SIZE`: Default 10 connections
+
+### Authentication
+- **Milvus Authentication**: Configurable username and password via environment variables
+  - `MILVUS_USER`: Default `root`
+  - `MILVUS_PASSWORD`: Default `Milvus`
+
+### Health Checks & Monitoring
+Three health check endpoints for service monitoring:
+
+```bash
+# Basic health check
+curl http://localhost:8000/health
+
+# Detailed health check with service status
+curl http://localhost:8000/health/detailed
+
+# Service-specific health checks
+curl http://localhost:8000/health/ollama
+curl http://localhost:8000/health/milvus
+```
+
+### Asynchronous Operations
+Non-blocking async methods for long-running operations:
+
+```python
+# Async answer generation
+answer, sources = await agent.answer_question_async(
+    collection_name="my_collection",
+    question="What is Milvus?"
+)
+
+# Async context retrieval
+context, sources = await agent.retrieve_context_async(
+    collection_name="my_collection",
+    query="Milvus features"
+)
+
+# Streaming responses for large answers
+async for chunk in agent.stream_answer(
+    collection_name="my_collection",
+    question="Explain Milvus architecture"
+):
+    print(chunk, end="", flush=True)
+```
+
+Streaming support also available via API endpoint:
+```bash
+curl http://localhost:8000/v1/chat/completions/stream \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [{"role": "user", "content": "What is Milvus?"}],
+    "stream": true
+  }'
 ```
 
 ## Prerequisites

@@ -2,11 +2,13 @@
 
 import logging
 import time
-from typing import List, Dict, Tuple, Optional
+import asyncio
+from typing import List, Dict, Tuple, Optional, AsyncIterator
 from collections import OrderedDict
+from concurrent.futures import ThreadPoolExecutor
 
 from src.config import Settings
-from src.tools import MilvusVectorDB, OllamaClient
+from src.tools import MilvusVectorDB, OllamaClient, MilvusResponseCache
 
 logger = logging.getLogger(__name__)
 
@@ -24,17 +26,33 @@ class RAGAgent:
         self.settings = settings
         # Use provided cache_size or fall back to settings configuration
         self.cache_size = cache_size if cache_size is not None else settings.agent_cache_size
-        self.ollama_client = OllamaClient(host=settings.ollama_host)
+        self.ollama_client = OllamaClient(
+            host=settings.ollama_host,
+            timeout=settings.ollama_timeout,
+            pool_size=settings.ollama_pool_size,
+        )
         self.vector_db = MilvusVectorDB(
             host=settings.milvus_host,
             port=settings.milvus_port,
             db_name=settings.milvus_db_name,
+            user=settings.milvus_user,
+            password=settings.milvus_password,
+            timeout=settings.milvus_timeout,
+            pool_size=settings.milvus_pool_size,
         )
         
         # Initialize caches
         self.embedding_cache = OrderedDict()  # query -> embedding vector
         self.search_cache = OrderedDict()  # (collection, query, top_k) -> context chunks
         self.answer_cache = OrderedDict()  # (question, collection, top_k) -> answer
+        
+        # Initialize persistent response cache
+        try:
+            self.response_cache = MilvusResponseCache(self.vector_db)
+            logger.info("Response cache initialized for persistent semantic caching")
+        except Exception as e:
+            logger.warning(f"Failed to initialize response cache: {e}. Continuing without persistent caching.")
+            self.response_cache = None
         
         logger.info(f"RAG Agent initialized with cache_size={self.cache_size}")
 
@@ -57,6 +75,14 @@ class RAGAgent:
         self.embedding_cache.clear()
         self.search_cache.clear()
         self.answer_cache.clear()
+        
+        # Clear persistent response cache if available
+        if self.response_cache:
+            try:
+                self.response_cache.clear_cache()
+            except Exception as e:
+                logger.warning(f"Failed to clear response cache: {e}")
+        
         logger.info("All caches cleared")
 
     def retrieve_context(
@@ -180,13 +206,40 @@ class RAGAgent:
         try:
             start_time = time.time()
             
-            # Check answer cache first
+            # Check answer cache first (exact match)
             cache_key = (question, collection_name, top_k)
             if cache_key in self.answer_cache:
-                logger.info(f"✓ Answer cache hit")
+                logger.info(f"✓ Answer cache hit (exact match)")
                 cached_result = self.answer_cache[cache_key]
                 logger.info(f"Total response time (cached): {time.time() - start_time:.2f}s")
                 return cached_result
+            
+            # Generate embedding for semantic cache check
+            embed_start = time.time()
+            question_embedding = None
+            if question in self.embedding_cache:
+                question_embedding = self.embedding_cache[question]
+                logger.info(f"✓ Embedding cache hit for response cache check")
+            else:
+                question_embedding = self.ollama_client.embed_text(
+                    question,
+                    model=self.settings.ollama_embed_model,
+                )
+                self._add_to_cache(self.embedding_cache, question, question_embedding)
+            embed_time = time.time() - embed_start
+            
+            # Check persistent response cache (semantic similarity)
+            if self.response_cache and question_embedding is not None:
+                cached_response = self.response_cache.search_cache(question_embedding)
+                if cached_response:
+                    logger.info(f"✓ Response cache hit (semantic match, {cached_response.get('similarity', 0):.1%} similar)")
+                    answer = cached_response.get("response", "")
+                    sources = cached_response.get("sources", [])
+                    result_tuple = (answer, sources)
+                    # Also cache in answer cache for faster subsequent exact matches
+                    self._add_to_cache(self.answer_cache, cache_key, result_tuple)
+                    logger.info(f"Total response time (semantic cache): {time.time() - start_time:.2f}s")
+                    return result_tuple
             
             # Retrieve relevant context
             retrieval_start = time.time()
@@ -249,6 +302,23 @@ Answer:"""
             # Cache the result with sources
             result_tuple = (answer, sources)
             self._add_to_cache(self.answer_cache, cache_key, result_tuple)
+            
+            # Store in persistent response cache for future semantic matches
+            if self.response_cache and question_embedding is not None:
+                try:
+                    self.response_cache.store_response(
+                        question=question,
+                        question_embedding=question_embedding,
+                        response=answer,
+                        metadata={
+                            "collection": collection_name,
+                            "top_k": top_k,
+                            "sources": sources,
+                        }
+                    )
+                    logger.info(f"✓ Response cached for future semantic matches")
+                except Exception as e:
+                    logger.warning(f"Failed to cache response: {e}")
             
             total_time = time.time() - start_time
             logger.info(f"Total response time: {total_time:.2f}s (retrieval: {retrieval_time:.2f}s, generation: {generation_time:.2f}s)")
@@ -356,3 +426,216 @@ Answer:"""
         estimated_total = (page + 1) * page_size + 1
         
         return context, sources, estimated_total
+
+    def answer_question_no_cache(
+        self,
+        collection_name: str,
+        question: str,
+        top_k: int = 10,
+    ) -> Tuple[str, List[Dict]]:
+        """Answer a question bypassing all caches - queries LLM directly.
+        
+        This method skips:
+        - Answer cache (exact match)
+        - Embedding cache
+        - Search cache  
+        - Response cache (semantic match)
+        
+        Used for testing or getting fresh answers without cache effects.
+
+        Args:
+            collection_name: Name of the collection to search
+            question: User question
+            top_k: Number of context chunks to retrieve
+
+        Returns:
+            Tuple of (answer, sources)
+        """
+        try:
+            start_time = time.time()
+            logger.info(f"[NO CACHE] Answering: {question[:60]}")
+            
+            # Generate fresh embedding (don't use cache)
+            embed_start = time.time()
+            question_embedding = self.ollama_client.embed_text(
+                question,
+                model=self.settings.ollama_embed_model,
+            )
+            embed_time = time.time() - embed_start
+            logger.info(f"Embedding generation took {embed_time:.2f}s (fresh)")
+            
+            # Retrieve context (fresh search, don't use search cache)
+            retrieval_start = time.time()
+            context_chunks, sources = self.retrieve_context(
+                collection_name=collection_name,
+                query=question,
+                top_k=top_k,
+            )
+            retrieval_time = time.time() - retrieval_start
+            
+            # Generate answer (fresh LLM generation, don't use answer cache)
+            generation_start = time.time()
+            answer = self.ollama_client.generate_response(
+                prompt=self._build_prompt(question, context_chunks),
+                model=self.settings.ollama_model,
+            )
+            generation_time = time.time() - generation_start
+            logger.info(f"Answer generation took {generation_time:.2f}s (fresh)")
+            
+            total_time = time.time() - start_time
+            logger.info(f"Total response time (no cache): {total_time:.2f}s (retrieval: {retrieval_time:.2f}s, generation: {generation_time:.2f}s)")
+            
+            return answer, sources
+            
+        except Exception as e:
+            logger.error(f"Error in no_cache answer: {e}")
+            raise
+
+    # =========================================================================
+    # Async Methods for Non-Blocking Operations
+    # =========================================================================
+    
+    async def answer_question_async(
+        self,
+        collection_name: str,
+        question: str,
+        top_k: int = 10,
+    ) -> Tuple[str, List[Dict]]:
+        """Answer a question asynchronously using RAG approach.
+
+        Args:
+            collection_name: Name of the collection to search
+            question: User question
+            top_k: Number of context chunks to retrieve
+
+        Returns:
+            Tuple of (answer, sources)
+        """
+        loop = asyncio.get_event_loop()
+        with ThreadPoolExecutor() as executor:
+            return await loop.run_in_executor(
+                executor,
+                self.answer_question,
+                collection_name,
+                question,
+                top_k,
+            )
+    
+    async def retrieve_context_async(
+        self,
+        collection_name: str,
+        query: str,
+        top_k: int = 5,
+        offset: int = 0,
+        filter_source: Optional[str] = None,
+    ) -> Tuple[List[str], List[Dict]]:
+        """Retrieve context asynchronously.
+
+        Args:
+            collection_name: Name of the collection to search
+            query: User query/question
+            top_k: Number of top results to retrieve
+            offset: Number of results to skip (for pagination)
+            filter_source: Optional source to filter by
+
+        Returns:
+            Tuple of (context_chunks, source_metadata)
+        """
+        loop = asyncio.get_event_loop()
+        with ThreadPoolExecutor() as executor:
+            return await loop.run_in_executor(
+                executor,
+                self.retrieve_context,
+                collection_name,
+                query,
+                top_k,
+                offset,
+                filter_source,
+            )
+    
+    async def add_documents_async(
+        self,
+        collection_name: str,
+        documents: List[str],
+    ) -> bool:
+        """Add documents to the knowledge base asynchronously.
+
+        Args:
+            collection_name: Name of the collection
+            documents: List of documents to add
+
+        Returns:
+            True if successful
+        """
+        loop = asyncio.get_event_loop()
+        with ThreadPoolExecutor() as executor:
+            return await loop.run_in_executor(
+                executor,
+                self.add_documents,
+                collection_name,
+                documents,
+            )
+    
+    async def stream_answer(
+        self,
+        collection_name: str,
+        question: str,
+        top_k: int = 10,
+    ) -> AsyncIterator[str]:
+        """Stream answer generation for long-running operations.
+        
+        This simulates streaming by yielding chunks of the answer.
+        In a real implementation, this would integrate with streaming
+        endpoints from the LLM.
+
+        Args:
+            collection_name: Name of the collection to search
+            question: User question
+            top_k: Number of context chunks to retrieve
+
+        Yields:
+            Chunks of the generated answer
+        """
+        try:
+            # Retrieve context asynchronously
+            context_chunks, sources = await self.retrieve_context_async(
+                collection_name=collection_name,
+                query=question,
+                top_k=top_k,
+            )
+            
+            # Yield progress indicator
+            yield "[Generating answer...]\n"
+            
+            # Generate the answer (still synchronous, but yielded progressively)
+            context_text = "\n".join([f"- {chunk}" for chunk in context_chunks])
+            
+            rag_prompt = f"""Answer the following question based on the context:
+
+Context:
+{context_text}
+
+Question: {question}
+
+Answer:"""
+            
+            answer = self.ollama_client.generate(
+                prompt=rag_prompt,
+                model=self.settings.ollama_model,
+                temperature=0.1,
+            )
+            
+            # Yield answer in chunks (by sentences)
+            for sentence in answer.split(". "):
+                if sentence.strip():
+                    yield sentence + ". "
+                    await asyncio.sleep(0.01)  # Small delay for streaming effect
+            
+            # Yield sources
+            yield "\n\n[Sources]\n"
+            for i, source in enumerate(sources[:3], 1):
+                yield f"{i}. {source.get('document_name', 'Unknown')}\n"
+        
+        except Exception as e:
+            logger.error(f"Stream answer failed: {e}")
+            yield f"Error: {str(e)}"

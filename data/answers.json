@@ -1,0 +1,59 @@
+{
+  "qa_pairs": [
+    {
+      "question": "What is Milvus?",
+      "answer": "Milvus is an open-source vector database built to power applications for AI, machine learning, and data science. It allows you to index, search, and analyze large amounts of high-dimensional data efficiently. The provided documentation context specifically mentions features like L2, COSINE, or IP (which are distance metrics used in vector databases), as well as an AnnSearchRequest object which is likely part of a search request structure in Milvus.",
+      "collection": "milvus_rag_collection"
+    },
+    {
+      "question": "How do I create a collection?",
+      "answer": "To create a collection in Milvus, you can follow either of the two methods provided in the documentation:\n\n1. Quick setup: This method allows you to create a collection by specifying only the name and the number of dimensions of the vector embeddings to be stored in the collection. In Python, this can be done using the following code snippet:\n\n```python\ncollection = Collection(\"Books\")  # Replace \"Books\" with your desired collection name\ncollection.create(dimension=vector_dimension)  # Replace `vector_dimension` with the number of dimensions for your vectors\n```\n\n2. Customized setup: Instead of using a quick-setup approach, you can customize the collection creation process by using specific parameters. To achieve this in Python, use the following function:\n\n```python\nfrom pymilvus import MilvusClient\n\nclient = MilvusClient(endpoint=\"<your_milvus_endpoint>\")  # Replace `<your_milvus_endpoint>` with your Milvus server address\ncollection = client.create_collection(\"Books\", params={\"dimension\": vector_dimension})  # Replace \"Books\" with your desired collection name and `vector_dimension` with the number of dimensions for your vectors\n```",
+      "collection": "milvus_rag_collection"
+    },
+    {
+      "question": "How do I insert data?",
+      "answer": "To insert data into a Milvus collection, you can use the `insert` function. Here's an example:\n\n```python\nres = client.insert(collection_name=\"your_collection_name\", data=your_data)\n\nprint(res)\n```\n\nIn this example, replace \"your_collection_name\" with the name of your collection and \"your_data\" with the data you want to insert. The `insert` function returns a dictionary containing information about the inserted data, such as the number of inserts (`insert_count`), the IDs of the inserted data (`ids`), and the cost of the operation (`cost`).",
+      "collection": "milvus_rag_collection"
+    },
+    {
+      "question": "How do I search vectors?",
+      "answer": "In Milvus, you can search for vectors by performing either single-vector search or vector search on multiple vectors.\n\nFor a single-vector search, specify the target collection name, the query vector, and the desired number of results (`limit`). Here's an example:\n\n```python\nquery_vectors = embedding_fn.encode_queries([\"Who is Alan Turing?\"])\n# Assuming that you have a collection named 'my_collection'\nresults = client.search(collection='my_collection', query_vectors=query_vectors, top_k=10)\n```\n\nFor vector search on multiple vectors at the same time, Milvus accepts one or more vectors as `query_vectors`. The value of `query_vectors` is a list of vectors, where each vector is an array of float numbers. Here's an example:\n\n```python\n# Assume that we have two collections named 'my_collection1' and 'my_collection2'\nquery_vectors = [vectors_from_my_collection1, vectors_from_my_collection2]\nresults = client.search(collection='my_collection1', query_vectors=query_vectors)\n```\n\nFor more complex search scenarios like range search or semantic search, please refer to the official Milvus documentation: https://milvus.io/docs/introduction.md",
+      "collection": "milvus_rag_collection"
+    },
+    {
+      "question": "What are vector indexes?",
+      "answer": "Vector indexes, as described in the provided context, are reorganized data structures derived from raw data. They are used to greatly accelerate the process of vector similarity search in Milvus. These indexes can be built on various types of vector fields and support a wide range of index types for both vector fields and scalar fields. For more information about different vector index types, refer to the Vector Index Types section in the official Milvus documentation.",
+      "collection": "milvus_rag_collection"
+    },
+    {
+      "question": "How do I filter data?",
+      "answer": "In Milvus, you can filter data using Bitset, which helps with attribute filtering and data deletion. For example, to filter data based on metadata like 'source', you can use the Milvus Scalar Filtering Rules as shown below:\n\n```python\nvectorstore.similarity_search( \"What is CoT?\", k=1, expr=\"source == 'https://lilianweng.github.io/posts/2023-06-23-agent/'\", )\n```\n\nMore information on using strings to filter search results and Hybrid Search can be found in these resources:\n\n- [Using strings to filter](https://milvus.io/blog/2022-08-08-How-to-use-string-data-to-empower-your-similarity-search-applications.md)\n- [Hybrid Search](https://milvus.io/docs/hybridsearch.md)\n\nFor loading data into Milvus, please refer to the provided documentation:\n\n- [Load data into Milvus](https://milvus.io/docs/quickstart.md#load-data)",
+      "collection": "milvus_rag_collection"
+    },
+    {
+      "question": "What is embedding?",
+      "answer": "An embedding, in the context of the provided documentation, refers to a list of floating-point numbers that capture semantic information about a document or query. These embeddings can be generated using different models such as SPLADE or Cohere's embedding models, which are integrated into Milvus via the `SpladeEmbeddingFunction` and `CohereEmbeddingFunction` classes respectively. The purpose of these embeddings is to enable tasks like text classification and semantic search. For more detailed information about embeddings in Milvus, you can refer to [Embeddings](embeddings.md) documentation.",
+      "collection": "milvus_rag_collection"
+    },
+    {
+      "question": "How do I optimize performance?",
+      "answer": "To optimize performance in Milvus, you can leverage its strong vector search capabilities in combination with DSPy's programming abilities, as demonstrated in the provided documentation.\n\nOne way to optimize performance is by adjusting `nprobe`, which helps find an ideal balance between accuracy and speed for a given scenario. It is important to note that results from the [IVF_FLAT performance test](https://zilliz.com/blog/Accelerating-Similarity-Search-on-Really-Big-Data-with-Vector-Indexing) show that query time increases sharply as both the number of target input vectors (`nq`) and the number of clusters to search (`nprobe`) increase.\n\nFor more information on vector indexes and their performance advantages, please refer to the [Vector Index](index.md) documentation in Milvus. Additionally, you can find more information about Knowhere's performance optimization by reading [Milvus: A Purpose-Built Vector Data Management System](https://www.cs.purdue.edu/homes/csjgwang/pubs/SIGMOD21_Milvus.pdf).",
+      "collection": "milvus_rag_collection"
+    },
+    {
+      "question": "What are the best practices?",
+      "answer": "The provided documentation does not explicitly detail the best practices for using Milvus, but it does discuss the four levels of consistency and their suitable scenarios in the \"Consistency\" section. Here's a brief summary:\n\n1. Strong Consistency: This level ensures that all clients will receive the same search results, regardless of the order they make requests. It is best suited for applications that require high accuracy or strict consistency guarantees.\n\n2. Batch Strong Consistency: This level ensures that all clients in a batch will receive the same search results as long as their requests are included in the same transaction. This level is suitable for applications where multiple clients make concurrent requests, and they expect to get consistent results when grouped together.\n\n3. Eventual Consistency: With eventual consistency, search results might be different between clients due to replicas not being up-to-date simultaneously across all Milvus instances. This level is best suited for read-heavy applications where updates happen infrequently and stale data can be tolerated for some time.\n\n4. Weak Consistency: This level does not guarantee any consistency guarantees between different clients, but each client receives the latest result available on its own replica. It is suitable for applications that have a high write rate or where old search results are acceptable.\n\nTo optimize a RAG application with Milvus using DSPy, it's essential to understand the trade-offs between consistency levels and choose the appropriate one based on your specific requirements.",
+      "collection": "milvus_rag_collection"
+    },
+    {
+      "question": "How do I manage collections?",
+      "answer": "You manage collections in Milvus by using the SDK of your choice. The process is detailed in the guide titled \"Manage Collections.\" Here's a Python example from the documentation:\n\n```Python\ncollection = Collection(\"Books\")\n```\n\nFor more information, you can refer to [Manage Collections](manage-collections.md) in the provided documentation.",
+      "collection": "milvus_rag_collection"
+    }
+  ],
+  "description": "Pre-generated question-answer pairs for response cache",
+  "generated_count": 10,
+  "total_expected": 10,
+  "version": "1.0",
+  "usage": "Run: python document-loaders/sync_answers_cache.py to load into response_cache"
+}

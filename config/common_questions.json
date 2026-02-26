@@ -1,0 +1,16 @@
+{
+  "common_questions": [
+    "What is Milvus?",
+    "How do I create a collection?",
+    "How do I insert data?",
+    "How do I search vectors?",
+    "What are vector indexes?",
+    "How do I filter data?",
+    "What is embedding?",
+    "How do I optimize performance?",
+    "What are the best practices?",
+    "How do I manage collections?"
+  ],
+  "description": "Common questions to pre-warm the cache on API startup",
+  "version": "1.0"
+}

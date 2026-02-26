@@ -18,12 +18,18 @@ class Settings(BaseSettings):
     ollama_host: str = "http://localhost:11434"
     ollama_model: str = "mistral:latest"
     ollama_embed_model: str = "nomic-embed-text:v1.5"
+    ollama_timeout: int = 30  # Request timeout in seconds
+    ollama_pool_size: int = 5  # Connection pool size
 
     # Milvus Configuration
     milvus_host: str = "localhost"
     milvus_port: int = 19530
     milvus_db_name: str = "knowledge_base"
     loader_milvus_db_name: str = "knowledge_base"
+    milvus_user: str = "root"
+    milvus_password: str = "Milvus"
+    milvus_timeout: int = 30  # Request timeout in seconds
+    milvus_pool_size: int = 10  # Connection pool size
 
     # Collection Configuration
     ollama_collection_name: str = "milvus_rag_collection"
@@ -45,6 +51,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     batch_size: int = 10
     user_agent: str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+    api_port: int = 8001  # API server port (reads API_PORT from .env, defaults to 8001)
 
     # AWS Configuration (optional)
     aws_region: Optional[str] = "us-west-1"

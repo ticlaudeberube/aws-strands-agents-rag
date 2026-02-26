@@ -1,6 +1,8 @@
 """Ollama integration for embeddings and LLM."""
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 import logging
 from typing import List, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -9,46 +11,77 @@ logger = logging.getLogger(__name__)
 
 
 class OllamaClient:
-    """Client for Ollama embeddings and LLM."""
+    """Client for Ollama embeddings and LLM with connection pooling and timeouts."""
 
-    def __init__(self, host: str = "http://localhost:11434"):
-        """Initialize Ollama client.
+    def __init__(
+        self,
+        host: str = "http://localhost:11434",
+        timeout: int = 30,
+        pool_size: int = 5,
+    ):
+        """Initialize Ollama client with connection pooling.
 
         Args:
             host: Ollama server host (e.g., http://localhost:11434)
+            timeout: Default request timeout in seconds
+            pool_size: Connection pool size
         """
         self.host = host
+        self.timeout = timeout
+        self.pool_size = pool_size
         self.embedding_endpoint = f"{host}/api/embeddings"
         self.generate_endpoint = f"{host}/api/generate"
         self.tags_endpoint = f"{host}/api/tags"
+        
+        # Create session with connection pooling and retry logic
+        self.session = requests.Session()
+        
+        # Configure retry strategy
+        retry_strategy = Retry(
+            total=3,
+            backoff_factor=1,
+            status_forcelist=[429, 500, 502, 503, 504],
+            allowed_methods=["HEAD", "GET", "DELETE", "POST"],
+        )
+        
+        # Apply retry strategy to both HTTP and HTTPS
+        adapter = HTTPAdapter(
+            max_retries=retry_strategy,
+            pool_connections=pool_size,
+            pool_maxsize=pool_size,
+        )
+        self.session.mount("http://", adapter)
+        self.session.mount("https://", adapter)
     
-    def is_available(self, timeout: int = 5) -> bool:
+    def is_available(self, timeout: Optional[int] = None) -> bool:
         """Check if Ollama server is available.
         
         Args:
-            timeout: Request timeout in seconds
+            timeout: Request timeout in seconds (uses default if None)
             
         Returns:
             True if Ollama is available, False otherwise
         """
+        _timeout = timeout if timeout is not None else self.timeout
         try:
-            response = requests.get(self.tags_endpoint, timeout=timeout)
+            response = self.session.get(self.tags_endpoint, timeout=_timeout)
             return response.status_code == 200
         except Exception as e:
             logger.warning(f"Ollama server not available: {e}")
             return False
     
-    def get_available_models(self, timeout: int = 5) -> List[str]:
+    def get_available_models(self, timeout: Optional[int] = None) -> List[str]:
         """Get list of available models from Ollama.
         
         Args:
-            timeout: Request timeout in seconds
+            timeout: Request timeout in seconds (uses default if None)
             
         Returns:
             List of available model names
         """
+        _timeout = timeout if timeout is not None else self.timeout
         try:
-            response = requests.get(self.tags_endpoint, timeout=timeout)
+            response = self.session.get(self.tags_endpoint, timeout=_timeout)
             response.raise_for_status()
             data = response.json()
             models = [model.get("name", "") for model in data.get("models", [])]
@@ -56,26 +89,35 @@ class OllamaClient:
         except Exception as e:
             logger.error(f"Failed to get models from Ollama: {e}")
             return []
+    
+    def close(self):
+        """Close the session and clean up resources."""
+        if hasattr(self, 'session'):
+            self.session.close()
+            logger.info("Ollama client session closed")
 
     def embed_text(
         self,
         text: str,
         model: str = "all-minilm",
+        timeout: Optional[int] = None,
     ) -> List[float]:
         """Generate embedding for text using Ollama.
 
         Args:
             text: Text to embed
             model: Ollama model name for embeddings
+            timeout: Request timeout in seconds (uses default if None)
 
         Returns:
             Embedding vector
         """
+        _timeout = timeout if timeout is not None else self.timeout
         try:
-            response = requests.post(
+            response = self.session.post(
                 self.embedding_endpoint,
                 json={"prompt": text, "model": model},
-                timeout=60,  # Increased timeout for slower embeddings
+                timeout=_timeout,
             )
             response.raise_for_status()
             result = response.json()
@@ -84,7 +126,7 @@ class OllamaClient:
             logger.error(f"❌ Cannot connect to Ollama at {self.host}. Make sure Ollama is running: ollama serve")
             raise RuntimeError(f"Ollama connection failed. Is Ollama running at {self.host}?") from e
         except requests.exceptions.Timeout as e:
-            logger.error(f"❌ Ollama request timeout (60s). Model '{model}' may be slow or not loaded. Check: ollama list")
+            logger.error(f"❌ Ollama request timeout ({_timeout}s). Model '{model}' may be slow or not loaded. Check: ollama list")
             raise RuntimeError(f"Ollama request timed out. Try: ollama pull {model}") from e
         except requests.exceptions.HTTPError as e:
             if e.response.status_code == 404:
@@ -166,7 +208,7 @@ class OllamaClient:
             Generated text
         """
         try:
-            response = requests.post(
+            response = self.session.post(
                 self.generate_endpoint,
                 json={"prompt": prompt, "model": model, "stream": stream, "temperature": temperature},
                 timeout=120,
@@ -174,6 +216,12 @@ class OllamaClient:
             response.raise_for_status()
             result = response.json()
             return result.get("response", "")
+        except requests.exceptions.ConnectionError as e:
+            logger.error(f"❌ Cannot connect to Ollama at {self.host}. Make sure Ollama is running: ollama serve")
+            raise RuntimeError(f"Ollama connection failed. Is Ollama running at {self.host}?") from e
+        except requests.exceptions.Timeout as e:
+            logger.error(f"❌ Ollama request timeout (120s). Model '{model}' may be slow or not loaded. Check: ollama list")
+            raise RuntimeError(f"Ollama request timed out loading model '{model}'. Try: ollama pull {model}") from e
         except Exception as e:
             logger.error(f"Generation failed: {e}")
             raise

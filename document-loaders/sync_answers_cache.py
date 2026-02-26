@@ -1,0 +1,169 @@
+#!/usr/bin/env python3
+"""Load pre-generated Q&A pairs into response cache for instant lookup.
+
+This script loads question-answer pairs with their embeddings into Milvus
+response_cache collection, enabling instant semantic cache hits for common questions.
+
+Usage: python document-loaders/sync_answers_cache.py
+"""
+
+import json
+import logging
+import os
+import sys
+from datetime import datetime
+from pathlib import Path
+from tqdm import tqdm
+
+# Setup logging
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
+
+# Add parent directory to path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from src.config.settings import get_settings
+from src.tools import MilvusVectorDB, OllamaClient
+
+settings = get_settings()
+vector_db = MilvusVectorDB(
+    host=settings.milvus_host,
+    port=settings.milvus_port,
+    db_name=settings.milvus_db_name,
+)
+ollama_client = OllamaClient(
+    host=settings.ollama_host,
+    timeout=settings.ollama_timeout,
+)
+
+def load_answers_cache():
+    """Load pre-generated Q&A pairs into response cache.
+    
+    Always runs to sync answers into the cache.
+    """
+    try:
+        with open("./data/answers.json", "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        print("❌ Error: ./data/answers.json not found")
+        print("   Please create with format:")
+        print("   {")
+        print('     "qa_pairs": [')
+        print('       {')
+        print('         "question": "What is Milvus?",')
+        print('         "answer": "Milvus is a vector database...",')
+        print('         "collection": "milvus_rag_collection"')
+        print("       }")
+        print("     ]")
+        print("   }")
+        return
+    
+    qa_pairs = data.get("qa_pairs", [])
+    if not qa_pairs:
+        print("❌ No Q&A pairs found in answers.json")
+        return
+    
+    # Use configured collection name for all Q&A pairs
+    collection_name = settings.ollama_collection_name
+    print(f"Using collection: {collection_name}")
+    
+    # Check if response_cache collection exists
+    try:
+        collections = vector_db.list_collections()
+        if "response_cache" not in collections:
+            print("Creating response_cache collection...")
+            vector_db.create_collection(
+                collection_name="response_cache",
+                embedding_dim=384,  # nomic-embed-text dimension
+                index_type="HNSW",
+                metric_type="COSINE",
+            )
+    except Exception as e:
+        print(f"Warning: Could not verify/create response_cache: {e}")
+    
+    print(f"\nLoading {len(qa_pairs)} Q&A pairs into response_cache...")
+    print("=" * 70)
+    logger.info(f"Processing {len(qa_pairs)} Q&A pairs from answers.json")
+    
+    embeddings = []
+    texts = []
+    metadata_list = []
+    skipped_count = 0
+    
+    for qa in tqdm(qa_pairs, desc="Generating embeddings"):
+        question = qa.get("question", "")
+        answer = qa.get("answer", "")
+        
+        if not question or not answer:
+            logger.warning(f"Skipping incomplete Q&A pair: {question[:30]}")
+            skipped_count += 1
+            continue
+        
+        # Generate question embedding
+        question_embedding = ollama_client.embed_text(
+            question,
+            model=settings.ollama_embed_model,
+        )
+        
+        embeddings.append(question_embedding)
+        texts.append(answer)
+        metadata_list.append({
+            "question": question,
+            "collection": collection_name,
+            "source": "pregenerated",
+        })
+    
+    if not embeddings:
+        logger.error("No valid Q&A pairs to insert")
+        print("❌ No valid Q&A pairs to insert")
+        return
+    
+    # Insert into response_cache
+    print(f"\nInserting {len(embeddings)} Q&A pairs into response_cache...")
+    logger.info(f"Collection: {collection_name}")
+    logger.info(f"Embeddings generated: {len(embeddings)}")
+    logger.info(f"Skipped pairs: {skipped_count}")
+    
+    try:
+        vector_db.insert_embeddings(
+            collection_name="response_cache",
+            embeddings=embeddings,
+            texts=texts,
+            metadata=metadata_list,
+        )
+        inserted_count = len(embeddings)
+        logger.info(f"✓ Successfully inserted {inserted_count} Q&A pairs into response_cache")
+        logger.info(f"  Success rate: {inserted_count}/{len(qa_pairs)} ({(inserted_count/len(qa_pairs)*100):.1f}%)")
+        print(f"✓ Successfully inserted {inserted_count} Q&A pairs")
+        print(f"  Response cache is now ready for semantic matching")
+    except Exception as e:
+        logger.error(f"Failed to insert Q&A pairs: {e}")
+        print(f"❌ Failed to insert Q&A pairs: {e}")
+        return
+    
+    print("\n" + "=" * 70)
+    print("✓ Answers cache population complete!")
+    print(f"  Questions cached: {len(embeddings)}")
+    print(f"  Similarity threshold: 92%")
+    
+    logger.info("="*70)
+    logger.info("CACHE SYNC STATISTICS")
+    logger.info("="*70)
+    logger.info(f"Total Q&A pairs loaded: {len(qa_pairs)}")
+    logger.info(f"Valid pairs processed: {len(embeddings)}")
+    logger.info(f"Invalid/skipped pairs: {skipped_count}")
+    logger.info(f"Successfully inserted: {len(embeddings)}")
+    logger.info(f"Collection: {collection_name}")
+    logger.info(f"Cache type: response_cache (semantic similarity)")
+    logger.info(f"Similarity threshold: 92%")
+    logger.info("="*70)
+    
+    logger.info("✓ Cache sync complete - answers are now available for semantic matching!")
+
+
+if __name__ == "__main__":
+    load_answers_cache()

@@ -3,6 +3,11 @@ import './App.css';
 import ChatMessage from './components/ChatMessage';
 import ChatInput from './components/ChatInput';
 
+// API Configuration from environment variables
+const API_HOST = process.env.REACT_APP_API_HOST || 'localhost';
+const API_PORT = process.env.REACT_APP_API_PORT || '8001';
+const API_BASE_URL = `http://${API_HOST}:${API_PORT}`;
+
 function App() {
   const [messages, setMessages] = useState([
     {
@@ -30,7 +35,7 @@ function App() {
 
   const checkApiStatus = async () => {
     try {
-      const response = await fetch('http://localhost:8000/health');
+      const response = await fetch(`${API_BASE_URL}/health`);
       if (response.ok) {
         setApiStatus('connected');
       } else {
@@ -65,7 +70,7 @@ function App() {
     setMessages((prev) => [...prev, assistantMessage]);
 
     try {
-      const response = await fetch('http://localhost:8000/v1/chat/completions', {
+      const response = await fetch(`${API_BASE_URL}/v1/chat/completions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

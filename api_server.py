@@ -471,6 +471,9 @@ async def chat_completions(request: ChatCompletionRequest, bypass_cache: bool = 
         bypass_cache: Set to true to skip all caches and query LLM directly
                       Example: /v1/chat/completions?bypass_cache=true
     """
+    # Track total query time
+    total_start_time = time.time()
+    
     try:
         current_agent = await get_or_init_agent()
         current_settings = settings if settings else get_settings()
@@ -492,6 +495,7 @@ async def chat_completions(request: ChatCompletionRequest, bypass_cache: bool = 
         else:
             logger.info(f"Query: {user_message[:100]}...")
         
+        timing_data = {}
         try:
             if bypass_cache:
                 # Bypass all caches and query LLM directly
@@ -512,6 +516,22 @@ async def chat_completions(request: ChatCompletionRequest, bypass_cache: bool = 
             answer = f"Error: {str(e)}"
             sources = []
         
+        # Deduplicate sources by document_name or text to avoid showing the same document multiple times
+        if sources:
+            seen = set()
+            unique_sources = []
+            for source in sources:
+                # Use document_name as primary key for deduplication, fall back to text
+                key = source.get("document_name") or source.get("text", "")
+                if key and key not in seen:
+                    seen.add(key)
+                    unique_sources.append(source)
+            sources = unique_sources
+        
+        # Calculate total query time
+        total_time = time.time() - total_start_time
+        timing_data["total_time_ms"] = round(total_time * 1000, 2)
+        
         return {
             "id": f"chatcmpl-{datetime.now().timestamp()}",
             "object": "chat.completion",
@@ -529,7 +549,8 @@ async def chat_completions(request: ChatCompletionRequest, bypass_cache: bool = 
                 "completion_tokens": len(answer.split()),
                 "total_tokens": len(user_message.split()) + len(answer.split()),
             },
-            "sources": sources,  # Include sources in response
+            "sources": sources,  # Include sources in response (deduplicated)
+            "timing": timing_data,  # Include timing metrics
         }
     except Exception as e:
         logger.error(f"Chat completions error: {e}")

@@ -107,3 +107,13 @@
   font-size: 11px;
   font-weight: 500;
 }
+.query-timing {
+  margin-left: auto;
+  padding: 2px 8px;
+  background: #dbeafe;
+  color: #1e40af;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}

@@ -1,7 +1,31 @@
 import React from 'react';
 import './SourcesPanel.css';
 
-function SourcesPanel({ sources, isLoading }) {
+function SourcesPanel({ sources, isLoading, timing }) {
+  const formatTime = (milliseconds) => {
+    if (typeof milliseconds !== 'number' || milliseconds < 0) return 'N/A';
+    if (milliseconds === 0) return '0ms';
+    if (milliseconds < 1000) return Math.round(milliseconds) + 'ms';
+    return (milliseconds / 1000).toFixed(2) + 's';
+  };
+
+  // Deduplicate sources by document_name to avoid showing duplicates
+  const getUniqueSources = () => {
+    if (!sources || sources.length === 0) return [];
+    const seen = new Set();
+    const unique = [];
+    for (const source of sources) {
+      const key = source.document_name || source.text || '';
+      if (key && !seen.has(key)) {
+        seen.add(key);
+        unique.push(source);
+      }
+    }
+    return unique;
+  };
+
+  const uniqueSources = getUniqueSources();
+
   if (isLoading) {
     return (
       <div className="sources-panel">
@@ -28,10 +52,15 @@ function SourcesPanel({ sources, isLoading }) {
     <div className="sources-panel">
       <div className="sources-panel-header">
         <h3>📚 Retrieved Documents</h3>
-        <span className="sources-count">{sources.length} source{sources.length !== 1 ? 's' : ''}</span>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          {timing && timing.total_time_ms && (
+            <span className="panel-timing">⏱️ {formatTime(timing.total_time_ms)}</span>
+          )}
+          <span className="sources-count">{uniqueSources.length} source{uniqueSources.length !== 1 ? 's' : ''}</span>
+        </div>
       </div>
       <div className="sources-panel-list">
-        {sources.map((source, index) => {
+        {uniqueSources.map((source, index) => {
           // Show document name if available, otherwise show text snippet
           const displayName = source.document_name || (source.text ? source.text.substring(0, 100) + '...' : 'Unnamed source');
           const isDocumentName = !!source.document_name;

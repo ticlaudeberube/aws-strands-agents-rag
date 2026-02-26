@@ -1,8 +1,26 @@
 import React from 'react';
 import './SourcesList.css';
 
-function SourcesList({ sources }) {
+function SourcesList({ sources, timing }) {
   if (!sources || sources.length === 0) {
+    return null;
+  }
+
+  // Deduplicate sources by document_name or text to avoid showing duplicates
+  const getUniqueKey = (source) => source.document_name || source.text || '';
+  const seen = new Set();
+  const uniqueSources = sources.filter((source) => {
+    const key = getUniqueKey(source);
+    if (key && seen.has(key)) {
+      return false;
+    }
+    if (key) {
+      seen.add(key);
+    }
+    return true;
+  });
+
+  if (uniqueSources.length === 0) {
     return null;
   }
 
@@ -12,15 +30,25 @@ function SourcesList({ sources }) {
     return Math.max(0, Math.round(distance * 100));
   };
 
+  const formatTime = (milliseconds) => {
+    if (typeof milliseconds !== 'number' || milliseconds < 0) return 'N/A';
+    if (milliseconds === 0) return '0ms';
+    if (milliseconds < 1000) return Math.round(milliseconds) + 'ms';
+    return (milliseconds / 1000).toFixed(2) + 's';
+  };
+
   return (
     <div className="sources-container">
       <div className="sources-header">
         <span className="sources-icon">📚</span>
         <span className="sources-title">Sources Used</span>
-        <span className="sources-count">({sources.length})</span>
+        <span className="sources-count">({uniqueSources.length})</span>
+        {timing && timing.total_time_ms && (
+          <span className="query-timing">⏱️ {formatTime(timing.total_time_ms)}</span>
+        )}
       </div>
       <div className="sources-list">
-        {sources.map((source, index) => (
+        {uniqueSources.map((source, index) => (
           <div key={index} className="source-item">
             <div className="source-number">{index + 1}</div>
             <div className="source-content">

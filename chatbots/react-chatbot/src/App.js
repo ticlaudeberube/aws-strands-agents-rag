@@ -16,6 +16,7 @@ function App() {
       role: 'assistant',
       isStreaming: false,
       sources: [],
+      timing: {},
     },
   ]);
   const [isLoading, setIsLoading] = useState(false);
@@ -66,6 +67,7 @@ function App() {
       role: 'assistant',
       isStreaming: true,
       sources: [],
+      timing: {},
     };
     setMessages((prev) => [...prev, assistantMessage]);
 
@@ -91,6 +93,7 @@ function App() {
       const assistantText =
         data.choices?.[0]?.message?.content || 'No response received';
       const sources = data.sources || [];
+      const timing = data.timing || {};
 
       // Update the assistant message with streaming effect
       setMessages((prev) => {
@@ -98,6 +101,7 @@ function App() {
         const lastMessage = newMessages[newMessages.length - 1];
         lastMessage.text = assistantText;
         lastMessage.sources = sources;
+        lastMessage.timing = timing;
         lastMessage.isStreaming = false;
         return newMessages;
       });
@@ -108,6 +112,7 @@ function App() {
         const lastMessage = newMessages[newMessages.length - 1];
         lastMessage.text = `❌ Error: ${error.message}`;
         lastMessage.sources = [];
+        lastMessage.timing = {};
         lastMessage.isStreaming = false;
         return newMessages;
       });
@@ -124,6 +129,7 @@ function App() {
         role: 'assistant',
         isStreaming: false,
         sources: [],
+        timing: {},
       },
     ]);
   };

@@ -152,3 +152,11 @@
   font-style: italic;
   margin-top: 4px;
 }
+.panel-timing {
+  font-size: 12px;
+  background: rgba(255, 255, 255, 0.3);
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-weight: 500;
+  white-space: nowrap;
+}

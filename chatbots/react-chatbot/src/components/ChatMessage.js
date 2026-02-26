@@ -16,7 +16,7 @@ function ChatMessage({ message }) {
           {message.isStreaming && <span className="cursor">|</span>}
         </p>
         {!isUser && message.sources && message.sources.length > 0 && (
-          <SourcesList sources={message.sources} />
+          <SourcesList sources={message.sources} timing={message.timing} />
         )}
       </div>
     </div>

@@ -192,9 +192,10 @@ class OllamaClient:
     def generate(
         self,
         prompt: str,
-        model: str = "mistral",
+        model: str = "neural-chat",
         stream: bool = False,
         temperature: float = 0.1,
+        max_tokens: int = None,
     ) -> str:
         """Generate text using Ollama LLM.
 
@@ -203,14 +204,31 @@ class OllamaClient:
             model: Ollama model name
             stream: Whether to stream response
             temperature: Temperature for generation (0-2, lower=more deterministic)
+            max_tokens: Maximum number of tokens to generate (Ollama uses 'num_predict', None = no limit)
 
         Returns:
             Generated text
         """
         try:
+            # Ollama uses 'num_predict' instead of 'max_tokens'
+            # num_predict: number of tokens to predict (-1 = infinite, default behavior)
+            payload = {
+                "prompt": prompt,
+                "model": model,
+                "stream": stream,
+                "temperature": temperature,
+            }
+            
+            # Only add num_predict if max_tokens is explicitly set and > 0
+            if max_tokens is not None and max_tokens > 0:
+                payload["num_predict"] = max_tokens
+                logger.info(f"Using token limit: max_tokens={max_tokens} (num_predict={max_tokens})")
+            else:
+                logger.info(f"No token limit (max_tokens={max_tokens})")
+            
             response = self.session.post(
                 self.generate_endpoint,
-                json={"prompt": prompt, "model": model, "stream": stream, "temperature": temperature},
+                json=payload,
                 timeout=120,
             )
             response.raise_for_status()

@@ -2,9 +2,14 @@
 
 A high-performance Retrieval-Augmented Generation (RAG) system using AWS Strands Agents, Ollama for local LLM/embeddings, and Milvus as a vector database.
 
+## Quick Start
+
+**Optimal Configuration**: Uses **qwen2.5:0.5b** model (500M parameters) - 85% faster than larger models while maintaining high answer quality. See [Model Performance Comparison](docs/MODEL_PERFORMANCE_COMPARISON.md) for benchmarks.
+
 ## Features
 
-- **Local LLM & Embeddings**: Uses Ollama for running language models and generating embeddings locally
+- **Strands Agent Framework**: Built on StrandsRAGAgent with proper Strands Agents SDK integration
+- **Local LLM & Embeddings**: Uses Ollama with qwen2.5:0.5b for fast, efficient inference
 - **Vector Database**: Milvus with optimized indexing, caching, and performance tuning
 - **Advanced Search**: Pagination, filtering by source, and async search capabilities
 - **Batch Processing**: Efficient embedding generation with parallel workers
@@ -13,47 +18,47 @@ A high-performance Retrieval-Augmented Generation (RAG) system using AWS Strands
 - **Multiple Document Loaders**: Support for files, URLs, and text documents
 - **Optimized Deployment**: Integrated Docker setup with performance optimizations
 
-## ⚠️ Architecture Status & Improvements
+## 📚 Documentation
 
-**Current Status**: The project demonstrates a working RAG system but does **not yet fully comply** with AWS Strands Agents best practices.
+**Getting Started**:
+- **[GETTING_STARTED.md](docs/GETTING_STARTED.md)** - Complete setup and configuration guide
+- **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** - System architecture, tools, and skills overview
 
-📋 **START HERE - Complete Architecture Evaluation**:
-- **[ARCHITECTURE_REVIEW_SUMMARY.md](docs/ARCHITECTURE_REVIEW_SUMMARY.md)** ⭐ **Read this first** - Executive summary with findings, roadmap, and next steps (5-10 min read)
+**Development & Integration**:
+- **[DEVELOPMENT.md](docs/DEVELOPMENT.md)** - Development guide with code examples
+- **[API_SERVER.md](docs/API_SERVER.md)** - FastAPI server documentation
 
-📚 **Detailed Documentation**:
-- **[ARCHITECTURE_EVALUATION.md](docs/ARCHITECTURE_EVALUATION.md)** - Comprehensive assessment against Strands standards (technical)
-- **[IMPLEMENTATION_GUIDE.md](docs/IMPLEMENTATION_GUIDE.md)** - Step-by-step corrective implementation with code examples
-- **[STRANDS_QUICK_REFERENCE.md](docs/STRANDS_QUICK_REFERENCE.md)** - Quick reference for developers
+**Performance & Configuration**:
+- **[MODEL_PERFORMANCE_COMPARISON.md](docs/MODEL_PERFORMANCE_COMPARISON.md)** - Model benchmarking (qwen2.5:0.5b recommended)
+- **[LATENCY_OPTIMIZATION.md](docs/LATENCY_OPTIMIZATION.md)** - Performance tuning strategies
+- **[CACHING_STRATEGY.md](docs/CACHING_STRATEGY.md)** - Multi-layer caching architecture
 
-**Key Findings** (⭐ See ARCHITECTURE_REVIEW_SUMMARY.md for full analysis):
-- ❌ Uses custom RAGAgent class instead of Strands `Agent` framework
-- ❌ Missing MCP (Model Context Protocol) server for tool management  
-- ❌ No skill system for progressive tool disclosure
-- ❌ No AgentCore Memory, Observability, or Identity integration
-- ✅ Vector database, caching, and async support working well
+**Architecture & Integration**:
+- **[STRANDS_QUICK_REFERENCE.md](docs/STRANDS_QUICK_REFERENCE.md)** - Strands Agents SDK reference
+- **[PROJECT_SUMMARY.md](docs/PROJECT_SUMMARY.md)** - Complete project overview
 
-**Recommendation**: Follow the phased implementation plan in the evaluation documents (8-10 weeks, can be done alongside production system).
-
----
-
-## Current Architecture (Pre-Optimization)
+## Architecture Overview
 
 ```
-┌──────────────────┐
-│  RAGAgent        │ ⚠️ Custom class (needs Strands SDK)
-│  (custom)        │
-└────────┬─────────┘
+┌──────────────────────┐
+│  StrandsRAGAgent     │ ✅ Strands Agents Framework
+│  (Strands-based)     │
+└────────┬─────────────┘
          │
-    ┌────┴──────┬──────────┐
-    │            │        │
-┌───▼────┐  ┌───▼──────┐  ┌▼────────┐
-│ Ollama │  │ Milvus   │  │Document │
-│  LLM   │  │ Vector   │  │Loaders  │
-│ & Emb  │  │   DB     │  │         │
-└────────┘  └──────────┘  └─────────┘
+    ┌────┴──────┬──────────────┐
+    │            │              │
+┌───▼────┐  ┌───▼──────┐  ┌────▼────────┐
+│ Ollama │  │ Milvus   │  │ Document    │
+│(qwen   │  │ Vector   │  │ Loaders     │
+│ 2.5)   │  │   DB     │  │             │
+└────────┘  └──────────┘  └─────────────┘
 ```
 
-**Target Architecture (Strands-Compliant)** shown in [ARCHITECTURE_EVALUATION.md](docs/ARCHITECTURE_EVALUATION.md)
+**Components**:
+- **StrandsRAGAgent**: Strands Agents SDK-compliant RAG agent with multi-layer caching
+- **Ollama** (qwen2.5:0.5b): Local LLM for generation and embeddings
+- **Milvus**: Vector database for semantic search
+- **MCP Server**: Model Context Protocol server for tool management
 
 ## How It Works
 
@@ -77,10 +82,11 @@ A high-performance Retrieval-Augmented Generation (RAG) system using AWS Strands
 
 ### Key Components
 
-- **RAGAgent** (`src/agents/rag_agent.py`): Orchestrates the RAG pipeline with intelligent caching
-- **MilvusVectorDB** (`src/tools/milvus_client.py`): Vector database wrapper for semantic search and storage
-- **OllamaClient** (`src/tools/ollama_client.py`): Local LLM for embeddings and text generation
-- **API Server** (`api_server.py`): FastAPI server exposing OpenAI-compatible endpoints
+- **StrandsRAGAgent** (`src/agents/strands_rag_agent.py`): Strands Agents framework with RAG pipeline, intelligent caching, and security checks
+- **MilvusVectorDB** (`src/tools/milvus_client.py`): Vector database wrapper with HNSW indexing and semantic search
+- **OllamaClient** (`src/tools/ollama_client.py`): Local LLM client using qwen2.5:0.5b for fast inference
+- **RAGAgentMCPServer** (`src/mcp/mcp_server.py`): Model Context Protocol server for tool management
+- **API Server** (`api_server.py`): FastAPI server with OpenAI-compatible endpoints
 - **Document Loaders** (`document-loaders/`): Tools to load, process, chunk, and embed documents
 - **Chatbots** (`chatbots/`): Interactive CLI and React web UI for querying
 
@@ -771,13 +777,17 @@ Target coverage: > 80% overall, > 90% for core modules
 - **[STRANDS_QUICK_REFERENCE.md](docs/STRANDS_QUICK_REFERENCE.md)** - Developer quick reference
 
 ### 🚀 Phase 1-2 Implementation (Strands Agents Refactor - Complete!)
-- **[PHASE_1_2_COMPLETION_SUMMARY.md](docs/PHASE_1_2_COMPLETION_SUMMARY.md)** - What's been delivered and status
-- **[PHASE_1_2_ARCHITECTURE.md](docs/PHASE_1_2_ARCHITECTURE.md)** - New architecture with StrandsRAGAgent, MCP server, and skill system
-- **[PHASE_1_2_TESTING.md](docs/PHASE_1_2_TESTING.md)** - Testing guide with examples and curl commands
-- **[PHASE_1_2_MIGRATION_GUIDE.md](docs/PHASE_1_2_MIGRATION_GUIDE.md)** - How to migrate from old RAGAgent (optional)
-- **[PHASE_1_2_QUICK_REFERENCE.md](docs/PHASE_1_2_QUICK_REFERENCE.md)** - Cheat sheet for common tasks
+- **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** - Complete system architecture with tools, skills, and MCP protocol
+- **[STRANDS_QUICK_REFERENCE.md](docs/STRANDS_QUICK_REFERENCE.md)** - Quick reference for Strands agent patterns
+- **[DEVELOPMENT.md](docs/DEVELOPMENT.md)** - Developer guide with code examples
 
-**Status**: ✅ Complete - 5 tools registered across 3 skills, 5 new API endpoints, backward compatible  
+**Historical Documentation** (for reference):
+- **[PHASE_1_2_COMPLETION_SUMMARY.md](docs/PHASE_1_2_COMPLETION_SUMMARY.md)** - Implementation completion details
+- **[PHASE_1_2_ARCHITECTURE.md](docs/PHASE_1_2_ARCHITECTURE.md)** - Phase 1-2 architecture documentation
+- **[PHASE_1_2_TESTING.md](docs/PHASE_1_2_TESTING.md)** - Testing guide from Phase 1-2
+- **[PHASE_1_2_QUICK_REFERENCE.md](docs/PHASE_1_2_QUICK_REFERENCE.md)** - Quick reference from Phase 1-2
+
+**Status**: ✅ Complete - 5 tools registered across 3 skills, MCP endpoints, optimized for Strands  
 **Try it**: `python examples/phase_1_2_examples.py`
 
 ### Getting Started & Development
@@ -786,7 +796,7 @@ Target coverage: > 80% overall, > 90% for core modules
 - [Collection Configuration](docs/COLLECTION_CONFIG.md) - Manage collections and configuration
 
 ### Operational & Reference
-- [API Server Documentation](docs/API_SERVER.md) - REST API reference
+- [API Server Documentation](docs/API_SERVER.md) - REST API and MCP endpoints
 - [Project Summary](docs/PROJECT_SUMMARY.md) - Complete project overview
 - [Docker Setup](docker/README.md) - Detailed Docker and performance optimization
 - [Docker Migration Guide](scripts/DOCKER_MIGRATION.md) - Migrate from legacy milvus-standalone setup

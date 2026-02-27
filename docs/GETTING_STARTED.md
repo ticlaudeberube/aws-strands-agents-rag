@@ -1,6 +1,8 @@
 # Getting Started with AWS Strands Agents RAG
 
-This guide will walk you through setting up and running the RAG system step-by-step.
+This guide will walk you through setting up and running the StrandsRAGAgent RAG system step-by-step.
+
+**Note**: This system uses **qwen2.5:0.5b** (500M parameters) as the optimal model, providing 85% faster inference compared to larger models while maintaining high-quality answers. See [Model Performance Comparison](MODEL_PERFORMANCE_COMPARISON.md) for detailed benchmarks.
 
 ## Prerequisites Checklist
 
@@ -154,21 +156,19 @@ ollama serve
 In another terminal, pull the required models:
 
 ```bash
-# For LLM (text generation - REQUIRED, optimized model)
-ollama pull neural-chat
+# For LLM - RECOMMENDED: qwen2.5:0.5b (optimized model)
+ollama pull qwen2.5:0.5b
 
 # For embeddings (REQUIRED)
-ollama pull nomic-embed-text
-
-# Optional: Alternative models if needed
-ollama pull orca-mini         # Faster alternative (1-2s)
-ollama pull mistral           # Higher quality alternative
+ollama pull nomic-embed-text:v1.5
 ```
 
-**Why neural-chat?**
-- 4-6x faster than mistral
-- Balanced quality and speed (recommended)
-- See [LATENCY_OPTIMIZATION.md](LATENCY_OPTIMIZATION.md) for details
+**Why qwen2.5:0.5b?**
+- ✅ **85% faster** than larger models (8-15s vs 40-54s)
+- ✅ **High quality answers** - generates comprehensive, accurate responses
+- ✅ **Small footprint** - 500M parameters (14x smaller than 7B models)
+- ✅ **Local inference** - runs efficiently on consumer hardware
+- See [MODEL_PERFORMANCE_COMPARISON.md](MODEL_PERFORMANCE_COMPARISON.md) for full benchmarks
 
 **Verify Ollama:**
 
@@ -177,10 +177,10 @@ ollama pull mistral           # Higher quality alternative
 ollama list
 
 # Test the language model
-ollama run neural-chat "What is Python?"
+ollama run qwen2.5:0.5b "What is Python?"
 
 # Test the embedding model  
-ollama run nomic-embed-text "test"
+ollama run nomic-embed-text:v1.5 "test"
 ```
 
 ## Step 4: Configure Application
@@ -190,38 +190,49 @@ Edit `.env` file with your settings:
 ```env
 # Ollama Configuration
 OLLAMA_HOST=http://localhost:11434
-OLLAMA_MODEL=neural-chat:latest        # Optimized for speed & quality (5.6-9.3x faster)
+OLLAMA_MODEL=qwen2.5:0.5b              # ✅ Recommended: 85% faster, high quality
 OLLAMA_EMBED_MODEL=nomic-embed-text:v1.5
 
 # Milvus Configuration
 MILVUS_HOST=localhost
 MILVUS_PORT=19530
 MILVUS_DB_NAME=knowledge_base
-LOADER_MILVUS_DB_NAME=knowledge_base
 
 # Collection Configuration
 OLLAMA_COLLECTION_NAME=milvus_rag_collection
 
-# Performance Settings (Already Optimized)
-AGENT_CACHE_SIZE=500                    # LRU cache size
-EMBEDDING_BATCH_SIZE=32                 # Batch size
-MAX_CHUNK_LENGTH=250                    # Optimized chunk size (was 400)
+# Performance Settings
+OLLAMA_NUM_THREADS=6              # Adjust based on your CPU
+TOKENIZERS_PARALLELISM=false
+MAX_CHUNK_LENGTH=400              # Optimal chunk size for retrieval
+EMBEDDING_DIM=768
+AGENT_CACHE_SIZE=500              # LRU cache size
 
 # Application Configuration
 LOG_LEVEL=INFO
-BATCH_SIZE=10
+API_PORT=8001
 ```
 
-**Key Notes:**
-- **OLLAMA_MODEL**: Now using `neural-chat` (4-6x faster than mistral)
-  - See [LATENCY_OPTIMIZATION.md](LATENCY_OPTIMIZATION.md) for performance details
-  - Alternative models: `orca-mini` (faster, lower quality), `phi` (fastest, most concise)
-- **MAX_CHUNK_LENGTH**: Optimized to 250 chars for faster processing
-- **MILVUS_HOST**: Use "milvus" in Docker, "localhost" for local Milvus
+**Key Configuration Notes:**
+- **OLLAMA_MODEL**: Using `qwen2.5:0.5b` (500M parameters)
+  - See [MODEL_PERFORMANCE_COMPARISON.md](MODEL_PERFORMANCE_COMPARISON.md) for benchmarks
+  - Provides 85% faster inference than larger models
+- **MILVUS_HOST**: Use "milvus" for Docker, "localhost" for local installation
 
-For detailed configuration, see [Collection Configuration Guide](COLLECTION_CONFIG.md).
+## Step 5: Load Sample Documents
 
-## Step 5: Start API Server
+```bash
+# Load sample Milvus documentation
+python document-loaders/add_sample_docs.py
+
+# Expected output:
+# Initializing RAG Agent...
+# ✓ Created collection 'milvus_rag_collection'
+# ✓ Documents added successfully!
+# ✓ Collection 'milvus_rag_collection' now has 6 documents
+```
+
+## Step 6: Start API Server
 
 ```bash
 # Start the OpenAI-compatible API server

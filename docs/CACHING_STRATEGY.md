@@ -2,7 +2,7 @@
 
 ## Overview
 
-The RAG Agent implements a **multi-layer caching strategy** to minimize latency and improve performance. Each layer caches a different aspect of the pipeline.
+The StrandsRAGAgent implements a **multi-layer caching strategy** to minimize latency and improve performance. Each layer caches a different aspect of the pipeline.
 
 ## The 4 Caching Layers
 
@@ -24,7 +24,7 @@ Full RAG Pipeline (Generation: 8-15s)
 **Purpose**: Avoid re-generating embeddings for identical questions
 
 ```python
-# In RAGAgent._generate_embedding()
+# In StrandsRAGAgent._generate_embedding()
 embedding_cache = OrderedDict()  # question text → embedding vector
 ```
 
@@ -52,7 +52,7 @@ Q2: "What is Milvus?"  (same question)
 **Purpose**: Avoid re-searching Milvus for identical retrieval queries
 
 ```python
-# In RAGAgent.retrieve_context()
+# In StrandsRAGAgent.retrieve_context()
 search_cache = OrderedDict()  # (collection, query, top_k, offset) → context chunks
 ```
 
@@ -81,7 +81,7 @@ Q2: "What is Milvus?" (same question, same collection, same top_k)
 **Purpose**: Avoid full LLM generation for semantically similar questions
 
 ```python
-# In RAGAgent.answer_question()
+# In StrandsRAGAgent.answer_question()
 response_cache = MilvusResponseCache()  # Persistent in Milvus response_cache collection
 ```
 
@@ -113,7 +113,7 @@ Q2: "Tell me about Milvus"  (semantically similar)
 **Purpose**: Fast exact-match answer retrieval within same session/request
 
 ```python
-# In RAGAgent.answer_question()
+# In StrandsRAGAgent.answer_question()
 answer_cache = OrderedDict()  # (question, collection, top_k) → (answer, sources)
 ```
 

@@ -10,16 +10,18 @@ Your AWS Strands Agents RAG project has been successfully created! Here's what h
 aws-stands-agents-rag/
 │
 ├── 📄 Core Files
-│   ├── api_server.py              # FastAPI server - REST API entry point
+│   ├── api_server.py              # FastAPI server with MCP endpoints
 │   ├── pyproject.toml            # Project configuration & dependencies
 │   ├── .env.example              # Environment template
 │   └── .gitignore                # Git ignore rules
 │
-├── 📚 Documentation
-│   ├── README.md                 # Complete user documentation
+├── 📚 Documentation (docs/)
+│   ├── ARCHITECTURE.md           # Complete system architecture
 │   ├── GETTING_STARTED.md        # Step-by-step setup guide
 │   ├── DEVELOPMENT.md            # Developer guide
-│   └── PROJECT_SUMMARY.md        # This file
+│   ├── API_SERVER.md             # API endpoints documentation
+│   ├── PROJECT_SUMMARY.md        # This file
+│   └── [Other guides]
 │
 ├── 🚀 Setup Scripts
 │   ├── setup.sh                  # Automated setup (Unix/macOS)
@@ -30,23 +32,23 @@ aws-stands-agents-rag/
 ├── 📦 Source Code (src/)
 │   ├── __init__.py               # Package initialization
 │   ├── agents/
-│   │   ├── rag_agent.py         # Main RAG Agent implementation
-│   │   └── __init__.py
+│   │   ├── strands_rag_agent.py  # Strands-compliant RAG agent
+│   │   └── skills/               # Organized tool skills
+│   │       ├── retrieval_skill.py
+│   │       ├── answer_generation_skill.py
+│   │       └── knowledge_base_skill.py
 │   ├── tools/
-│   │   ├── milvus_client.py     # Milvus vector database wrapper
-│   │   ├── ollama_client.py     # Ollama LLM client
-│   │   └── __init__.py
-│   ├── loaders/
-│   │   ├── document_loader.py   # Document loading utilities
-│   │   └── __init__.py
+│   │   ├── milvus_vector_db.py   # Vector database wrapper
+│   │   ├── ollama_client.py      # LLM client
+│   │   ├── tool_registry.py      # Tool management system
+│   │   └── response_cache.py     # Caching system
+│   ├── mcp/
+│   │   └── mcp_server.py         # MCP protocol implementation
 │   └── config/
-│       ├── settings.py           # Configuration with pydantic
-│       └── __init__.py
+│       └── settings.py            # Configuration with pydantic
 │
 ├── 🎯 Examples (examples/)
-│   ├── basic_rag.py             # Basic RAG with sample documents
-│   ├── file_based_rag.py        # Load documents from files
-│   └── interactive_chat.py      # Interactive Q&A chat
+│   └── phase_1_2_examples.py     # Strands agent usage examples
 │
 ├── 🐳 Docker (docker/)
 │   ├── docker-compose.yml        # Optimized Milvus, MinIO, etcd, RAG API
@@ -59,7 +61,6 @@ aws-stands-agents-rag/
 ├── 📜 Scripts (scripts/)
 │   ├── check_setup.py            # System setup diagnostic
 │   ├── verify_collection.py      # Collection configuration verifier
-│   ├── migrate_docker.sh         # Migration from milvus-standalone
 │   ├── DOCKER_MIGRATION.md       # Docker migration guide
 │   └── setup.sh / setup.bat      # Project setup scripts
 │

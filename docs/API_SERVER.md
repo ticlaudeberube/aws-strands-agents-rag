@@ -159,6 +159,112 @@ const answer = data.choices[0].message.content;
 console.log(answer);
 ```
 
+## MCP Server Endpoints (Tool Management)
+
+The API server includes Model Context Protocol (MCP) endpoints for managing tools and skills. These are documented in [ARCHITECTURE.md](ARCHITECTURE.md#mcp-server).
+
+### Get Server Info
+
+```bash
+GET http://localhost:8000/api/mcp/server/info
+```
+
+Returns server metadata and available endpoints:
+```json
+{
+  "name": "RAG Agent MCP Server",
+  "version": "1.0.0",
+  "capabilities": ["tools", "resources"],
+  "tools": 5,
+  "skills": 3
+}
+```
+
+### List All Tools
+
+```bash
+GET http://localhost:8000/api/mcp/tools
+```
+
+Returns all available tools with schemas:
+```json
+{
+  "tools": [
+    {
+      "name": "retrieve_documents",
+      "description": "Retrieve documents using semantic search",
+      "skill": "retrieval",
+      "parameters": {"type": "object", ...}
+    },
+    ...
+  ]
+}
+```
+
+### List Skills
+
+```bash
+GET http://localhost:8000/api/mcp/skills
+```
+
+Returns organized skills with tool counts:
+```json
+{
+  "skills": {
+    "retrieval": {"tools": 3, "description": "Document search"},
+    "answer_generation": {"tools": 1, "description": "Answer synthesis"},
+    "knowledge_base": {"tools": 1, "description": "Document management"}
+  }
+}
+```
+
+### Get Skill Documentation
+
+```bash
+GET http://localhost:8000/api/mcp/skills/{skill_name}
+```
+
+Returns markdown documentation for a skill:
+```bash
+curl http://localhost:8000/api/mcp/skills/retrieval
+```
+
+### Call Tool
+
+```bash
+POST http://localhost:8000/api/mcp/tools/call
+```
+
+Execute a tool with arguments:
+```bash
+curl -X POST http://localhost:8000/api/mcp/tools/call \
+  -H "Content-Type: application/json" \
+  -d '{
+    "tool": "retrieve_documents",
+    "arguments": {
+      "collection": "milvus_docs",
+      "query": "What is Milvus?",
+      "top_k": 5
+    }
+  }'
+```
+
+Response:
+```json
+{
+  "status": "success",
+  "tool": "retrieve_documents",
+  "result": [
+    {
+      "text": "Milvus is an open-source vector database...",
+      "source": "milvus_docs",
+      "score": 0.95
+    },
+    ...
+  ]
+}
+```
+
 ## Using with Ollama GUI
 
 Most Ollama web UI tools support OpenAI-compatible APIs.

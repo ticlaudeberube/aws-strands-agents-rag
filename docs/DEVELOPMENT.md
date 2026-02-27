@@ -6,44 +6,53 @@ This guide provides information for developers working on this project.
 
 ```
 aws-stands-agents-rag/
-├── src/                          # Main source code
-│   ├── __init__.py              # Package initialization
-│   ├── agents/                  # Agent implementations
+├── src/                              # Main source code
+│   ├── __init__.py                  # Package initialization
+│   ├── agents/                      # Agent implementations
 │   │   ├── __init__.py
-│   │   └── rag_agent.py        # RAG agent with caching & pagination
-│   ├── tools/                   # Tools and utilities
+│   │   ├── strands_rag_agent.py    # Strands-compliant RAG agent
+│   │   └── skills/                 # Tool skills (organized by category)
+│   │       ├── __init__.py
+│   │       ├── retrieval_skill.py      # Retrieval tools
+│   │       ├── answer_generation_skill.py  # Generation tools
+│   │       └── knowledge_base_skill.py     # Knowledge base tools
+│   ├── tools/                       # Tools and utilities
 │   │   ├── __init__.py
-│   │   ├── milvus_client.py    # Enhanced Milvus vector DB wrapper
-│   │   └── ollama_client.py    # Ollama LLM wrapper with batch processing
-│   ├── loaders/                 # Document loaders
+│   │   ├── milvus_vector_db.py    # Milvus vector DB wrapper
+│   │   ├── ollama_client.py        # Ollama LLM client
+│   │   ├── tool_registry.py        # Tool management & discovery
+│   │   └── response_cache.py       # Response caching system
+│   ├── mcp/                         # Model Context Protocol
 │   │   ├── __init__.py
-│   │   └── document_loader.py  # Document loading utilities
-│   └── config/                  # Configuration
+│   │   └── mcp_server.py           # MCP protocol server for tools
+│   └── config/                      # Configuration
 │       ├── __init__.py
-│       └── settings.py          # Settings with pydantic & caching config
-├── document-loaders/            # Document loading scripts
-│   ├── load_milvus_docs_ollama.py  # Load Milvus docs with batch embedding
-│   ├── core/                       # Core loader utilities
-│   └── milvus_docs/               # Downloaded Milvus documentation
-├── chatbots/                    # Chat interfaces
-│   ├── interactive_chat.py      # Terminal RAG chat
-│   └── react-chatbot/           # React web UI chatbot
-├── docker/                      # Docker configuration
-│   ├── docker-compose.yml       # Services: Milvus, MinIO, etcd, API
-│   ├── Dockerfile               # RAG API container
-│   ├── optimize.sh              # Performance optimization script
-│   ├── daemon.json              # Docker daemon config
-│   └── README.md                # Docker documentation
-├── scripts/                     # Utility scripts
-│   ├── check_setup.py           # System diagnostics
-│   ├── verify_collection.py     # Collection verification
-│   ├── DOCKER_MIGRATION.md      # Migration from milvus-standalone
-│   └── setup.sh / setup.bat     # project setup
-├── examples/                    # Example scripts (legacy)
-├── tests/                       # Unit tests (to be created)
-├── api_server.py               # FastAPI server - REST API endpoint
-├── pyproject.toml              # Project configuration
-└── README.md                   # Main documentation
+│       └── settings.py              # Settings with pydantic
+├── document-loaders/                # Document loading scripts
+│   ├── load_milvus_docs_ollama.py  # Load Milvus docs with embedding
+│   ├── add_sample_docs.py          # Add sample documents
+│   ├── core/                        # Core loader utilities
+│   └── milvus_docs/                # Downloaded Milvus documentation
+├── chatbots/                        # Chat interfaces
+│   ├── interactive_chat.py          # Terminal RAG chat
+│   └── react-chatbot/              # React web UI chatbot
+├── docker/                          # Docker configuration
+│   ├── docker-compose.yml          # Services: Milvus, MinIO, etcd, API
+│   ├── Dockerfile                  # RAG API container
+│   ├── optimize.sh                 # Performance optimization script
+│   ├── daemon.json                 # Docker daemon config
+│   └── README.md                   # Docker documentation
+├── scripts/                         # Utility scripts
+│   ├── check_setup.py              # System diagnostics
+│   ├── verify_collection.py        # Collection verification
+│   ├── DOCKER_MIGRATION.md         # Migration from milvus-standalone
+│   └── setup.sh / setup.bat        # Project setup
+├── examples/                        # Example scripts
+│   └── phase_1_2_examples.py       # Strands agent architecture examples
+├── tests/                           # Unit tests
+├── api_server.py                   # FastAPI server - REST API endpoint
+├── pyproject.toml                  # Project configuration
+└── README.md                        # Main documentation
 ```
 
 ## Key Components
@@ -55,9 +64,9 @@ aws-stands-agents-rag/
 - Runs in a Docker container via the `docker` folder for local development
 
 ### Ollama
-**Ollama** is a local LLM (Large Language Model) platform that allows you to run models like Mistral, Llama2, and neural-chat without cloud dependencies. It provides:
-- Text embeddings for semantic understanding
-- Text generation for answering questions
+**Ollama** is a local LLM (Large Language Model) platform that allows you to run models locally without cloud dependencies. This project uses:
+- **qwen2.5:0.5b** (500M parameters) for fast text generation - 85% faster than larger models
+- **nomic-embed-text:v1.5** for semantic embeddings
 
 ## Development Setup
 
@@ -191,8 +200,8 @@ class MyDocumentLoader(DocumentLoader):
 ### 3. Adding New Agent Functionality
 
 ```python
-# In src/agents/rag_agent.py
-class RAGAgent:
+# In src/agents/strands_rag_agent.py
+class StrandsRAGAgent:
     def new_method(self, param: str) -> str:
         """New method description."""
         # Implementation
@@ -201,43 +210,34 @@ class RAGAgent:
 
 ## Code Examples
 
-### Example 1: Using the RAG Agent with Advanced Features
+### Example 1: Using the StrandsRAGAgent with RAG Pipeline
 
 ```python
-from src.config.settings import get_settings
-from src.agents.rag_agent import RAGAgent
+from src.config.settings import Settings
+from src.agents.strands_rag_agent import StrandsRAGAgent
 
-settings = get_settings()
-agent = RAGAgent(settings=settings)
+settings = Settings()
+agent = StrandsRAGAgent(settings=settings)
 
-# Add documents
+# Add documents to knowledge base
 agent.add_documents(
     collection_name="docs",
     documents=["Document 1", "Document 2", "Document 3"]
 )
 
-# Basic query
-answer = agent.answer_question(
-    collection_name="docs",
+# Ask a question with RAG pipeline
+answer, sources = agent.answer_question(
     question="What is the topic?",
+    collection_name="docs",
     top_k=3
 )
-print(answer)
+print(f"Answer: {answer}")
+print(f"Sources: {len(sources)} documents retrieved")
 
-# Pagination example
-page = 0
-context, sources, total = agent.paginated_search(
+# Direct retrieval
+context, sources = agent.retrieve_context(
     collection_name="docs",
-    question="What is the topic?",
-    page=page,
-    page_size=5
-)
-
-# Filtering by source
-context, sources = agent.search_by_source(
-    collection_name="docs",
-    question="What is the topic?",
-    source="milvus_docs",
+    query="What is the topic?",
     top_k=5
 )
 
@@ -383,13 +383,13 @@ python examples/file_based_rag.py
 
 ```bash
 # Run with debug logging
-LOG_LEVEL=DEBUG python examples/basic_rag.py
+LOG_LEVEL=DEBUG python examples/phase_1_2_examples.py
 
 # Debug specific module
 python -c "
 import logging
 logging.basicConfig(level=logging.DEBUG)
-from src.agents import RAGAgent
+from src.agents import StrandsRAGAgent
 # Your debug code here
 "
 ```
@@ -406,37 +406,40 @@ python -m cProfile -s cumulative examples/basic_rag.py | head -30
 
 ## API Reference
 
-### RAGAgent
+### StrandsRAGAgent
 
 ```python
-class RAGAgent:
+class StrandsRAGAgent:
     # Initialization
     def __init__(self, settings: Settings, cache_size: int = None)
     
-    # Retrieve and Answer
+    # Answer Question (Full RAG Pipeline)
+    def answer_question(
+        question: str,
+        collection_name: str = "default",
+        top_k: int = 5,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None
+    ) -> Tuple[str, List[Dict]]  # (answer, sources)
+    
+    # Retrieve Context
     def retrieve_context(
         collection_name: str,
         query: str,
         top_k: int = 5,
         offset: int = 0,
         filter_source: Optional[str] = None
-    ) -> Tuple[List[str], List[Dict]]
+    ) -> Tuple[List[str], List[Dict]]  # (chunks, sources)
     
-    def answer_question(
+    # Document Management
+    def add_documents(
         collection_name: str,
-        question: str,
-        top_k: int = 10
-    ) -> Tuple[str, List[Dict]]
+        documents: List[Union[str, Dict]]
+    ) -> str  # status message
     
-    # Advanced Search
-    def search_by_source(
-        collection_name: str,
-        question: str,
-        source: str = None,
-        top_k: int = 5
-    ) -> Tuple[List[str], List[Dict]]
-    
-    def paginated_search(
+    # Cache Management
+    def clear_caches() -> None
+```
         collection_name: str,
         question: str,
         page: int = 0,

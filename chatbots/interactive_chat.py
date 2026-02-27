@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Interactive Q&A chatbot using RAG Agent."""
+"""Interactive Q&A chatbot using Strands RAG Agent."""
 
 import logging
 import sys
@@ -9,7 +9,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.config.settings import get_settings
-from src.agents.rag_agent import RAGAgent
+from src.agents.strands_rag_agent import StrandsRAGAgent
 
 logging.basicConfig(
     level=logging.INFO,
@@ -37,9 +37,9 @@ def main():
     settings = get_settings()
 
     # Check Ollama availability
-    logger.info("Initializing RAG Agent...")
+    logger.info("Initializing StrandsRAGAgent...")
     try:
-        agent = RAGAgent(settings=settings)
+        agent = StrandsRAGAgent(settings=settings)
     except Exception as e:
         logger.error(f"Failed to initialize agent: {e}")
         sys.exit(1)
@@ -59,48 +59,54 @@ def main():
     print_header()
     
     # Chat loop
-    while True:
-        try:
-            # Get user input
-            user_input = input("You: ").strip()
-
-            if not user_input:
-                continue
-
-            # Handle commands
-            if user_input.lower() in ["/quit", "/exit"]:
-                print("\nGoodbye! 👋\n")
-                break
-
-            if user_input.lower() == "/help":
-                print_header()
-                continue
-
-            if user_input.lower() == "/collections":
-                print(f"Using collection: {collection_name}")
-                print(f"Available databases: {settings.milvus_db_name}")
-                continue
-
-            # Answer the question
-            print("\nAssistant: ", end="", flush=True)
+    try:
+        while True:
             try:
-                answer, sources = agent.answer_question(
-                    collection_name=collection_name,
-                    question=user_input,
-                    top_k=5,
-                )
-                print(answer)
-                print()
-            except Exception as e:
-                print(f"\n❌ Error answering question: {e}\n")
-                logger.error(f"Failed to answer: {e}")
+                # Get user input
+                user_input = input("You: ").strip()
 
-        except KeyboardInterrupt:
-            print("\n\nGoodbye! 👋\n")
-            break
-        except Exception as e:
-            logger.error(f"Unexpected error: {e}")
-            print(f"❌ Error: {e}\n")
+                if not user_input:
+                    continue
+
+                # Handle commands
+                if user_input.lower() in ["/quit", "/exit"]:
+                    print("\nGoodbye! 👋\n")
+                    break
+
+                if user_input.lower() == "/help":
+                    print_header()
+                    continue
+
+                if user_input.lower() == "/collections":
+                    print(f"Using collection: {collection_name}")
+                    print(f"Available databases: {settings.milvus_db_name}")
+                    continue
+
+                # Answer the question
+                print("\nAssistant: ", end="", flush=True)
+                try:
+                    answer, sources = agent.answer_question(
+                        collection_name=collection_name,
+                        question=user_input,
+                        top_k=5,
+                    )
+                    print(answer)
+                    print()
+                except Exception as e:
+                    print(f"\n❌ Error answering question: {e}\n")
+                    logger.error(f"Failed to answer: {e}")
+
+            except KeyboardInterrupt:
+                print("\n\nGoodbye! 👋\n")
+                break
+            except Exception as e:
+                logger.error(f"Unexpected error: {e}")
+                print(f"❌ Error: {e}\n")
+    
+    finally:
+        # Clean up resources
+        agent.close()
+        logger.info("Agent closed")
 
 
 if __name__ == "__main__":

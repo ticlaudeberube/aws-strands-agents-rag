@@ -1,19 +1,24 @@
-"""Unit tests for RAGAgent."""
+"""Unit tests for StrandsRAGAgent (formerly RAGAgent).
+
+This test file has been updated to test the new StrandsRAGAgent
+which replaces the original RAGAgent with the same interface
+and all core RAG functionality.
+"""
 
 import pytest
 from unittest.mock import Mock, patch, MagicMock
 from collections import OrderedDict
-from src.agents.rag_agent import RAGAgent
+from src.agents.strands_rag_agent import StrandsRAGAgent
 
 
-class TestRAGAgentInit:
-    """Test RAGAgent initialization."""
+class TestStrandsRAGAgentInit:
+    """Test StrandsRAGAgent initialization."""
     
-    @patch('src.agents.rag_agent.MilvusVectorDB')
-    @patch('src.agents.rag_agent.OllamaClient')
+    @patch('src.agents.strands_rag_agent.MilvusVectorDB')
+    @patch('src.agents.strands_rag_agent.OllamaClient')
     def test_init_with_settings(self, mock_ollama, mock_milvus, test_settings):
-        """Test RAGAgent initialization with settings."""
-        agent = RAGAgent(test_settings)
+        """Test StrandsRAGAgent initialization with settings."""
+        agent = StrandsRAGAgent(test_settings)
         
         assert agent.settings == test_settings
         assert agent.cache_size == test_settings.agent_cache_size
@@ -21,23 +26,23 @@ class TestRAGAgentInit:
         assert isinstance(agent.search_cache, OrderedDict)
         assert isinstance(agent.answer_cache, OrderedDict)
     
-    @patch('src.agents.rag_agent.MilvusVectorDB')
-    @patch('src.agents.rag_agent.OllamaClient')
+    @patch('src.agents.strands_rag_agent.MilvusVectorDB')
+    @patch('src.agents.strands_rag_agent.OllamaClient')
     def test_init_with_custom_cache_size(self, mock_ollama, mock_milvus, test_settings):
-        """Test RAGAgent initialization with custom cache size."""
-        agent = RAGAgent(test_settings, cache_size=100)
+        """Test StrandsRAGAgent initialization with custom cache size."""
+        agent = StrandsRAGAgent(test_settings, cache_size=100)
         
         assert agent.cache_size == 100
 
 
-class TestRAGAgentCaching:
-    """Test RAGAgent caching functionality."""
+class TestStrandsRAGAgentCaching:
+    """Test StrandsRAGAgent caching functionality."""
     
-    @patch('src.agents.rag_agent.MilvusVectorDB')
-    @patch('src.agents.rag_agent.OllamaClient')
+    @patch('src.agents.strands_rag_agent.MilvusVectorDB')
+    @patch('src.agents.strands_rag_agent.OllamaClient')
     def test_add_to_cache(self, mock_ollama, mock_milvus, test_settings):
         """Test adding items to cache."""
-        agent = RAGAgent(test_settings, cache_size=2)
+        agent = StrandsRAGAgent(test_settings, cache_size=2)
         cache = OrderedDict()
         
         agent._add_to_cache(cache, "key1", "value1")
@@ -47,11 +52,11 @@ class TestRAGAgentCaching:
         assert cache["key1"] == "value1"
         assert cache["key2"] == "value2"
     
-    @patch('src.agents.rag_agent.MilvusVectorDB')
-    @patch('src.agents.rag_agent.OllamaClient')
+    @patch('src.agents.strands_rag_agent.MilvusVectorDB')
+    @patch('src.agents.strands_rag_agent.OllamaClient')
     def test_cache_eviction(self, mock_ollama, mock_milvus, test_settings):
         """Test LRU cache eviction."""
-        agent = RAGAgent(test_settings, cache_size=2)
+        agent = StrandsRAGAgent(test_settings, cache_size=2)
         cache = OrderedDict()
         
         # Add items beyond cache size
@@ -64,11 +69,11 @@ class TestRAGAgentCaching:
         assert "key2" in cache
         assert "key3" in cache
     
-    @patch('src.agents.rag_agent.MilvusVectorDB')
-    @patch('src.agents.rag_agent.OllamaClient')
+    @patch('src.agents.strands_rag_agent.MilvusVectorDB')
+    @patch('src.agents.strands_rag_agent.OllamaClient')
     def test_clear_caches(self, mock_ollama, mock_milvus, test_settings):
         """Test clearing all caches."""
-        agent = RAGAgent(test_settings)
+        agent = StrandsRAGAgent(test_settings)
         
         agent.embedding_cache["test"] = [0.1, 0.2]
         agent.search_cache["test"] = ([], [])
@@ -81,14 +86,14 @@ class TestRAGAgentCaching:
         assert len(agent.answer_cache) == 0
 
 
-class TestRAGAgentRetrieval:
+class TestStrandsRAGAgentRetrieval:
     """Test context retrieval functionality."""
     
-    @patch('src.agents.rag_agent.MilvusVectorDB')
-    @patch('src.agents.rag_agent.OllamaClient')
+    @patch('src.agents.strands_rag_agent.MilvusVectorDB')
+    @patch('src.agents.strands_rag_agent.OllamaClient')
     def test_retrieve_context_cache_hit(self, mock_ollama, mock_milvus, test_settings):
         """Test retrieve_context with cache hit."""
-        agent = RAGAgent(test_settings)
+        agent = StrandsRAGAgent(test_settings)
         
         # Pre-populate cache
         cached_result = (["chunk1", "chunk2"], [{"source": "doc1"}])
@@ -98,8 +103,8 @@ class TestRAGAgentRetrieval:
         
         assert result == cached_result
     
-    @patch('src.agents.rag_agent.MilvusVectorDB')
-    @patch('src.agents.rag_agent.OllamaClient')
+    @patch('src.agents.strands_rag_agent.MilvusVectorDB')
+    @patch('src.agents.strands_rag_agent.OllamaClient')
     def test_retrieve_context_new_search(self, mock_ollama, mock_milvus, test_settings):
         """Test retrieve_context with new search."""
         # Mock the clients
@@ -110,9 +115,9 @@ class TestRAGAgentRetrieval:
             {"text": "chunk1", "distance": 0.9, "metadata": {}}
         ]
         
-        with patch('src.agents.rag_agent.OllamaClient', return_value=mock_ollama_client):
-            with patch('src.agents.rag_agent.MilvusVectorDB', return_value=mock_milvus_client):
-                agent = RAGAgent(test_settings)
+        with patch('src.agents.strands_rag_agent.OllamaClient', return_value=mock_ollama_client):
+            with patch('src.agents.strands_rag_agent.MilvusVectorDB', return_value=mock_milvus_client):
+                agent = StrandsRAGAgent(test_settings)
                 agent.vector_db = mock_milvus_client
                 agent.ollama_client = mock_ollama_client
                 
@@ -122,15 +127,15 @@ class TestRAGAgentRetrieval:
                 assert len(context_chunks) > 0
 
 
-class TestRAGAgentAsync:
+class TestStrandsRAGAgentAsync:
     """Test async functionality."""
     
     @pytest.mark.asyncio
-    @patch('src.agents.rag_agent.MilvusVectorDB')
-    @patch('src.agents.rag_agent.OllamaClient')
+    @patch('src.agents.strands_rag_agent.MilvusVectorDB')
+    @patch('src.agents.strands_rag_agent.OllamaClient')
     async def test_answer_question_async(self, mock_ollama, mock_milvus, test_settings):
         """Test async answer_question."""
-        agent = RAGAgent(test_settings)
+        agent = StrandsRAGAgent(test_settings)
         agent.answer_question = Mock(return_value=("answer", []))
         
         result = await agent.answer_question_async("collection", "question")
@@ -139,11 +144,11 @@ class TestRAGAgentAsync:
         assert isinstance(result[1], list)
     
     @pytest.mark.asyncio
-    @patch('src.agents.rag_agent.MilvusVectorDB')
-    @patch('src.agents.rag_agent.OllamaClient')
+    @patch('src.agents.strands_rag_agent.MilvusVectorDB')
+    @patch('src.agents.strands_rag_agent.OllamaClient')
     async def test_retrieve_context_async(self, mock_ollama, mock_milvus, test_settings):
         """Test async retrieve_context."""
-        agent = RAGAgent(test_settings)
+        agent = StrandsRAGAgent(test_settings)
         agent.retrieve_context = Mock(return_value=(["chunk"], []))
         
         result = await agent.retrieve_context_async("collection", "query")

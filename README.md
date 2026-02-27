@@ -13,12 +13,35 @@ A high-performance Retrieval-Augmented Generation (RAG) system using AWS Strands
 - **Multiple Document Loaders**: Support for files, URLs, and text documents
 - **Optimized Deployment**: Integrated Docker setup with performance optimizations
 
-## Architecture
+## ⚠️ Architecture Status & Improvements
+
+**Current Status**: The project demonstrates a working RAG system but does **not yet fully comply** with AWS Strands Agents best practices.
+
+📋 **START HERE - Complete Architecture Evaluation**:
+- **[ARCHITECTURE_REVIEW_SUMMARY.md](docs/ARCHITECTURE_REVIEW_SUMMARY.md)** ⭐ **Read this first** - Executive summary with findings, roadmap, and next steps (5-10 min read)
+
+📚 **Detailed Documentation**:
+- **[ARCHITECTURE_EVALUATION.md](docs/ARCHITECTURE_EVALUATION.md)** - Comprehensive assessment against Strands standards (technical)
+- **[IMPLEMENTATION_GUIDE.md](docs/IMPLEMENTATION_GUIDE.md)** - Step-by-step corrective implementation with code examples
+- **[STRANDS_QUICK_REFERENCE.md](docs/STRANDS_QUICK_REFERENCE.md)** - Quick reference for developers
+
+**Key Findings** (⭐ See ARCHITECTURE_REVIEW_SUMMARY.md for full analysis):
+- ❌ Uses custom RAGAgent class instead of Strands `Agent` framework
+- ❌ Missing MCP (Model Context Protocol) server for tool management  
+- ❌ No skill system for progressive tool disclosure
+- ❌ No AgentCore Memory, Observability, or Identity integration
+- ✅ Vector database, caching, and async support working well
+
+**Recommendation**: Follow the phased implementation plan in the evaluation documents (8-10 weeks, can be done alongside production system).
+
+---
+
+## Current Architecture (Pre-Optimization)
 
 ```
 ┌──────────────────┐
-│  Strands Agents  │
-│   (RAG Agent)    │
+│  RAGAgent        │ ⚠️ Custom class (needs Strands SDK)
+│  (custom)        │
 └────────┬─────────┘
          │
     ┌────┴──────┬──────────┐
@@ -29,6 +52,8 @@ A high-performance Retrieval-Augmented Generation (RAG) system using AWS Strands
 │ & Emb  │  │   DB     │  │         │
 └────────┘  └──────────┘  └─────────┘
 ```
+
+**Target Architecture (Strands-Compliant)** shown in [ARCHITECTURE_EVALUATION.md](docs/ARCHITECTURE_EVALUATION.md)
 
 ## How It Works
 
@@ -372,14 +397,14 @@ aws-stands-agents-rag/
 
 ```python
 from src.config.settings import get_settings
-from src.agents.rag_agent import RAGAgent
+from src.agents.strands_rag_agent import StrandsRAGAgent
 
 # Initialize
 settings = get_settings()
-agent = RAGAgent(settings=settings)
+agent = StrandsRAGAgent(settings=settings)
 
 # Add documents
-documents = ["Document 1 text...", "Document 2 text..."]
+documents = [{"text": "Document 1 text..."}, {"text": "Document 2 text..."}]
 agent.add_documents(
     collection_name="my_docs",
     documents=documents
@@ -580,9 +605,9 @@ docker-compose -f docker/docker-compose.yml restart
 ### Pagination
 
 ```python
-from src.agents.rag_agent import RAGAgent
+from src.agents.strands_rag_agent import StrandsRAGAgent
 
-agent = RAGAgent(settings=settings)
+agent = StrandsRAGAgent(settings=settings)
 
 # Get paginated results
 page = 0
@@ -663,7 +688,7 @@ results = asyncio.run(async_search())
 ### Custom Embedding Models
 
 ```python
-agent = RAGAgent(settings=settings)
+agent = StrandsRAGAgent(settings=settings)
 
 # Use different embedding model
 embeddings = agent.ollama_client.embed_texts(
@@ -739,13 +764,32 @@ Target coverage: > 80% overall, > 90% for core modules
 
 ## Documentation
 
+### 📋 Architecture Review (New - Start Here!)
+- **[ARCHITECTURE_REVIEW_SUMMARY.md](docs/ARCHITECTURE_REVIEW_SUMMARY.md)** - ⭐ **Read this first** Executive summary of findings and roadmap
+- **[ARCHITECTURE_EVALUATION.md](docs/ARCHITECTURE_EVALUATION.md)** - Comprehensive assessment vs. Strands standards
+- **[IMPLEMENTATION_GUIDE.md](docs/IMPLEMENTATION_GUIDE.md)** - Corrective implementation with code examples
+- **[STRANDS_QUICK_REFERENCE.md](docs/STRANDS_QUICK_REFERENCE.md)** - Developer quick reference
+
+### 🚀 Phase 1-2 Implementation (Strands Agents Refactor - Complete!)
+- **[PHASE_1_2_COMPLETION_SUMMARY.md](docs/PHASE_1_2_COMPLETION_SUMMARY.md)** - What's been delivered and status
+- **[PHASE_1_2_ARCHITECTURE.md](docs/PHASE_1_2_ARCHITECTURE.md)** - New architecture with StrandsRAGAgent, MCP server, and skill system
+- **[PHASE_1_2_TESTING.md](docs/PHASE_1_2_TESTING.md)** - Testing guide with examples and curl commands
+- **[PHASE_1_2_MIGRATION_GUIDE.md](docs/PHASE_1_2_MIGRATION_GUIDE.md)** - How to migrate from old RAGAgent (optional)
+- **[PHASE_1_2_QUICK_REFERENCE.md](docs/PHASE_1_2_QUICK_REFERENCE.md)** - Cheat sheet for common tasks
+
+**Status**: ✅ Complete - 5 tools registered across 3 skills, 5 new API endpoints, backward compatible  
+**Try it**: `python examples/phase_1_2_examples.py`
+
+### Getting Started & Development
 - [Getting Started Guide](docs/GETTING_STARTED.md) - Step-by-step setup instructions
-- [Collection Configuration](docs/COLLECTION_CONFIG.md) - Manage collections and configuration
-- [Docker Migration Guide](scripts/DOCKER_MIGRATION.md) - Migrate from legacy milvus-standalone setup
-- [Docker Setup](docker/README.md) - Detailed Docker and performance optimization
 - [Development Guide](docs/DEVELOPMENT.md) - Development and contribution guidelines
+- [Collection Configuration](docs/COLLECTION_CONFIG.md) - Manage collections and configuration
+
+### Operational & Reference
 - [API Server Documentation](docs/API_SERVER.md) - REST API reference
 - [Project Summary](docs/PROJECT_SUMMARY.md) - Complete project overview
+- [Docker Setup](docker/README.md) - Detailed Docker and performance optimization
+- [Docker Migration Guide](scripts/DOCKER_MIGRATION.md) - Migrate from legacy milvus-standalone setup
 
 ## Integration with AWS Services
 

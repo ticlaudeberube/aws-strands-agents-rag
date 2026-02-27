@@ -3,6 +3,8 @@
 
 Exposes the RAG agent as an OpenAI-compatible API endpoint.
 Can be used with Ollama GUI and other compatible clients.
+
+Uses StrandsRAGAgent with MCP support and Strands framework integration.
 """
 
 import logging
@@ -24,7 +26,10 @@ from pydantic import BaseModel
 sys.path.insert(0, str(Path(__file__).parent))
 
 from src.config.settings import get_settings
-from src.agents.rag_agent import RAGAgent
+from src.agents.strands_rag_agent import StrandsRAGAgent
+from src.agents.skills import RetreivalSkill, AnswerGenerationSkill, KnowledgeBaseSkill
+from src.mcp.mcp_server import RAGAgentMCPServer
+from src.tools.tool_registry import get_registry
 
 logging.basicConfig(
     level=logging.INFO,
@@ -74,13 +79,76 @@ class ChatCompletionResponse(BaseModel):
 # Lifespan Manager
 # ============================================================================
 
+# Global state
+strands_agent: Optional[StrandsRAGAgent] = None
+mcp_server: Optional[RAGAgentMCPServer] = None
+settings: Optional[object] = None
+initialization_error: Optional[str] = None
+common_questions: List[str] = []
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """FastAPI lifespan context manager for startup and shutdown."""
+    """FastAPI lifespan context manager for startup and shutdown.
+    
+    Initializes:
+    - StrandsRAGAgent with all RAG logic, caching, and security
+    - MCP Server with registered skills
+    """
+    global strands_agent, mcp_server, settings, initialization_error, common_questions
+    
     # Startup
-    yield
-    # Shutdown
-    cleanup_resources()
+    logger.info("=" * 70)
+    logger.info("Starting RAG Agent API Server with StrandsRAGAgent")
+    logger.info("=" * 70)
+    
+    try:
+        # Load settings
+        settings = get_settings()
+        logger.info(f"Settings loaded: {settings.milvus_host}:{settings.milvus_port}")
+        
+        # Initialize StrandsRAGAgent
+        logger.info("\nInitializing StrandsRAGAgent...")
+        strands_agent = StrandsRAGAgent(settings)
+        logger.info("✓ StrandsRAGAgent initialized")
+        logger.info(f"  - Multi-layer caching enabled (embedding, search, answer cache)")
+        logger.info(f"  - Security attack detection enabled")
+        logger.info(f"  - Scope validation enabled")
+        logger.info(f"  - Semantic response caching enabled")
+        
+        # Initialize MCP server and register skills
+        logger.info("\nInitializing MCP Server...")
+        mcp_server = RAGAgentMCPServer(settings)
+        registry = get_registry()
+        
+        skills_summary = registry.list_skills()
+        logger.info(f"✓ MCP Server initialized with {len(registry.list_tools())} tools")
+        logger.info(f"  Skills: {skills_summary}")
+        
+        # Load common questions
+        try:
+            questions_file = Path(__file__).parent / "config" / "common_questions.json"
+            if questions_file.exists():
+                with open(questions_file, "r") as f:
+                    common_questions = json.load(f)
+                logger.info(f"✓ Loaded {len(common_questions)} common questions")
+        except Exception as e:
+            logger.warning(f"Failed to load common questions: {e}")
+        
+        logger.info("\n" + "=" * 70)
+        logger.info("Server ready! Using StrandsRAGAgent architecture")
+        logger.info("=" * 70 + "\n")
+        
+        yield
+        
+    except Exception as e:
+        initialization_error = str(e)
+        logger.error(f"✗ Initialization failed: {e}", exc_info=True)
+        raise
+    
+    finally:
+        # Shutdown
+        cleanup_resources()
 
 
 # ============================================================================
@@ -89,7 +157,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="RAG Agent API",
-    description="OpenAI-compatible API for RAG Agent",
+    description="OpenAI-compatible API for RAG Agent with MCP Support",
     version="1.0.0",
     lifespan=lifespan,
 )
@@ -103,55 +171,45 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Global state
-agent: Optional[RAGAgent] = None
-settings: Optional[object] = None
-initialization_error: Optional[str] = None
-common_questions: List[str] = []
-
 
 async def get_or_init_agent():
-    """Get existing agent (assumes it's already initialized on startup)."""
-    global agent, settings, initialization_error
+    """Get existing StrandsRAGAgent (assumes it's already initialized on startup)."""
+    global strands_agent, settings, initialization_error
     
     if initialization_error:
         raise HTTPException(status_code=503, detail=initialization_error)
     
-    if agent is None:
+    if strands_agent is None:
         raise HTTPException(status_code=503, detail="Agent not initialized. Check server startup logs.")
     
-    return agent
+    return strands_agent
 
 
 def cleanup_resources() -> None:
     """Clean up resources on shutdown."""
-    global agent, settings
+    global strands_agent, mcp_server
     
     logger.info("\n" + "=" * 60)
     logger.info("Shutting down RAG Agent API Server")
     logger.info("=" * 60)
     
-    if agent is not None:
+    # Clean up MCP server
+    if mcp_server is not None:
         try:
-            # Close vector DB connection
-            if hasattr(agent.vector_db, 'client') and agent.vector_db.client:
-                try:
-                    agent.vector_db.client.close()
-                    logger.info("✓ Milvus connection closed")
-                except Exception as e:
-                    logger.warning(f"Failed to close Milvus connection: {e}")
-            
-            # Close Ollama session
-            if hasattr(agent.ollama_client, 'session') and agent.ollama_client.session:
-                try:
-                    agent.ollama_client.session.close()
-                    logger.info("✓ Ollama session closed")
-                except Exception as e:
-                    logger.warning(f"Failed to close Ollama session: {e}")
-            
-            logger.info("✓ All resources cleaned up")
+            mcp_server.close()
+            logger.info("✓ MCP Server closed")
         except Exception as e:
-            logger.error(f"Error during cleanup: {e}")
+            logger.warning(f"Error closing MCP Server: {e}")
+    
+    # Clean up StrandsRAGAgent (primary agent)
+    if strands_agent is not None:
+        try:
+            strands_agent.close()
+            logger.info("✓ StrandsRAGAgent closed")
+            logger.info("✓ Milvus connection closed")
+            logger.info("✓ Ollama session closed")
+        except Exception as e:
+            logger.warning(f"Error closing StrandsRAGAgent: {e}")
     
     logger.info("=" * 60)
     logger.info("✓ Shutdown complete")
@@ -179,14 +237,14 @@ def load_common_questions() -> List[str]:
         return []
 
 
-def warm_response_cache(agent: "RAGAgent", settings) -> None:
+def warm_response_cache(agent: "StrandsRAGAgent", settings) -> None:
     """Pre-warm response cache with answers from answers.json on startup.
     
     Automatically loads Q&A pairs from data/answers.json into the response cache
     for semantic matching, as long as the file exists.
     
     Args:
-        agent: RAGAgent instance with response_cache
+        agent: StrandsRAGAgent instance with response_cache
         settings: Application settings
     """
     if not agent.response_cache:
@@ -261,6 +319,7 @@ async def root():
     return {
         "name": "RAG Agent API",
         "version": "1.0.0",
+        "description": "OpenAI-compatible API with MCP support for RAG agent",
         "endpoints": {
             "health": "GET /health",
             "health_detailed": "GET /health/detailed",
@@ -268,11 +327,24 @@ async def root():
             "chat": "POST /v1/chat/completions",
             "cache_questions": "GET /api/cache/questions",
             "cache_stats": "GET /api/cache/stats",
+            "mcp_server_info": "GET /api/mcp/server/info",
+            "mcp_tools": "GET /api/mcp/tools",
+            "mcp_skills": "GET /api/mcp/skills",
+            "mcp_skill_docs": "GET /api/mcp/skills/{skill_name}",
+            "mcp_call_tool": "POST /api/mcp/tools/call",
         },
         "features": {
+            "mcp_support": "Enabled (Phase 2)",
+            "skill_system": "Enabled (progressive tool disclosure)",
             "auto_cache_warming": "Enabled on startup",
             "semantic_caching": "Enabled (Milvus response cache)",
             "performance": "99.9% speedup on cached queries",
+        },
+        "architecture": {
+            "agent": "StrandsRAGAgent (Phase 2)",
+            "mcp_server": "RAGAgentMCPServer",
+            "vector_db": "Milvus",
+            "llm": "Ollama (local inference)",
         },
     }
 
@@ -445,6 +517,144 @@ async def get_cache_stats():
         }
     except Exception as e:
         logger.error(f"Failed to get cache stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# MCP Server Endpoints (Phase 2 - Tool Management)
+# ============================================================================
+
+@app.get("/api/mcp/server/info", tags=["mcp"])
+async def get_mcp_server_info():
+    """Get information about the MCP server.
+    
+    Returns server metadata, tool count, and available skills.
+    """
+    global mcp_server
+    
+    if mcp_server is None:
+        raise HTTPException(status_code=503, detail="MCP server not initialized")
+    
+    try:
+        return mcp_server.get_server_info()
+    except Exception as e:
+        logger.error(f"Failed to get MCP server info: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/mcp/tools", tags=["mcp"])
+async def list_mcp_tools():
+    """List all available tools in MCP format.
+    
+    Tools are organized by skill category.
+    Returns detailed tool definitions with parameters.
+    """
+    global mcp_server
+    
+    if mcp_server is None:
+        raise HTTPException(status_code=503, detail="MCP server not initialized")
+    
+    try:
+        tools = mcp_server.get_tools()
+        return {
+            "count": len(tools),
+            "tools": tools,
+        }
+    except Exception as e:
+        logger.error(f"Failed to list MCP tools: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/mcp/skills", tags=["mcp"])
+async def list_mcp_skills():
+    """List all available skill categories.
+    
+    Skills are groups of related tools for progressive tool disclosure.
+    """
+    global mcp_server
+    
+    if mcp_server is None:
+        raise HTTPException(status_code=503, detail="MCP server not initialized")
+    
+    try:
+        registry = get_registry()
+        skills = registry.list_skills()
+        
+        return {
+            "skills": skills,
+            "total_skills": len(skills),
+            "total_tools": len(registry.list_tools()),
+        }
+    except Exception as e:
+        logger.error(f"Failed to list MCP skills: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/mcp/skills/{skill_name}", tags=["mcp"])
+async def get_mcp_skill_documentation(skill_name: str):
+    """Get documentation for a specific skill.
+    
+    Returns the full documentation (markdown) for a skill
+    including all tools and parameters.
+    
+    Args:
+        skill_name: Name of the skill (e.g., 'retrieval', 'answer_generation')
+    """
+    global mcp_server
+    
+    if mcp_server is None:
+        raise HTTPException(status_code=503, detail="MCP server not initialized")
+    
+    try:
+        doc = mcp_server.get_skill_documentation(skill_name)
+        return {
+            "skill": skill_name,
+            "documentation": doc,
+        }
+    except Exception as e:
+        logger.error(f"Failed to get skill documentation: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/mcp/tools/call", tags=["mcp"])
+async def call_mcp_tool(request: dict):
+    """Call a tool via MCP interface.
+    
+    This endpoint allows direct tool invocation with proper parameter validation.
+    
+    Request body:
+    {
+        "tool": "tool_name",
+        "arguments": { "param1": "value1", ... }
+    }
+    
+    Returns:
+        Tool execution result
+    """
+    global mcp_server
+    
+    if mcp_server is None:
+        raise HTTPException(status_code=503, detail="MCP server not initialized")
+    
+    try:
+        tool_name = request.get("tool")
+        arguments = request.get("arguments", {})
+        
+        if not tool_name:
+            raise ValueError("'tool' field required in request")
+        
+        result = await mcp_server.call_tool(tool_name, arguments)
+        
+        return {
+            "status": "success",
+            "tool": tool_name,
+            "result": result,
+        }
+    
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Tool execution failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -663,48 +873,30 @@ async def clear_cache():
 
 
 def main():
-    """Start the API server with cache warming on startup."""
-    global agent, settings, initialization_error, common_questions
+    """Start the API server with lifespan context manager handling initialization."""
+    global settings, initialization_error, common_questions
     
-    logger.info("=" * 60)
+    logger.info("=" * 70)
     logger.info("RAG Agent API Server Starting")
-    logger.info("=" * 60)
+    logger.info("=" * 70)
+    
     settings = get_settings()
     logger.info(f"Server: http://0.0.0.0:{settings.api_port}")
     logger.info(f"Docs: http://localhost:{settings.api_port}/docs")
     logger.info("Press Ctrl+C to shutdown gracefully")
-    logger.info("=" * 60 + "\n")
+    logger.info("=" * 70)
     
     try:
         # Load common questions for cache endpoints
         logger.info("Loading common questions...")
         common_questions = load_common_questions()
         
-        # Initialize RAG Agent on startup
-        logger.info("Initializing RAG Agent...")
-        # Note: Ensure Milvus and Ollama are running before starting this server
-        agent = RAGAgent(settings=settings)
-        
-        if not agent.ollama_client.is_available():
-            msg = f"Ollama not available at {settings.ollama_host}"
-            initialization_error = msg
-            raise RuntimeError(msg)
-        
-        logger.info("✓ RAG Agent initialized")
-        logger.info(f"✓ Ollama: {settings.ollama_host}")
-        logger.info(f"✓ Milvus: {settings.milvus_host}:{settings.milvus_port}")
-        logger.info(f"✓ Database: {settings.milvus_db_name}\n")
-        
-        # Warm response cache with pre-generated answers
-        logger.info("Warming response cache...")
-        warm_response_cache(agent, settings)
-        
-        logger.info("=" * 60)
+        logger.info("=" * 70)
         logger.info("Server Ready - Accepting Requests")
-        logger.info("=" * 60 + "\n")
+        logger.info("=" * 70 + "\n")
         
-        # Run uvicorn server with graceful shutdown
-        # Note: lifespan parameter replaces deprecated on_event handlers
+        # Run uvicorn server with lifespan context manager
+        # Initialization and cleanup handled by lifespan context manager
         uvicorn.run(
             app,
             host="0.0.0.0",
@@ -714,8 +906,6 @@ def main():
             timeout_graceful_shutdown=15,
             # Allow port reuse immediately after shutdown
             loop="auto",
-            # Use uvicorn's default signal handling (SIGTERM, SIGINT)
-            # which properly closes connections before port release
         )
     except KeyboardInterrupt:
         logger.info("\n✓ Server interrupted by user")

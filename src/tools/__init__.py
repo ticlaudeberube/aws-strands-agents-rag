@@ -3,5 +3,14 @@
 from .milvus_client import MilvusVectorDB
 from .ollama_client import OllamaClient
 from .response_cache import MilvusResponseCache
+from .tool_registry import ToolRegistry, ToolDefinition, get_registry, reset_registry
 
-__all__ = ["MilvusVectorDB", "OllamaClient", "MilvusResponseCache"]
+__all__ = [
+    "MilvusVectorDB",
+    "OllamaClient",
+    "MilvusResponseCache",
+    "ToolRegistry",
+    "ToolDefinition",
+    "get_registry",
+    "reset_registry",
+]

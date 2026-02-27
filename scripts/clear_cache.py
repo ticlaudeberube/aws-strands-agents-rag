@@ -19,7 +19,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.config.settings import get_settings
-from src.agents.rag_agent import RAGAgent
+from src.agents.strands_rag_agent import StrandsRAGAgent
 
 logging.basicConfig(
     level=logging.INFO,
@@ -49,7 +49,7 @@ def main():
         
         while retry_count < max_retries:
             try:
-                agent = RAGAgent(settings=settings)
+                agent = StrandsRAGAgent(settings=settings)
                 break
             except RuntimeError as e:
                 retry_count += 1

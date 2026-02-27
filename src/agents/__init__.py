@@ -1,5 +1,5 @@
-"""Agents module."""
+"""Agents module with Strands integration."""
 
-from .rag_agent import RAGAgent
+from .strands_rag_agent import StrandsRAGAgent
 
-__all__ = ["RAGAgent"]
+__all__ = ["StrandsRAGAgent"]

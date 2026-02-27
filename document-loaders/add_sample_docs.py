@@ -2,7 +2,7 @@
 """Simple script to add sample documents to Milvus."""
 
 from src.config.settings import Settings
-from src.agents.rag_agent import RAGAgent
+from src.agents.strands_rag_agent import StrandsRAGAgent
 
 # Sample documents about Milvus
 SAMPLE_DOCS = [
@@ -34,7 +34,7 @@ SAMPLE_DOCS = [
 def main():
     print("Initializing RAG Agent...")
     settings = Settings()
-    agent = RAGAgent(settings=settings)
+    agent = StrandsRAGAgent(settings=settings)
     
     # Drop existing collection to ensure clean state
     print(f"Checking for existing collection '{settings.ollama_collection_name}'...")
@@ -43,6 +43,20 @@ def main():
         print(f"✓ Dropped existing collection")
     except Exception as e:
         print(f"  (Collection didn't exist or already clean: {type(e).__name__})")
+    
+    # Create new collection with document embedding dimensions
+    print(f"Creating collection '{settings.ollama_collection_name}'...")
+    try:
+        agent.vector_db.create_collection(
+            collection_name=settings.ollama_collection_name,
+            embedding_dim=settings.embedding_dim,
+            index_type="HNSW",
+            metric_type="COSINE"
+        )
+        print(f"✓ Created collection '{settings.ollama_collection_name}'")
+    except Exception as e:
+        print(f"✗ Error creating collection: {e}")
+        raise
     
     print(f"Adding {len(SAMPLE_DOCS)} sample documents...")
     try:

@@ -95,6 +95,14 @@ class RAGAgentMCPServer:
         
         return resources
     
+    def get_skills(self) -> Dict[str, int]:
+        """Get list of available skills and their tool counts.
+        
+        Returns:
+            Dictionary mapping skill names to tool counts
+        """
+        return self.registry.list_skills()
+    
     def get_skill_documentation(self, skill_name: str) -> str:
         """Get documentation for a skill.
         

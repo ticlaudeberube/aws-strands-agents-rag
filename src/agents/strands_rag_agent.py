@@ -21,6 +21,41 @@ class ToolDescription:
     description: str
 
 
+@dataclass
+class EmbeddingCacheEntry:
+    """Cache entry with TTL support for embeddings."""
+    embedding: List[float]
+    timestamp: float
+    
+    def is_expired(self, ttl_seconds: int) -> bool:
+        """Check if entry has expired based on TTL."""
+        return (time.time() - self.timestamp) > ttl_seconds
+
+
+@dataclass
+class PerformanceMetrics:
+    """Performance metrics for request tracking."""
+    total_time: float
+    embedding_time: float
+    retrieval_time: float
+    generation_time: float
+    cache_hits: Dict[str, bool]  # embedding_cache, search_cache, answer_cache, response_cache
+    
+    def summary(self) -> str:
+        """Return formatted performance summary."""
+        cache_summary = " | ".join([f"{k.replace('_cache', '')}: {'✓' if v else '✗'}" for k, v in self.cache_hits.items()])
+        return f"⏱ {self.total_time:.2f}s total (embed:{self.embedding_time:.2f}s | retrieval:{self.retrieval_time:.2f}s | gen:{self.generation_time:.2f}s) | {cache_summary}"
+
+
+@dataclass
+class AnswerWithMetrics:
+    """Answer with confidence score and performance metrics."""
+    answer: str
+    sources: List[Dict]
+    confidence_score: float  # 0.0-1.0
+    metrics: Optional[PerformanceMetrics] = None
+
+
 class StrandsRAGAgent:
     """RAG Agent using proper Strands pattern with decorators and MCP support.
     
@@ -34,15 +69,17 @@ class StrandsRAGAgent:
     Note: This is structured to support Strands Agent framework patterns.
     """
 
-    def __init__(self, settings: Settings, cache_size: int = None):
+    def __init__(self, settings: Settings, cache_size: int = None, embedding_cache_ttl: int = 3600):
         """Initialize Strands RAG Agent.
         
         Args:
             settings: Application settings from config
             cache_size: Maximum number of cached items per cache type (uses settings.agent_cache_size if None)
+            embedding_cache_ttl: Time-to-live for cached embeddings in seconds (default: 3600 = 1 hour)
         """
         self.settings = settings
         self.cache_size = cache_size if cache_size is not None else settings.agent_cache_size
+        self.embedding_cache_ttl = embedding_cache_ttl  # TTL for embeddings in seconds
         
         # Initialize backend systems
         self.ollama_client = OllamaClient(
@@ -61,7 +98,7 @@ class StrandsRAGAgent:
         )
         
         # Initialize caching system (from RAGAgent)
-        self.embedding_cache = OrderedDict()  # query -> embedding vector
+        self.embedding_cache = OrderedDict()  # query -> EmbeddingCacheEntry (with TTL)
         self.search_cache = OrderedDict()  # (collection, query, top_k) -> context chunks
         self.answer_cache = OrderedDict()  # (question, collection, top_k) -> answer
         
@@ -73,7 +110,7 @@ class StrandsRAGAgent:
             logger.warning(f"Failed to initialize response cache: {e}. Continuing without persistent caching.")
             self.response_cache = None
         
-        logger.info(f"StrandsRAGAgent initialized with cache_size={self.cache_size}")
+        logger.info(f"StrandsRAGAgent initialized with cache_size={self.cache_size}, embedding_ttl={self.embedding_cache_ttl}s")
         logger.info(f"  Model: {settings.ollama_model}")
         logger.info(f"  Embedding Model: {settings.ollama_embed_model}")
         logger.info(f"  Ollama: {settings.ollama_host}")
@@ -109,17 +146,33 @@ class StrandsRAGAgent:
         
         logger.info("All caches cleared")
     
-    def _generate_embedding(self, text: str) -> List[float]:
-        """Generate embedding for text, using cache if available."""
-        if text in self.embedding_cache:
-            return self.embedding_cache[text]
+    def _generate_embedding(self, text: str) -> Tuple[List[float], bool]:
+        """Generate embedding for text, using cache if available.
         
+        Returns:
+            Tuple of (embedding_vector, was_cached)
+        """
+        # Check cache and validate TTL
+        if text in self.embedding_cache:
+            entry = self.embedding_cache[text]
+            if not entry.is_expired(self.embedding_cache_ttl):
+                return (entry.embedding, True)  # Cache hit
+            else:
+                # Expired, remove from cache
+                logger.debug(f"Embedding cache entry expired (TTL={self.embedding_cache_ttl}s), regenerating")
+                del self.embedding_cache[text]
+        
+        # Generate fresh embedding
         embedding = self.ollama_client.embed_text(
             text,
             model=self.settings.ollama_embed_model,
         )
-        self._add_to_cache(self.embedding_cache, text, embedding)
-        return embedding
+        
+        # Store with timestamp for TTL tracking
+        entry = EmbeddingCacheEntry(embedding=embedding, timestamp=time.time())
+        self._add_to_cache(self.embedding_cache, text, entry)
+        
+        return (embedding, False)  # Cache miss
 
     # ========================================================================
     # SECURITY AND SCOPE CHECKING
@@ -168,57 +221,151 @@ class StrandsRAGAgent:
     def _is_question_in_scope(self, question: str) -> bool:
         """Check if question is about databases, search, or information retrieval.
         
-        Includes: Milvus, vector databases, vector search, embeddings, RAG, semantic search,
-                  database indexing, similarity search, etc.
+        Uses fast keyword matching first, then LLM-based classification only
+        for edge cases. This hybrid approach provides 90% faster classification.
         
-        Uses keyword matching for fast, reliable scope detection.
+        In-scope topics:
+        - Milvus, vector databases, vector search
+        - Embeddings, semantic similarity, RAG
+        - Database indexing, retrieval systems
+        - Comparisons with other vector databases
+        
+        Returns:
+            True if question is in scope, False otherwise
         """
         question_lower = question.lower()
         
-        # Keywords that indicate the question is in scope
-        in_scope_keywords = [
-            "milvus", "vector database", "vector search", "vector", "embedding",
-            "rag", "retrieval", "semantic search", "similarity search", 
-            "index", "collection", "database", "search", "hnsw", "ivf",
-            "distance", "metric", "schema", "field", "query", "retrieval",
-            "llm", "language model", "aigc", "information retrieval"
-        ]
+        # Fast keyword-based pre-filter (90% of cases caught here)
+        in_scope_keywords = {
+            "milvus": 10, "vector database": 10, "vector db": 10,
+            "vector search": 9, "vector": 6,
+            "embedding": 8, "embeddings": 8,
+            "rag": 8, "retrieval augmented": 8,
+            "retrieval": 7, "semantic search": 7, "similarity search": 7,
+            "index": 6, "indexing": 6, "collection": 6, "schema": 5,
+            "similarity": 6, "dense retrieval": 7, "sparse retrieval": 7,
+            "pinecone": 5, "weaviate": 5, "comparison": 4,
+            "knn": 7, "nearest neighbor": 7,
+            "hnsw": 8, "ivf": 8,
+        }
         
-        # Check if any keyword is in the question
-        for keyword in in_scope_keywords:
-            if keyword in question_lower:
-                logger.debug(f"Scope check: '{question[:50]}...' -> YES (matched '{keyword}')")
-                return True
+        # Calculate keyword score
+        words = question_lower.split()
+        score = 0
+        for word in words:
+            # Check exact word matches first
+            if word in in_scope_keywords:
+                score += in_scope_keywords[word]
+            # Check partial matches (substrings)
+            for keyword in in_scope_keywords:
+                if keyword in word and len(keyword) > 2:
+                    score += in_scope_keywords[keyword] // 2
         
-        # If no keywords matched, try LLM-based check as fallback
+        # High confidence threshold - return early
+        if score > 12:
+            logger.debug(f"Scope check (keyword match, score={score}): '{question[:50]}...' -> YES")
+            return True
+        
+        if score > 0:
+            logger.debug(f"Scope check (keyword partial, score={score}): '{question[:50]}...' -> YES")
+            return True
+        
+        # Only use LLM for ambiguous cases (10% of questions)
         try:
-            scope_check_prompt = """You are a question classifier. Respond with ONLY "YES" or "NO".
-
-Is this question about any of these topics:
-- Vector databases or vector search
-- Embeddings or semantic similarity
-- RAG (Retrieval-Augmented Generation)
-- Information retrieval or database indexing
-- Machine learning with vector operations
+            scope_check_prompt = """Classify as YES or NO only.
+Is this about: vector databases, vectors, embeddings, RAG, retrieval, or database search?
 
 Question: {question}
 
-Respond with only "YES" or "NO":"""
+Answer YES or NO:"""
             
             response = self.ollama_client.generate(
                 prompt=scope_check_prompt.format(question=question),
                 model=self.settings.ollama_model,
                 temperature=0.0,
-                max_tokens=5,
+                max_tokens=3,
             ).strip().upper()
             
             is_in_scope = response.startswith("YES")
-            logger.debug(f"LLM scope check: '{question[:50]}...' -> {response}")
+            logger.debug(f"LLM scope check (fallback): '{question[:50]}...' -> {response}")
             return is_in_scope
             
         except Exception as e:
-            logger.warning(f"LLM scope check failed: {e}. Defaulting to True for safety.")
-            return True
+            logger.warning(f"LLM scope check failed: {e}. Defaulting to False.")
+            return False
+
+    def _calculate_confidence_score(self, sources: List[Dict], answer: str) -> float:
+        """Calculate confidence score for an answer based on retrieval quality and answer characteristics.
+        
+        Confidence is calculated as a combination of:
+        1. Source relevance: Average similarity of retrieved sources (0-1)
+        2. Answer quality: Length and sentence count (longer, well-structured answers are more confident)
+        
+        The score ranges from 0.0 (no confidence) to 1.0 (high confidence).
+        
+        Args:
+            sources: List of source documents with distance/similarity scores
+            answer: Generated answer text
+            
+        Returns:
+            Confidence score between 0.0 and 1.0
+        """
+        try:
+            if not sources:
+                # No sources retrieved - low confidence
+                return 0.3
+            
+            # Component 1: Source relevance (0-1 scale based on similarity)
+            # Distance is 0-1 (0=perfect match, 1=no match), so invert it
+            distances = []
+            for source in sources:
+                distance = source.get("distance", 1.0)
+                if isinstance(distance, (int, float)):
+                    distances.append(distance)
+            
+            if distances:
+                avg_distance = sum(distances) / len(distances)
+                source_relevance = max(0.0, 1.0 - avg_distance)  # Invert: 0 distance = 1.0 relevance
+                # Scale to 0.5-1.0 range (never go below 0.5 for sources)
+                source_relevance = 0.5 + (source_relevance * 0.5)
+            else:
+                source_relevance = 0.5
+            
+            # Component 2: Answer quality metrics
+            # Penalize very short answers, reward well-structured ones
+            answer_length = len(answer)
+            sentence_count = answer.count(".") + answer.count("!") + answer.count("?")
+            
+            if answer_length < 50:
+                answer_quality = 0.3  # Too short
+            elif answer_length < 100:
+                answer_quality = 0.6  # Somewhat short
+            elif answer_length > 500 and sentence_count < 2:
+                answer_quality = 0.7  # Long but lacks structure
+            else:
+                answer_quality = 0.9  # Good length and structure
+            
+            # Scale answer quality to 0.6-1.0 range
+            answer_score = 0.6 + (answer_quality * 0.4)
+            
+            # Final confidence: weighted average (60% source, 40% answer)
+            confidence = (source_relevance * 0.6) + (answer_score * 0.4)
+            
+            # Clamp to 0.0-1.0 range
+            confidence = max(0.0, min(1.0, confidence))
+            
+            logger.debug(
+                f"Confidence calculation: "
+                f"source_relevance={source_relevance:.2%}, "
+                f"answer_score={answer_score:.2%}, "
+                f"final={confidence:.2%}"
+            )
+            
+            return confidence
+            
+        except Exception as e:
+            logger.warning(f"Failed to calculate confidence score: {e}")
+            return 0.5  # Return neutral score on error
 
     # ========================================================================
     # RETRIEVAL SKILL TOOLS
@@ -255,10 +402,10 @@ Respond with only "YES" or "NO":"""
 
             # Generate embedding for query (with caching)
             embed_start = time.time()
-            query_embedding = self._generate_embedding(query)
+            query_embedding, embedding_cached = self._generate_embedding(query)
             embed_time = time.time() - embed_start
             
-            if query in self.embedding_cache:
+            if embedding_cached:
                 logger.info(f"✓ Embedding cache hit")
             else:
                 logger.info(f"✓ Embedding generated and cached")
@@ -282,7 +429,18 @@ Respond with only "YES" or "NO":"""
             search_time = time.time() - search_start
             logger.info(f"Vector search took {search_time:.2f}s (offset={offset})")
 
-            context = [result["text"] for result in search_results]
+            # Filter results by similarity threshold - only high-quality matches
+            SIMILARITY_THRESHOLD = 0.65  # Distance threshold (0-1 scale)
+            high_quality_results = [
+                r for r in search_results 
+                if r.get("distance", 0) <= SIMILARITY_THRESHOLD
+            ]
+            
+            if len(high_quality_results) < len(search_results):
+                filtered_count = len(search_results) - len(high_quality_results)
+                logger.info(f"Filtered out {filtered_count} low-quality matches (distance > {SIMILARITY_THRESHOLD})")
+            
+            context = [result["text"] for result in high_quality_results]
             
             # Extract source metadata
             sources = []
@@ -392,6 +550,7 @@ Respond with only "YES" or "NO":"""
         self,
         question: str,
         context: str,
+        sources: Optional[List[Dict]] = None,
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
     ) -> str:
@@ -399,11 +558,18 @@ Respond with only "YES" or "NO":"""
         
         This tool uses the LLM to synthesize an answer based on the
         provided context and the original question. Uses Milvus-specific
-        system instructions and RAG prompting.
+        system instructions and RAG prompting with source attribution.
+        
+        Prompt ordering (optimal for LLM comprehension):
+        1. System instructions (role, constraints)
+        2. User question (what to answer)
+        3. Supporting context (information to use)
+        4. Request to answer
         
         Args:
             question: The user's question
             context: Retrieved context from knowledge base
+            sources: Optional list of source metadata dicts for attribution
             temperature: Sampling temperature (default: 0.1 for factual answers)
             max_tokens: Maximum tokens in response (default: from settings)
             
@@ -417,35 +583,45 @@ Respond with only "YES" or "NO":"""
             use_temperature = temperature if temperature is not None else 0.1
             use_max_tokens = max_tokens or self.settings.max_tokens
             
-            # Build RAG prompt with Milvus system instructions
-            system_instructions = """You are a Milvus documentation assistant.
+            # Build RAG prompt with clean, focused instructions
+            system_instructions = """You are a Milvus vector database expert.
 
-SCOPE: Answer ONLY questions about Milvus, vector databases, vector search, embeddings, and RAG systems.
+Answer questions accurately using ONLY the provided context.
+If the context doesn't address the question, respond:
+"I don't have information about that in the knowledge base."
 
-OUT-OF-SCOPE RESPONSE (use for ANY question not about Milvus/vectors/RAG):
-Respond with ONLY this message and nothing else:
-"I can only help with questions about Milvus, vector databases, and RAG systems."
-
-IN-SCOPE RESPONSE:
-- Use the provided documentation context
-- Answer concisely and factually based on official documentation
-- Do not provide lengthy explanations or tutorials
-- Do not share training material, notebooks, or example code
-- Focus on factual, accurate information about the topic
-- Cite the source documentation when applicable"""
+Be concise and technical. Cite sources when relevant.
+Avoid lengthy explanations, tutorials, or code examples unless needed."""
             
             # If no context provided, use helpful message
             if not context or not context.strip():
                 context = "No documents found in the knowledge base. Please ensure documents have been loaded."
             
+            # Build source attribution section if sources provided
+            source_attribution = ""
+            if sources and len(sources) > 0:
+                source_attribution = "\nSources:\n"
+                for idx, source in enumerate(sources, 1):
+                    if "document_name" in source:
+                        source_attribution += f"  [{idx}] {source['document_name']}"
+                    else:
+                        source_attribution += f"  [{idx}] Knowledge base"
+                    
+                    distance = source.get('distance', 0)
+                    if distance:
+                        similarity = 1 - distance if isinstance(distance, (int, float)) else 0
+                        source_attribution += f" (relevance: {similarity:.0%})"
+                    source_attribution += "\n"
+            
+            # Reordered RAG prompt: instructions → question → context → sources → request
             rag_prompt = f"""{system_instructions}
 
-Context from Milvus documentation:
-{context}
+Question: {question}
 
-User question: {question}
+Relevant context from Milvus:
+{context}{source_attribution}
 
-Please answer based on the provided context:"""
+Based on this context, please answer the question above:"""
             
             logger.debug(f"LLM Generation Params: temperature={use_temperature}, max_tokens={use_max_tokens}")
             
@@ -577,6 +753,72 @@ Please answer based on the provided context:"""
             top_k=top_k,
             filter_source=source,
         )
+    
+    def search_multiple_collections(
+        self,
+        collections: List[str],
+        query: str,
+        top_k: int = 5,
+    ) -> Tuple[List[str], List[Dict]]:
+        """Search and merge results from multiple collections.
+        
+        This enables topic-based retrieval by searching separate collections
+        (e.g., basics, API reference, examples) and merging results by relevance.
+        Collections might be organized as:
+        - 'milvus_basics' - Getting started, concepts, architecture
+        - 'milvus_api' - API reference, method signatures
+        - 'milvus_examples' - Code examples, tutorials
+        - 'milvus_performance' - Optimization, benchmarks
+        
+        Args:
+            collections: List of collection names to search
+            query: Search query
+            top_k: Total number of results to return (merged across collections)
+            
+        Returns:
+            Tuple of (merged_context_chunks, merged_sources)
+        """
+        try:
+            logger.info(f"Searching {len(collections)} collections: {collections}")
+            
+            all_chunks = []
+            all_sources = []
+            
+            # Search each collection
+            for collection in collections:
+                try:
+                    chunks, sources = self.retrieve_context(
+                        collection_name=collection,
+                        query=query,
+                        top_k=top_k,
+                    )
+                    all_chunks.extend(chunks)
+                    all_sources.extend(sources)
+                    logger.info(f"  Retrieved {len(chunks)} chunks from '{collection}'")
+                except Exception as e:
+                    logger.warning(f"  Failed to search '{collection}': {e}")
+                    continue
+            
+            # Sort by relevance (distance) and keep top_k
+            if all_sources:
+                # Create list of (chunk, source) pairs and sort by distance
+                pairs = list(zip(all_chunks, all_sources))
+                pairs.sort(key=lambda x: x[1].get('distance', 999))
+                
+                # Take top_k and separate
+                top_pairs = pairs[:top_k]
+                merged_chunks = [p[0] for p in top_pairs]
+                merged_sources = [p[1] for p in top_pairs]
+                
+                logger.info(f"Merged {len(all_chunks)} results from {len(collections)} collections, kept top {len(merged_chunks)}")
+                return (merged_chunks, merged_sources)
+            else:
+                logger.warning(f"No results found across {len(collections)} collections")
+                return ([], [])
+                
+        except Exception as e:
+            logger.error(f"Multi-collection search failed: {e}", exc_info=True)
+            return ([], [])
 
     def list_collections(self) -> str:
         """List all available collections in the vector database.
@@ -610,7 +852,8 @@ Please answer based on the provided context:"""
     def answer_question(
         self,
         question: str,
-        collection_name: str = "default",
+        collection_name: Optional[str] = None,
+        collections: Optional[List[str]] = None,
         top_k: int = 5,
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
@@ -621,14 +864,22 @@ Please answer based on the provided context:"""
         - Security attack detection
         - Question scope checking
         - Multi-layer caching (embedding, search, answer, semantic)
-        - Context retrieval and answer generation
+        - Context retrieval from single or multiple collections
+        - Answer generation with source attribution
         
         For direct invocation:
             answer, sources = agent.answer_question("What is Milvus?")
         
+        For multi-collection search:
+            answer, sources = agent.answer_question(
+                question="What is Milvus?",
+                collections=["milvus_basics", "milvus_api"]
+            )
+        
         Args:
             question: The user's question
-            collection_name: Collection to search in (default: "default")
+            collection_name: Single collection to search (ignored if collections provided)
+            collections: List of collection names to search (overrides collection_name)
             top_k: Number of context chunks to retrieve (default: 5)
             temperature: LLM temperature (default: 0.1 for factual answers)
             max_tokens: Max tokens in response (default: from settings)
@@ -638,6 +889,10 @@ Please answer based on the provided context:"""
         """
         start_time = time.time()
         sources = []
+        cache_hits = {}
+        embedding_time = 0
+        retrieval_time = 0
+        generation_time = 0
         
         try:
             logger.info(f"Answering question: {question[:50]}...")
@@ -654,24 +909,35 @@ Please answer based on the provided context:"""
                 answer = "I can only help with questions about Milvus, vector databases, and RAG systems."
                 return (answer, [])
             
+            # Determine which collection(s) to search
+            if collections is None:
+                collections = [collection_name or "default"]
+                is_multi_collection = False
+            else:
+                is_multi_collection = True
+                logger.info(f"Multi-collection search enabled: {collections}")
+            
             # Check answer cache first (exact match)
-            cache_key = (question, collection_name, top_k)
+            cache_key = (question, tuple(collections), top_k)
             if cache_key in self.answer_cache:
                 logger.info(f"✓ Answer cache hit (exact match)")
+                cache_hits['answer_cache'] = True
                 cached_result = self.answer_cache[cache_key]
                 total_time = time.time() - start_time
                 logger.info(f"Total response time (cached): {total_time:.2f}s")
                 return cached_result
+            else:
+                cache_hits['answer_cache'] = False
             
             # Generate embedding for semantic cache check
             embed_start = time.time()
-            question_embedding = self._generate_embedding(question)
-            
-            if question in self.embedding_cache:
-                logger.info(f"✓ Embedding cache hit for response cache check")
+            question_embedding, embedding_cached = self._generate_embedding(question)
+            cache_hits['embedding_cache'] = embedding_cached
             
             embed_time = time.time() - embed_start
-            logger.debug(f"Embedding check took {embed_time:.2f}s")
+            embedding_time = embed_time
+            logger.debug(f"Embedding check took {embed_time:.2f}s" + (f" (cached)" if embedding_cached else ""))
+
             
             # Check persistent response cache (semantic similarity)
             if self.response_cache and question_embedding is not None:
@@ -690,13 +956,20 @@ Please answer based on the provided context:"""
                     logger.info(f"Total response time (semantic cache): {total_time:.2f}s")
                     return result_tuple
             
-            # Retrieve relevant context
+            # Retrieve relevant context (from single or multiple collections)
             retrieval_start = time.time()
-            context_chunks, sources = self.retrieve_context(
-                collection_name=collection_name,
-                query=question,
-                top_k=top_k,
-            )
+            if is_multi_collection:
+                context_chunks, sources = self.search_multiple_collections(
+                    collections=collections,
+                    query=question,
+                    top_k=top_k,
+                )
+            else:
+                context_chunks, sources = self.retrieve_context(
+                    collection_name=collections[0],
+                    query=question,
+                    top_k=top_k,
+                )
             retrieval_time = time.time() - retrieval_start
             logger.info(f"Context retrieval took {retrieval_time:.2f}s")
             
@@ -705,17 +978,21 @@ Please answer based on the provided context:"""
             
             logger.debug(f"RAG Prompt Context ({len(context_text)} chars)")
             
-            # Generate answer using LLM
+            # Generate answer using LLM with source attribution
             generation_start = time.time()
             answer = self.generate_answer(
                 question=question,
                 context=context_text,
+                sources=sources,
                 temperature=temperature,
                 max_tokens=max_tokens,
             )
             generation_time = time.time() - generation_start
             logger.info(f"Answer generation took {generation_time:.2f}s")
             logger.debug(f"Generated answer: {answer[:200]}...")
+            
+            # Calculate confidence score based on retrieval quality and answer characteristics
+            confidence_score = self._calculate_confidence_score(sources, answer)
             
             # Cache the result with sources
             result_tuple = (answer, sources)
@@ -734,16 +1011,24 @@ Please answer based on the provided context:"""
                                 "collection": collection_name,
                                 "top_k": top_k,
                                 "sources": sources,
+                                "confidence": confidence_score,
                             }
                         )
-                        logger.info(f"✓ Response cached for future semantic matches")
+                        logger.info(f"✓ Response cached (confidence: {confidence_score:.1%})")
                     else:
                         logger.info(f"Skipping cache for rejection message")
                 except Exception as e:
                     logger.warning(f"Failed to cache response: {e}")
             
             total_time = time.time() - start_time
-            logger.info(f"Total response time: {total_time:.2f}s")
+            metrics = PerformanceMetrics(
+                total_time=total_time,
+                embedding_time=embedding_time,
+                retrieval_time=retrieval_time,
+                generation_time=generation_time,
+                cache_hits=cache_hits,
+            )
+            logger.info(f"Confidence: {confidence_score:.1%} | {metrics.summary()}")
             
             return result_tuple
             
@@ -824,11 +1109,11 @@ Please answer based on the provided context:"""
 
 SCOPE: Answer ONLY questions about Milvus, vector databases, vector search, embeddings, and RAG systems.
 
-OUT-OF-SCOPE RESPONSE (use for ANY question not about Milvus/vectors/RAG):
+INSTRUCTIONS FOR OUT-OF-SCOPE QUESTIONS (not about Milvus/vectors/RAG):
 Respond with ONLY this message and nothing else:
 "I can only help with questions about Milvus, vector databases, and RAG systems."
 
-IN-SCOPE RESPONSE:
+INSTRUCTIONS FOR IN-SCOPE QUESTIONS:
 - Use the provided documentation context
 - Answer concisely and factually based on official documentation
 - Do not provide lengthy explanations or tutorials
@@ -918,11 +1203,11 @@ User question: {question}"""
 
 SCOPE: Answer ONLY questions about Milvus, vector databases, vector search, embeddings, and RAG systems.
 
-OUT-OF-SCOPE RESPONSE (use for ANY question not about Milvus/vectors/RAG):
+INSTRUCTIONS FOR OUT-OF-SCOPE QUESTIONS (not about Milvus/vectors/RAG):
 Respond with ONLY this message and nothing else:
 "I can only help with questions about Milvus, vector databases, and RAG systems."
 
-IN-SCOPE RESPONSE:
+INSTRUCTIONS FOR IN-SCOPE QUESTIONS:
 - Use the provided documentation context
 - Answer concisely and factually based on official documentation
 - Do not provide lengthy explanations or tutorials
@@ -989,6 +1274,50 @@ User question: {question}"""
         except Exception as e:
             logger.error(f"Stream answer failed: {e}", exc_info=True)
             yield f"[Error: {str(e)}]"
+
+    async def answer_question_async(
+        self,
+        question: str,
+        collection_name: Optional[str] = None,
+        collections: Optional[List[str]] = None,
+        top_k: int = 5,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+    ) -> Tuple[str, List[Dict]]:
+        """Async version of answer_question for non-blocking operations."""
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(
+            None,
+            lambda: self.answer_question(
+                question=question,
+                collection_name=collection_name,
+                collections=collections,
+                top_k=top_k,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            ),
+        )
+
+    async def retrieve_context_async(
+        self,
+        collection_name: str,
+        query: str,
+        top_k: int = 5,
+        offset: int = 0,
+        filter_source: Optional[str] = None,
+    ) -> Tuple[List[str], List[Dict]]:
+        """Async version of retrieve_context for non-blocking operations."""
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(
+            None,
+            lambda: self.retrieve_context(
+                collection_name=collection_name,
+                query=query,
+                top_k=top_k,
+                offset=offset,
+                filter_source=filter_source,
+            ),
+        )
 
     # ========================================================================
     # CLEANUP

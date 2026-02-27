@@ -8,6 +8,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.config.settings import Settings
+from src.agents.strands_rag_agent import StrandsRAGAgent
+from src.mcp.mcp_server import RAGAgentMCPServer
 
 
 @pytest.fixture
@@ -26,6 +28,34 @@ def test_settings():
         milvus_db_name="test_db",
         agent_cache_size=100,
     )
+
+
+@pytest.fixture
+def strands_agent(test_settings):
+    """Create a StrandsRAGAgent for testing."""
+    try:
+        agent = StrandsRAGAgent(test_settings)
+        yield agent
+    finally:
+        # Cleanup
+        try:
+            agent.close()
+        except Exception as e:
+            print(f"Cleanup error: {e}")
+
+
+@pytest.fixture
+def mcp_server(test_settings):
+    """Create an MCP server for testing."""
+    try:
+        server = RAGAgentMCPServer(test_settings)
+        yield server
+    finally:
+        # Cleanup
+        try:
+            server.close()
+        except Exception as e:
+            print(f"Cleanup error: {e}")
 
 
 @pytest.fixture

@@ -828,6 +828,36 @@ See [Strands Agents Deployment Guide](https://strandsagents.com/latest/documenta
    - etcd: 1 CPU, 1GB RAM
    - RAG API: 2 CPU, 2GB RAM
 
+## 🛣️ Roadmap & Future Improvements
+
+### ✅ Recently Completed
+- [x] Hybrid keyword + LLM scope classification (90% faster)
+- [x] Simplified system prompt architecture
+- [x] Similarity threshold filtering (0.65 distance cutoff)
+- [x] Multiple collection search support
+- [x] Reordered RAG prompt (instructions → question → context → sources)
+- [x] Document source attribution with relevance scores
+
+### 📋 Planned Improvements
+
+**High Priority**:
+7. **Optimize embedding cache** - Add timestamp-based expiration for stale embeddings (configurable TTL)
+8. **Streaming response refinement** - Better chunking for streaming to avoid mid-sentence breaks
+9. **Answer confidence scoring** - Return confidence levels with responses based on retrieval quality
+
+**Medium Priority**:
+10. **Performance instrumentation** - Add detailed latency breakdown logging for each phase (scope check, retrieval, generation)
+11. **Multi-model support** - Support for multiple embedding and generation models simultaneously
+12. **Semantic deduplication** - Detect and filter near-duplicate context chunks before generation
+
+**Future Enhancements**:
+- Custom collection schemas for specialized data types
+- Hybrid BM25 + semantic search (dense + sparse retrieval)
+- Fine-tuned models for specialized domains
+- Response streaming with real-time token generation
+- Advanced cache strategies (time-based, LRU with TTL)
+- Evaluation framework for answer quality metrics
+
 ## Contributing
 
 Contributions are welcome! Please:

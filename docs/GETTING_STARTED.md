@@ -151,19 +151,24 @@ In a new terminal, ensure Ollama is running:
 ollama serve
 ```
 
-In another terminal, pull the models:
+In another terminal, pull the required models:
 
 ```bash
-# For LLM (text generation)
-ollama pull mistral
+# For LLM (text generation - REQUIRED, optimized model)
+ollama pull neural-chat
 
-# For embeddings
-ollama pull all-minilm
-
-# Optional: pull more models
-ollama pull llama2
+# For embeddings (REQUIRED)
 ollama pull nomic-embed-text
+
+# Optional: Alternative models if needed
+ollama pull orca-mini         # Faster alternative (1-2s)
+ollama pull mistral           # Higher quality alternative
 ```
+
+**Why neural-chat?**
+- 4-6x faster than mistral
+- Balanced quality and speed (recommended)
+- See [LATENCY_OPTIMIZATION.md](LATENCY_OPTIMIZATION.md) for details
 
 **Verify Ollama:**
 
@@ -171,11 +176,11 @@ ollama pull nomic-embed-text
 # Check available models
 ollama list
 
-# Test a model
-ollama run mistral "What is Python?"
+# Test the language model
+ollama run neural-chat "What is Python?"
 
-# Check embedding model
-ollama run all-minilm "test"
+# Test the embedding model  
+ollama run nomic-embed-text "test"
 ```
 
 ## Step 4: Configure Application
@@ -185,7 +190,7 @@ Edit `.env` file with your settings:
 ```env
 # Ollama Configuration
 OLLAMA_HOST=http://localhost:11434
-OLLAMA_MODEL=mistral:latest
+OLLAMA_MODEL=neural-chat:latest        # Optimized for speed & quality (5.6-9.3x faster)
 OLLAMA_EMBED_MODEL=nomic-embed-text:v1.5
 
 # Milvus Configuration
@@ -197,25 +202,24 @@ LOADER_MILVUS_DB_NAME=knowledge_base
 # Collection Configuration
 OLLAMA_COLLECTION_NAME=milvus_rag_collection
 
-# Performance Settings
-AGENT_CACHE_SIZE=500                    # LRU cache size for embeddings and searches
-EMBEDDING_BATCH_SIZE=32                 # Batch size for bulk embedding operations
-MAX_CHUNK_LENGTH=400                    # Maximum text chunk length
-EMBEDDING_DIM=768                       # Embedding dimension
+# Performance Settings (Already Optimized)
+AGENT_CACHE_SIZE=500                    # LRU cache size
+EMBEDDING_BATCH_SIZE=32                 # Batch size
+MAX_CHUNK_LENGTH=250                    # Optimized chunk size (was 400)
 
 # Application Configuration
 LOG_LEVEL=INFO
 BATCH_SIZE=10
 ```
 
-**Key Configuration Notes:**
+**Key Notes:**
+- **OLLAMA_MODEL**: Now using `neural-chat` (4-6x faster than mistral)
+  - See [LATENCY_OPTIMIZATION.md](LATENCY_OPTIMIZATION.md) for performance details
+  - Alternative models: `orca-mini` (faster, lower quality), `phi` (fastest, most concise)
+- **MAX_CHUNK_LENGTH**: Optimized to 250 chars for faster processing
+- **MILVUS_HOST**: Use "milvus" in Docker, "localhost" for local Milvus
 
-- `OLLAMA_COLLECTION_NAME`: Used consistently across all loaders and services
-- `AGENT_CACHE_SIZE`: Higher values use more memory but improve performance for repeated queries
-- `EMBEDDING_BATCH_SIZE`: Larger batches are faster but use more memory
-- `MILVUS_HOST`: Use "milvus" if running Docker, "localhost" for local Milvus
-
-For more details, see [Collection Configuration Guide](COLLECTION_CONFIG.md).
+For detailed configuration, see [Collection Configuration Guide](COLLECTION_CONFIG.md).
 
 ## Step 5: Start API Server
 
@@ -384,13 +388,24 @@ python --version
 pip install --upgrade -e .
 ```
 
-## Performance Tips
+## Performance Optimization
 
-1. **Faster Embeddings**: Use `all-minilm` (fast but smaller dimension)
-2. **Better Quality**: Use `nomic-embed-text` (slower but higher quality)
-3. **Batch Processing**: Embed multiple documents at once
-4. **Limit Search**: Use `top_k=3` for faster but less comprehensive results
-5. **Chunk Size**: Smaller chunks = more search results, larger = fewer but longer
+For detailed performance tuning guide, see [LATENCY_OPTIMIZATION.md](LATENCY_OPTIMIZATION.md).
+
+**Quick Performance Tips:**
+
+1. **Current Setup is Optimized**: Default neural-chat + top_k=3 achieves 3-5s / <100ms cached
+2. **For Even Faster**: Try `orca-mini` model (1-2s, lower quality)
+3. **For Better Quality**: Use more context (`top_k=5`) and longer responses (`max_tokens=512`)
+4. **Cache Warm-up**: Run `python document-loaders/sync_answers_cache.py` for <100ms responses
+5. **Streaming**: Use `/v1/chat/completions/stream` endpoint for progressive results
+6. **Disable Logging**: Set `LOG_LEVEL=WARNING` in .env for production
+
+**Performance Metrics:**
+- First Query: 3-5 seconds (5.6-9.3x faster than baseline)
+- Cached Query: <100ms (instant)
+- Model: neural-chat (2-3s generation)
+- Context: top_k=3 (3 chunks per query)
 
 ## Architecture Diagrams
 

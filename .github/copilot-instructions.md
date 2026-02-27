@@ -27,7 +27,29 @@ This is an AWS Strands Agents RAG system that uses Milvus for vector database op
 2. **Vector Database**: Refer to `src/tools/` for existing MilvusVectorDB implementations
 3. **RAG Pattern**: Consider the full RAG pipeline when suggesting code changes
 4. **Document Loading**: Reference document loaders in `document-loaders/` for embedding and indexing workflows
-5. **Documentation Updates**: When making changes to user-facing code, scripts, or instructions, update corresponding documentation files (README.md, docs/*.md) to reflect the changes. This includes updating setup instructions, command paths, and error messages.
+5. **Documentation Updates**: When making changes to user-facing code, scripts, or instructions, update corresponding documentation files to reflect the changes. This includes updating setup instructions, command paths, and error messages.
+
+## Documentation Organization
+**Important**: Follow this documentation structure:
+- **Global Project Documentation**: Located at project root
+  - `README.md` - Main project overview and quick start (ONLY documentation at root level)
+- **All Other Documentation**: Located in `docs/` folder
+  - Feature guides: `docs/GETTING_STARTED.md`, `docs/LATENCY_OPTIMIZATION.md`, etc.
+  - Technical references: `docs/API_SERVER.md`, `docs/CACHING_STRATEGY.md`, etc.
+  - Development guides: `docs/DEVELOPMENT.md`, `docs/PROJECT_SUMMARY.md`, etc.
+
+**When Updating Documentation**:
+- If adding/modifying getting started → update `docs/GETTING_STARTED.md`
+- If adding/modifying API endpoints → update `docs/API_SERVER.md`
+- If adding/modifying performance → update `docs/LATENCY_OPTIMIZATION.md`
+- If documenting a new feature → create in `docs/FEATURE_NAME.md`
+- If updating project-level info → update root `README.md` ONLY
+- **Never** create documentation files outside `docs/` folder (except `README.md`)
+
+**Consolidation Rule**: 
+- Avoid duplicate documentation across multiple files
+- Consolidate related topics into single comprehensive guides
+- Use cross-references (links) to related documentation instead of copy-pasting content
 
 ## Helpful Commands
 - Document loaders: `document-loaders/load_milvus_docs_ollama.py`

@@ -147,4 +147,4 @@ data/*
 # Temporary
 temp/
 tmp/
-/document-loaders/milvus_docs/**
+/document-loaders/milvus_docs/**data/embeddings.json

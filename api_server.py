@@ -509,6 +509,8 @@ async def chat_completions(request: ChatCompletionRequest, bypass_cache: bool = 
                     collection_name=current_settings.ollama_collection_name,
                     question=user_message,
                     top_k=retrieval_top_k,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
                 )
             else:
                 # Use normal path with caching
@@ -516,6 +518,8 @@ async def chat_completions(request: ChatCompletionRequest, bypass_cache: bool = 
                     collection_name=current_settings.ollama_collection_name,
                     question=user_message,
                     top_k=retrieval_top_k,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
                 )
         except Exception as e:
             logger.error(f"RAG error: {e}")
@@ -595,11 +599,18 @@ async def chat_completions_stream(request: ChatCompletionRequest):
         async def stream_generator():
             """Generator for streaming response with SSE format."""
             try:
+                # Use request parameters or defaults
+                retrieval_top_k = request.top_k or 5
+                temperature = request.temperature if request.temperature is not None else 0.1
+                max_tokens = request.max_tokens or current_settings.max_tokens
+                
                 # Create a task for the streaming answer
                 async for chunk in current_agent.stream_answer(
                     collection_name=current_settings.ollama_collection_name,
                     question=user_message,
-                    top_k=5,
+                    top_k=retrieval_top_k,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
                 ):
                     # Yield in Server-Sent Events format
                     yield f"data: {chunk}\n\n"
@@ -615,6 +626,40 @@ async def chat_completions_stream(request: ChatCompletionRequest):
     except Exception as e:
         logger.error(f"Stream endpoint error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/v1/cache/clear", tags=["cache"])
+async def clear_cache():
+    """Clear all RAG Agent caches.
+    
+    Clears:
+    - Embedding cache (query embeddings)
+    - Search cache (retrieval results)
+    - Answer cache (generated answers)
+    - Response cache (semantic matching cache)
+    
+    Returns immediately without waiting for dependent operations.
+    """
+    if not agent:
+        raise HTTPException(status_code=503, detail="Agent not initialized")
+    
+    try:
+        logger.info("Cache clear request received")
+        
+        # Clear caches in the running agent
+        agent.clear_caches()
+        
+        logger.info("✓ All caches cleared successfully")
+        
+        return {
+            "status": "success",
+            "message": "All caches cleared",
+            "timestamp": datetime.now().isoformat(),
+        }
+    
+    except Exception as e:
+        logger.error(f"Error clearing caches: {e}")
+        raise HTTPException(status_code=500, detail=f"Cache clear failed: {str(e)}")
 
 
 def main():

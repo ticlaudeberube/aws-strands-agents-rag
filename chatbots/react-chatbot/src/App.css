@@ -164,6 +164,12 @@
   gap: 12px;
 }
 
+.button-group {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
 .clear-btn {
   padding: 8px 16px;
   background: #ef4444;
@@ -174,7 +180,6 @@
   font-weight: 500;
   cursor: pointer;
   transition: background 0.2s;
-  align-self: flex-end;
 }
 
 .clear-btn:hover {
@@ -183,4 +188,29 @@
 
 .clear-btn:active {
   transform: scale(0.98);
+}
+
+.clear-cache-btn {
+  padding: 8px 16px;
+  background: #f59e0b;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.clear-cache-btn:hover:not(:disabled) {
+  background: #d97706;
+}
+
+.clear-cache-btn:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.clear-cache-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }

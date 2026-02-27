@@ -129,6 +129,50 @@ function App() {
     }
   };
 
+  const handleClearCache = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/v1/cache/clear`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Cache clear failed: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log('Cache cleared:', data);
+      
+      // Add system message
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: nextIdRef.current++,
+          text: '✓ Cache cleared successfully!',
+          role: 'system',
+          isStreaming: false,
+          sources: [],
+          timing: {},
+        },
+      ]);
+    } catch (error) {
+      console.error('Error clearing cache:', error);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: nextIdRef.current++,
+          text: `❌ Failed to clear cache: ${error.message}`,
+          role: 'system',
+          isStreaming: false,
+          sources: [],
+          timing: {},
+        },
+      ]);
+    }
+  };
+
   const handleClearChat = () => {
     setMessages([
       {
@@ -185,9 +229,19 @@ function App() {
                 }
               />
               {messages.length > 1 && (
-                <button className="clear-btn" onClick={handleClearChat}>
-                  Clear Chat
-                </button>
+                <div className="button-group">
+                  <button className="clear-btn" onClick={handleClearChat}>
+                    Clear Chat
+                  </button>
+                  <button 
+                    className="clear-cache-btn" 
+                    onClick={handleClearCache}
+                    disabled={isLoading}
+                    title="Clear all caches: embedding, search, answer, and response cache"
+                  >
+                    Clear Cache
+                  </button>
+                </div>
               )}
             </div>
           </div>

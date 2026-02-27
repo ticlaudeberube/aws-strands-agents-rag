@@ -13,10 +13,21 @@ function ChatMessage({ message }) {
       <div className="message-content">
         <p className="message-text">
           {message.text}
-          {message.isStreaming && <span className="cursor">|</span>}
+          {message.isStreaming && !message.text && (
+            <span className="streaming-cursor">
+              <span className="dot"></span>
+              <span className="dot"></span>
+              <span className="dot"></span>
+            </span>
+          )}
         </p>
         {!isUser && message.sources && message.sources.length > 0 && (
           <SourcesList sources={message.sources} timing={message.timing} />
+        )}
+        {!isUser && message.timing && message.timing.total_time_ms && (
+          <div className="timing-info">
+            ⏱️ Response time: {(message.timing.total_time_ms / 1000).toFixed(2)}s
+          </div>
         )}
       </div>
     </div>

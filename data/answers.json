@@ -49,11 +49,41 @@
       "question": "How do I manage collections?",
       "answer": "You manage collections in Milvus by using the SDK of your choice. The process is detailed in the guide titled \"Manage Collections.\" Here's a Python example from the documentation:\n\n```Python\ncollection = Collection(\"Books\")\n```\n\nFor more information, you can refer to [Manage Collections](manage-collections.md) in the provided documentation.",
       "collection": "milvus_rag_collection"
+    },
+    {
+      "question": "What are the key differences between vector indexes like HNSW and IVF_FLAT?",
+      "answer": "HNSW and IVF_FLAT are both vector indexes, but they use different approaches for storing and searching data. HNSW (Hierarchical Navigable Small World) is a tree-like structure with high time complexity but low space requirements, optimized for large datasets. It supports incremental updates, adding or removing items without rebuilding the index. In contrast, IVF_FLAT divides vector space into list clusters and finds nearest clusters based on centroids before comparing distances to find nearest vectors within each cluster. Each index type has its advantages depending on the application and dataset characteristics.",
+      "collection": "milvus_rag_collection"
+    },
+    {
+      "question": "What are the main components of Milvus architecture and how do they interact together?",
+      "answer": "The main components of Milvus architecture include Coordinator, DataNode, QueryNode, IndexNode, Storage Node, and Worker. These components work in a distributed manner with interactions among them as follows:\n\n1. Coordinator: Responsible for managing the overall system, assigning tasks to other nodes, and monitoring their health.\n2. DataNodes: In charge of storing and retrieving data from the storage system.\n3. QueryNode: Handles query requests and communicates with IndexNodes.\n4. IndexNode: Performs index creation/updates on stored data.\n5. Storage Node: Deals with actual storage, managing data persistence.\n6. Worker: Executes user-defined tasks on a specific dataset.\n\nThe Coordinator is the only single point of failure in this architecture. However, Milvus ensures high availability of other components through scaling up and out nodes, making it more robust.",
+      "collection": "milvus_rag_collection"
+    },
+    {
+      "question": "Explain how Milvus handles data consistency and what are the different consistency levels?",
+      "answer": "Milvus supports four levels of consistency: Strong, Eventual, Bounded, and Session. By default, a collection created without specifying the consistency level has the 'Bounded' level. Milvus ensures consistency by providing mechanisms to read the most recent data view when using the Strong consistency level during search or query requests. You can configure this parameter while creating a collection or conducting searches/queries. The choice of consistency level depends on your application needs and tradeoffs between consistency and latency, as per the PACELC theorem (consistency increases latency).",
+      "collection": "milvus_rag_collection"
+    },
+    {
+      "question": "How does Milvus handle incremental data inserts and what are the performance implications compared to batch inserts?",
+      "answer": "Milvus supports both incremental and batch data insertions. Incremental inserts process smaller amounts of data continuously, which can be more efficient for applications with real-time input. For batch inserts, larger chunks of data are processed at once, but they require a buffer to accumulate until reaching the maximum 1024MB limit per insert operation. While batch inserts typically take less time than incremental ones, their latency can be higher due to buffering and eventual insertion.",
+      "collection": "milvus_rag_collection"
+    },
+    {
+      "question": "Explain the Milvus data model and its relation to tables, partitions, and segments",
+      "answer": "Milvus uses a data model that organizes data into collections, which can then be divided into partitions. Each partition contains multiple entities (entities are typically represented by their primary keys), and each entity is associated with a segment.\n\n1. **Collections**: Milvus manages the entire collection of data, including all entities stored in its collection system.\n2. **Segments**: A segment is an area within the collection that can be further divided into smaller sub-areas or collections called partitions. Each partition contains multiple segments, and each segment may contain numerous entities.\n\n### Summary\n- **Collection**: A complete, organized dataset.\n- **Segments**: Areas within the collection where entities can be divided and searched based on similarity.\n- **Partitions**: Divisions of collections into smaller, manageable units that are easier to query and analyze. Each partition contains multiple segments.",
+      "collection": "milvus_rag_collection"
+    },
+    {
+      "question": "What are the deployment topologies and scaling options available in Milvus?",
+      "answer": "In Milvus, there are three main types of deployments:\n\n1. **Local Deployment**: This is a local mode that does not involve external services.\n2. **Docker**: Supports running applications on containers.\n3. **Kubernetes on-premises**: Used for deploying applications to cloud infrastructure.\n4. **Cloud SaaS (e.g., Pinecone)**: Requires specific hosting and API deployment models.\n\n### Scaling a Milvus Cluster\n\n- In production environments, Milvus supports horizontal scaling by adding or removing worker nodes as per your requirements. For example:\n  - To scale out: Add more worker nodes if needed.\n  - To scale in: Remove one worker node to reduce the number of replicas.\n\n- You can scale Milvus clusters with the help of Helm charts via Kubernetes. You need to have already installed a Milvus cluster before scaling.\n\n- The following command deploys a Milvus cluster with its components and dependencies using default configurations. You need to customize these settings before deployment based on your data size and performance requirements.",
+      "collection": "milvus_rag_collection"
     }
   ],
   "description": "Pre-generated question-answer pairs for response cache",
-  "generated_count": 10,
-  "total_expected": 10,
+  "generated_count": 17,
+  "total_expected": 17,
   "version": "1.0",
   "usage": "Run: python document-loaders/sync_answers_cache.py to load into response_cache"
 }

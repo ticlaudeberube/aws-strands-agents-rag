@@ -244,3 +244,76 @@ class OllamaClient:
             logger.error(f"Generation failed: {e}")
             raise
 
+    def generate_stream(
+        self,
+        prompt: str,
+        model: str = "neural-chat",
+        temperature: float = 0.1,
+        max_tokens: int = None,
+    ):
+        """Stream text generation using Ollama LLM.
+
+        Yields chunks of text as they are generated. Useful for real-time
+        response streaming to clients.
+
+        Args:
+            prompt: Input prompt
+            model: Ollama model name
+            temperature: Temperature for generation (0-2, lower=more deterministic)
+            max_tokens: Maximum number of tokens to generate (Ollama uses 'num_predict', None = no limit)
+
+        Yields:
+            Chunks of generated text
+        """
+        import json
+        
+        try:
+            payload = {
+                "prompt": prompt,
+                "model": model,
+                "stream": True,
+                "temperature": temperature,
+            }
+            
+            # Only add num_predict if max_tokens is explicitly set and > 0
+            if max_tokens is not None and max_tokens > 0:
+                payload["num_predict"] = max_tokens
+                logger.debug(f"Streaming with token limit: {max_tokens}")
+            
+            response = self.session.post(
+                self.generate_endpoint,
+                json=payload,
+                timeout=120,
+                stream=True,
+            )
+            response.raise_for_status()
+            
+            # Stream chunks as they arrive
+            # Ollama returns newline-delimited JSON objects
+            for line in response.iter_lines():
+                if line:
+                    try:
+                        # Decode bytes to string and parse JSON
+                        line_str = line.decode('utf-8') if isinstance(line, bytes) else line
+                        chunk_data = json.loads(line_str)
+                        
+                        # Extract the response chunk from the JSON
+                        chunk = chunk_data.get("response", "")
+                        if chunk:
+                            yield chunk
+                    except json.JSONDecodeError as e:
+                        logger.debug(f"Failed to parse JSON chunk: {e}")
+                        continue
+                    except Exception as e:
+                        logger.debug(f"Failed to process chunk: {e}")
+                        continue
+        except requests.exceptions.ConnectionError as e:
+            logger.error(f"❌ Cannot connect to Ollama at {self.host}. Make sure Ollama is running: ollama serve")
+            raise RuntimeError(f"Ollama connection failed. Is Ollama running at {self.host}?") from e
+        except requests.exceptions.Timeout as e:
+            logger.error(f"❌ Ollama streaming timeout (120s). Model '{model}' may be slow or not loaded.")
+            raise RuntimeError(f"Ollama request timed out. Try: ollama pull {model}") from e
+        except Exception as e:
+            logger.error(f"Stream generation failed: {e}")
+            raise
+

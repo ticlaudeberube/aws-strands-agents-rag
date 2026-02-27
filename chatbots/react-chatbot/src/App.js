@@ -61,8 +61,9 @@ function App() {
     setIsLoading(true);
 
     // Add assistant message placeholder
+    const assistantMessageId = nextIdRef.current++;
     const assistantMessage = {
-      id: nextIdRef.current++,
+      id: assistantMessageId,
       text: '',
       role: 'assistant',
       isStreaming: true,
@@ -72,6 +73,7 @@ function App() {
     setMessages((prev) => [...prev, assistantMessage]);
 
     try {
+      const startTime = Date.now();
       const response = await fetch(`${API_BASE_URL}/v1/chat/completions`, {
         method: 'POST',
         headers: {
@@ -82,6 +84,7 @@ function App() {
           model: 'rag-agent',
           temperature: 0.1,  // Low temperature for factual responses
           top_p: 0.9,
+          stream: false,
         }),
       });
 
@@ -93,27 +96,32 @@ function App() {
       const assistantText =
         data.choices?.[0]?.message?.content || 'No response received';
       const sources = data.sources || [];
-      const timing = data.timing || {};
+      
+      const endTime = Date.now();
+      const totalTime = (endTime - startTime) / 1000;
 
-      // Update the assistant message with streaming effect
       setMessages((prev) => {
         const newMessages = [...prev];
-        const lastMessage = newMessages[newMessages.length - 1];
-        lastMessage.text = assistantText;
-        lastMessage.sources = sources;
-        lastMessage.timing = timing;
-        lastMessage.isStreaming = false;
+        const messageIndex = newMessages.findIndex(m => m.id === assistantMessageId);
+        if (messageIndex !== -1) {
+          newMessages[messageIndex].text = assistantText;
+          newMessages[messageIndex].sources = sources;
+          newMessages[messageIndex].timing = { total_time_ms: Math.round(totalTime * 1000) };
+          newMessages[messageIndex].isStreaming = false;
+        }
         return newMessages;
       });
     } catch (error) {
       console.error('Error:', error);
       setMessages((prev) => {
         const newMessages = [...prev];
-        const lastMessage = newMessages[newMessages.length - 1];
-        lastMessage.text = `❌ Error: ${error.message}`;
-        lastMessage.sources = [];
-        lastMessage.timing = {};
-        lastMessage.isStreaming = false;
+        const messageIndex = newMessages.findIndex(m => m.id === assistantMessageId);
+        if (messageIndex !== -1) {
+          newMessages[messageIndex].text = `❌ Error: ${error.message}`;
+          newMessages[messageIndex].sources = [];
+          newMessages[messageIndex].timing = {};
+          newMessages[messageIndex].isStreaming = false;
+        }
         return newMessages;
       });
     } finally {

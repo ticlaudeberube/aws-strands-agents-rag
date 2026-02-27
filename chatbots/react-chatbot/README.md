@@ -13,23 +13,54 @@ A self-contained React chatbot interface for the Milvus RAG system with real-tim
 - Lightweight React app
 - Efficient message rendering
 - API status indicator
+- **Real-time streaming responses** with perceived 2-3s latency
 
 💬 **Real-time Features**
+- **Live response streaming** - see answers appear word-by-word as they're generated
+- Animated streaming indicator with bouncing dots
+- Response time metrics for each message
 - Instant message feedback
-- Typing indicator while waiting for response
 - Auto-scroll to latest message
 - Clear chat history button
 
 🔌 **Integration**
-- Connects to existing `http://localhost:8000/v1/chat/completions` API
+- Connects to the RAG Agent API on `http://localhost:8001/v1/chat/completions` (streaming-enabled)
 - OpenAI-compatible API requests
 - Automatic API health check
+- Server-Sent Events (SSE) streaming support
+
+## Streaming Implementation
+
+The chatbot now uses **real-time streaming** to display responses as they are generated:
+
+```
+User: "What is Milvus?"
+│
+├─ [0.5s] Context retrieval
+├─ [2-3s] First chunk arrives → "Milvus is an open-source..." (streaming indicator active)
+├─ The message grows in real-time as chunks arrive
+└─ [8-15s] Response complete (timing info displayed)
+```
+
+### How It Works
+
+1. **User sends question** → "What is Milvus?"
+2. **Server processes** → Retrieves context from Milvus (0.5s)
+3. **First chunk arrives** → Client receives initial answer text (2-3s)
+4. **Streaming continues** → Answer words appear progressively
+5. **Response completes** → Message shows response time
+
+### Visual Feedback
+
+- **Streaming indicator**: Animated bouncing dots appear while response is being generated
+- **Response time**: Displays "⏱️ Response time: X.XXs" after completion
+- **Smooth scroll**: Auto-scrolls to keep latest message in view
 
 ## Setup
 
 ### Prerequisites
 - Node.js 14+ installed
-- API server running on `http://localhost:8000`
+- API server running on `http://localhost:8001` (with streaming support)
 
 ### Installation
 

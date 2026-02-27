@@ -46,9 +46,10 @@ class ChatCompletionRequest(BaseModel):
     """OpenAI-compatible chat completion request."""
     messages: List[Message]
     model: Optional[str] = "rag-agent"
-    temperature: Optional[float] = 0.7
+    temperature: Optional[float] = 0.1  # Low temperature for factual RAG answers
     top_p: Optional[float] = 0.9
-    max_tokens: Optional[int] = None
+    max_tokens: Optional[int] = None  # None means use settings.max_tokens
+    top_k: Optional[int] = None  # None means use default of 5 for retrieval
     stream: Optional[bool] = False
 
 
@@ -495,6 +496,11 @@ async def chat_completions(request: ChatCompletionRequest, bypass_cache: bool = 
         else:
             logger.info(f"Query: {user_message[:100]}...")
         
+        # Use request parameters or defaults
+        retrieval_top_k = request.top_k or 5
+        temperature = request.temperature if request.temperature is not None else 0.1
+        max_tokens = request.max_tokens or current_settings.max_tokens
+        
         timing_data = {}
         try:
             if bypass_cache:
@@ -502,14 +508,14 @@ async def chat_completions(request: ChatCompletionRequest, bypass_cache: bool = 
                 answer, sources = current_agent.answer_question_no_cache(
                     collection_name=current_settings.ollama_collection_name,
                     question=user_message,
-                    top_k=5,
+                    top_k=retrieval_top_k,
                 )
             else:
                 # Use normal path with caching
                 answer, sources = current_agent.answer_question(
                     collection_name=current_settings.ollama_collection_name,
                     question=user_message,
-                    top_k=5,
+                    top_k=retrieval_top_k,
                 )
         except Exception as e:
             logger.error(f"RAG error: {e}")
@@ -559,9 +565,14 @@ async def chat_completions(request: ChatCompletionRequest, bypass_cache: bool = 
 
 @app.post("/v1/chat/completions/stream", tags=["chat"])
 async def chat_completions_stream(request: ChatCompletionRequest):
-    """Stream chat completions endpoint for long-running operations.
+    """Stream chat completions endpoint for real-time response streaming.
     
-    Returns Server-Sent Events stream with answer chunks.
+    Returns Server-Sent Events (SSE) stream with answer chunks as they are generated.
+    This provides a perceived immediate response while the full answer is being
+    generated in the background.
+    
+    The stream yields chunks in the format: data: {chunk}\n\n
+    Client can consume with JavaScript fetch() and EventSource API.
     """
     try:
         current_agent = await get_or_init_agent()
@@ -581,20 +592,25 @@ async def chat_completions_stream(request: ChatCompletionRequest):
         
         logger.info(f"Stream Query: {user_message[:100]}...")
         
-        async def generate():
-            """Generator for streaming response."""
+        async def stream_generator():
+            """Generator for streaming response with SSE format."""
             try:
+                # Create a task for the streaming answer
                 async for chunk in current_agent.stream_answer(
                     collection_name=current_settings.ollama_collection_name,
                     question=user_message,
                     top_k=5,
                 ):
+                    # Yield in Server-Sent Events format
                     yield f"data: {chunk}\n\n"
+                
+                # Signal end of stream
+                yield "data: [STREAM_END]\n\n"
             except Exception as e:
                 logger.error(f"Stream generation error: {e}")
-                yield f"data: Error: {str(e)}\n\n"
+                yield f"data: [Error: {str(e)}]\n\n"
         
-        return StreamingResponse(generate(), media_type="text/event-stream")
+        return StreamingResponse(stream_generator(), media_type="text/event-stream")
     
     except Exception as e:
         logger.error(f"Stream endpoint error: {e}")

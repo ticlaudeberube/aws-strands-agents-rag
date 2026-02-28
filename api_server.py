@@ -949,14 +949,15 @@ async def clear_cache():
     
     Returns immediately without waiting for dependent operations.
     """
-    if not agent:
+    current_agent = await get_or_init_agent()
+    if not current_agent:
         raise HTTPException(status_code=503, detail="Agent not initialized")
     
     try:
         logger.info("Cache clear request received")
         
         # Clear caches in the running agent
-        agent.clear_caches()
+        current_agent.clear_caches()
         
         logger.info("✓ All caches cleared successfully")
         

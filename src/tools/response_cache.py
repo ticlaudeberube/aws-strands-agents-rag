@@ -25,9 +25,9 @@ class MilvusResponseCache:
     # - Exact match (identical text): ~1.0
     # - Similar rephrasing: ~0.91-0.92
     # - Unrelated question using same terms: ~0.90
-    # Use threshold of 0.99 to accept only exact/very near-exact matches
-    DISTANCE_THRESHOLD = 0.99  # Only accept near-identical questions (distance >= 0.99)
-    SIMILARITY_THRESHOLD = 0.92  # Kept for backward compatibility but not used
+    # Use threshold of 0.90 to accept semantically similar questions
+    DISTANCE_THRESHOLD = 0.90  # Accept similar questions (distance >= 0.90)
+    SIMILARITY_THRESHOLD = 0.90  # Kept for backward compatibility but not used
     
     def __init__(self, vector_db, embedding_dim: int = 768):
         """Initialize response cache.
@@ -114,6 +114,7 @@ class MilvusResponseCache:
                     "distance": distance,
                     "created_at": metadata.get("created_at", ""),
                     "hit_count": metadata.get("hit_count", 0),
+                    "sources": metadata.get("sources", []),  # Retrieve sources from metadata
                 }
                 
                 logger.info(f"✓ Cache HIT ({similarity:.1%} similar, distance={distance:.4f})")

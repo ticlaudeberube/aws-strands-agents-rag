@@ -6,8 +6,8 @@ function SourcesList({ sources, timing }) {
     return null;
   }
 
-  // Deduplicate sources by document_name or text to avoid showing duplicates
-  const getUniqueKey = (source) => source.document_name || source.text || '';
+  // Deduplicate sources by document_name, URL, or text to avoid showing duplicates
+  const getUniqueKey = (source) => source.url || source.document_name || source.text || '';
   const seen = new Set();
   const uniqueSources = sources.filter((source) => {
     const key = getUniqueKey(source);
@@ -26,6 +26,7 @@ function SourcesList({ sources, timing }) {
 
   const getRelevancePercentage = (distance) => {
     // For COSINE metric: distance is similarity score (0-1, where 1 is perfect match)
+    // For web sources: distance is already the relevance score (0-1)
     // Convert to relevance percentage (0-100)
     return Math.max(0, Math.round(distance * 100));
   };
@@ -48,20 +49,47 @@ function SourcesList({ sources, timing }) {
         )}
       </div>
       <div className="sources-list">
-        {uniqueSources.map((source, index) => (
-          <div key={index} className="source-item">
-            <div className="source-number">{index + 1}</div>
-            <div className="source-content">
-              <p className="source-filename">{source.document_name || source.text?.substring(0, 50) + '...' || 'Unknown'}</p>
-              <p className="source-text">{source.text}</p>
-              <div className="source-meta">
-                <span className="relevance-badge">
-                  ✓ {getRelevancePercentage(source.distance)}% relevant
-                </span>
+        {uniqueSources.map((source, index) => {
+          const isWebSource = source.source_type === 'web_search' || source.url;
+          return (
+            <div key={index} className={`source-item ${isWebSource ? 'web-source' : ''}`}>
+              <div className={`source-number ${isWebSource ? 'web-badge' : ''}`}>
+                {isWebSource ? '🌐' : index + 1}
+              </div>
+              <div className="source-content">
+                {isWebSource ? (
+                  <>
+                    <p className="source-filename web-title">
+                      <a href={source.url} target="_blank" rel="noopener noreferrer" className="web-link">
+                        {source.title || 'Web Result'}
+                      </a>
+                    </p>
+                    {source.snippet && <p className="source-text">{source.snippet}</p>}
+                    <div className="source-meta">
+                      <span className="web-source-badge">🔗 Web Search</span>
+                      <span className="source-url">{new URL(source.url).hostname}</span>
+                      {source.distance && (
+                        <span className="relevance-badge">
+                          ✓ {getRelevancePercentage(source.distance)}% relevant
+                        </span>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <p className="source-filename">{source.document_name || source.text?.substring(0, 50) + '...' || 'Unknown'}</p>
+                    <p className="source-text">{source.text}</p>
+                    <div className="source-meta">
+                      <span className="relevance-badge">
+                        ✓ {getRelevancePercentage(source.distance)}% relevant
+                      </span>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

@@ -9,13 +9,13 @@ function SourcesPanel({ sources, isLoading, timing }) {
     return (milliseconds / 1000).toFixed(2) + 's';
   };
 
-  // Deduplicate sources by document_name to avoid showing duplicates
+  // Deduplicate sources by document_name, URL, or text to avoid showing duplicates
   const getUniqueSources = () => {
     if (!sources || sources.length === 0) return [];
     const seen = new Set();
     const unique = [];
     for (const source of sources) {
-      const key = source.document_name || source.text || '';
+      const key = source.url || source.document_name || source.text || '';
       if (key && !seen.has(key)) {
         seen.add(key);
         unique.push(source);
@@ -61,6 +61,33 @@ function SourcesPanel({ sources, isLoading, timing }) {
       </div>
       <div className="sources-panel-list">
         {uniqueSources.map((source, index) => {
+          const isWebSource = source.source_type === 'web_search' || source.url;
+          
+          if (isWebSource) {
+            return (
+              <div key={index} className="sources-panel-item web-source-item">
+                <div className="sources-panel-number web-badge">🌐</div>
+                <div className="sources-panel-content">
+                  <p className="sources-panel-text web-source-title">
+                    <a href={source.url} target="_blank" rel="noopener noreferrer" className="web-source-link">
+                      {source.title || 'Web Result'}
+                    </a>
+                  </p>
+                  {source.snippet && <p className="sources-panel-text web-snippet">{source.snippet}</p>}
+                  <div className="sources-panel-meta">
+                    <span className="web-source-badge">🔗 Web Search</span>
+                    <span className="web-domain">{new URL(source.url).hostname}</span>
+                    {source.distance && (
+                      <span className="relevance-badge" style={{marginLeft: '8px'}}>
+                        ✓ {Math.round(source.distance * 100)}% relevant
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          }
+          
           // Show document name if available, otherwise show text snippet
           const displayName = source.document_name || (source.text ? source.text.substring(0, 100) + '...' : 'Unnamed source');
           const isDocumentName = !!source.document_name;

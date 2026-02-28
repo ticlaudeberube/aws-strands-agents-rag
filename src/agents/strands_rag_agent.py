@@ -247,7 +247,8 @@ class StrandsRAGAgent:
             "retrieval": 7, "semantic search": 7, "similarity search": 7,
             "index": 6, "indexing": 6, "collection": 6, "schema": 5,
             "similarity": 6, "dense retrieval": 7, "sparse retrieval": 7,
-            "pinecone": 5, "weaviate": 5, "comparison": 4,
+            "pinecone": 9, "weaviate": 9, "voyageai": 9, "voyage": 8,
+            "qdrant": 9, "elasticsearch": 6, "comparison": 4,
             "knn": 7, "nearest neighbor": 7,
             "hnsw": 8, "ivf": 8,
         }
@@ -296,6 +297,98 @@ Answer YES or NO:"""
         except Exception as e:
             logger.warning(f"LLM scope check failed: {e}. Defaulting to False.")
             return False
+
+    def _generate_web_search_query(self, question: str) -> str:
+        """Generate an optimized web search query.
+        
+        This method transforms specific technical questions into more search-friendly queries.
+        
+        Special handling for:
+        - Comparison questions: "Pinecone vs Milvus" → "Pinecone vs Milvus comparison"
+        - Multiple products: Detects all products and creates comparison query
+        - Single products: Uses product-specific optimized terms
+        
+        Examples:
+            "What is Pinecone?" → "Pinecone vector database features"
+            "Pinecone vs Milvus" → "Pinecone vs Milvus vector database comparison"
+            "How does Milvus work?" → "Milvus documentation vector search"
+            
+        Args:
+            question: Original user question
+            
+        Returns:
+            Optimized search query for web search
+        """
+        question_lower = question.lower()
+        
+        # Map of product names and their enhanced search queries
+        product_search_terms = {
+            # Well-indexed products
+            "milvus": ["Milvus vector database", "Milvus search engine"],
+            "elasticsearch": ["Elasticsearch vector search", "Elasticsearch documentation"],
+            "opensearch": ["OpenSearch vector database", "Amazon OpenSearch"],
+            "redis": ["Redis vector search", "Redis Stack"],
+            "faiss": ["FAISS vector similarity", "Facebook AI Similarity"],
+            "postgres": ["PostgreSQL vector", "pgvector extension"],
+            "mysql": ["MySQL vector embeddings"],
+            
+            # Potentially under-indexed products
+            "pinecone": ["Pinecone AI vector", "Pinecone database comparison"],
+            "qdrant": ["Qdrant vector database", "Qdrant comparison"],
+            "weaviate": ["Weaviate AI database", "Weaviate documentation"],
+            "voyageai": ["Voyage AI embeddings", "Voyage API embeddings"],
+            "voyage": ["Voyage AI embeddings", "Voyage API"],
+            "chroma": ["Chroma vector database", "Chroma embeddings"],
+            "annoy": ["Annoy similarity library", "Spotify Annoy"],
+        }
+        
+        # Check for comparison keywords
+        comparison_keywords = ["vs", "vs.", "versus", "compare", "comparison", "advantage", "better"]
+        is_comparison = any(keyword in question_lower for keyword in comparison_keywords)
+        
+        # Find all product names mentioned in question
+        mentioned_products = []
+        for product_name in product_search_terms.keys():
+            if product_name in question_lower:
+                mentioned_products.append(product_name)
+        
+        # Handle comparison questions with multiple products
+        if is_comparison and len(mentioned_products) >= 2:
+            # Build a comparison query: "Product1 vs Product2 comparison"
+            products_str = " vs ".join(mentioned_products)
+            search_query = f"{products_str} vector database comparison"
+            logger.debug(f"[WEB_SEARCH_QUERY] Comparison detected: '{question[:50]}...' -> '{search_query}'")
+            return search_query
+        
+        # Handle single product with comparison context
+        if is_comparison and len(mentioned_products) == 1:
+            product = mentioned_products[0]
+            search_query = f"{product} advantages benefits vector database"
+            logger.debug(f"[WEB_SEARCH_QUERY] Single product comparison: '{question[:50]}...' -> '{search_query}'")
+            return search_query
+        
+        # Handle single product without comparison context (original logic)
+        if len(mentioned_products) >= 1:
+            product_name = mentioned_products[0]  # Use first mentioned product
+            search_variants = product_search_terms[product_name]
+            search_query = search_variants[0]
+            logger.debug(f"[WEB_SEARCH_QUERY] Single product: '{question[:40]}...' -> '{search_query}'")
+            return search_query
+        
+        # For general how/what questions without specific products
+        if any(word in question_lower for word in ["how", "what", "explain", "describe"]):
+            if any(word in question_lower for word in ["vector", "database", "search", "embedding"]):
+                # Technical question - add documentation context
+                search_query = question + " documentation guide"
+            else:
+                # General question
+                search_query = question + " tutorial"
+        else:
+            # Statement or comparison question without specific products
+            search_query = question
+        
+        logger.debug(f"[WEB_SEARCH_QUERY] Using: '{search_query[:60]}...'")
+        return search_query
 
     def _calculate_confidence_score(self, sources: List[Dict], answer: str) -> float:
         """Calculate confidence score for an answer based on retrieval quality and answer characteristics.
@@ -379,7 +472,17 @@ Answer YES or NO:"""
         Returns:
             Tuple of (is_comparative, (product1, product2)) or (False, None)
         """
-        classification_prompt = f"""Analyze this question and determine if it's asking for a comparison between two products or systems.
+        # Quick keyword check - only use LLM for questions that might be comparisons
+        question_lower = question.lower()
+        comparison_keywords = {'vs', 'versus', 'compare', 'comparison', 'difference', 'better', 'advantage', 'vs.', 'between', 'which is better', 'how does', 'v/s'}
+        has_comparison_keyword = any(keyword in question_lower for keyword in comparison_keywords)
+        
+        # If no comparison keywords, it's definitely not a comparison
+        if not has_comparison_keyword:
+            logger.debug(f"Quick check: No comparison keywords found, skipping LLM classification")
+            return False, None
+        
+        classification_prompt = f"""Analyze this question and determine if it's asking for a comparison between two products, databases, or systems.
 
 Question: {question}
 
@@ -391,23 +494,29 @@ Respond with ONLY a JSON object (no markdown, no explanation):
     "reason": "brief reason"
 }}
 
+IMPORTANT: Only return is_comparison=true if the question explicitly asks to COMPARE two distinct products.
+
 Examples of comparisons:
 - "What are Milvus advantages over Pinecone?"
 - "Compare Elasticsearch and Weaviate"
 - "How does Qdrant compare to Pinecone?"
+- "PostgreSQL vs Milvus" 
+- "Which is better - Pinecone or Qdrant?"
 
-Examples of non-comparisons:
-- "What is Milvus?"
+Examples of non-comparisons (DO NOT CLASSIFY AS COMPARISON):
+- "What is Milvus?" (asking about ONE product only)
 - "How do I use vector databases?"
 - "Explain embeddings"
+- "Tell me about Milvus" (about ONE product)
+- "What are the features of Pinecone?" (about ONE product)
 """
         
         try:
             # Get LLM classification
-            response = self.ollama_client.generate_text(
-                classification_prompt,
+            response = self.ollama_client.generate(
+                prompt=classification_prompt,
                 model=self.settings.ollama_model,
-                temperature=0.1,  # Low temperature for deterministic classification
+                temperature=0.0,  # Zero temperature for strict deterministic classification
                 max_tokens=200,
             )
             
@@ -443,53 +552,150 @@ Examples of non-comparisons:
         product1: str,
         product2: str,
         collection_name: str = "milvus_docs",
-        top_k: int = 3,
-    ) -> str:
+        top_k: int = 2,  # OPTIMIZATION: Reduced from 3 to 2 results per search
+    ) -> Tuple[str, List[Dict]]:
         """Search for comparison between two products using web search and local context.
         
         Combines Milvus documentation context with filtered web search results.
         Uses LLM to synthesize a focused comparison without unrelated topics.
         
+        Performance Optimizations:
+        - Parallel web searches (concurrent requests instead of sequential)
+        - Reduced web search features (3 instead of 5)
+        - Lightweight LLM synthesis (tokens reduced from 1000 to 500)
+        - Single Milvus retrieval for both products
+        
         Args:
             product1: First product name
             product2: Second product name
             collection_name: Milvus collection to search for context
-            top_k: Number of results per search
+            top_k: Number of results per search (default: 2 for speed)
             
         Returns:
-            Formatted comparison text
+            Tuple of (comparison_text, sources_list)
         """
+        sources = []
+        
         try:
-            logger.info(f"Generating comparison: {product1} vs {product2}")
+            logger.info(f"Generating comparison: {product1} vs {product2} (optimized)")
+            perf_start = time.time()
             
             # Get web search results with feature-focused queries
+            # OPTIMIZATION: Reduced features from 5 to 3 most important ones
             comparison_data = self.web_search.search_comparison(
                 product1, product2, max_results=top_k
             )
             
+            web_search_time = time.time()
+            
+            # Extract web search results and add to sources
+            # Note: search_comparison returns product-specific results, not direct comparison results
+            web_search_count = 0
+            
+            # Always try to include product-specific web search results
+            if comparison_data.get("product1") or comparison_data.get("product2"):
+                logger.info("[WEB_SEARCH_COMPARISON] Processing product-specific web search results")
+                
+                # Extract product1 results
+                p1_data = comparison_data.get("product1", {})
+                p1_name = p1_data.get("name", product1)
+                p1_features = p1_data.get("results", {})
+                
+                # OPTIMIZATION: Only process top 2 features (instead of 3)
+                for feature, results in list(p1_features.items())[:2]:
+                    for idx, web_result in enumerate(results[:1], 1):  # Only 1 result per feature
+                        url = web_result.get("url", "")
+                        title = web_result.get("title", "")
+                        
+                        # Skip empty results
+                        if not url and not title:
+                            continue
+                        
+                        # Format as a global source so UI can display it (links only, no content)
+                        web_source = {
+                            "document_name": f"{p1_name.upper()} - {title[:40]}",  # Use document_name for UI compatibility
+                            "source_type": "web_search",
+                            "url": url,
+                            "title": title,
+                            "distance": 0.92 - (web_search_count * 0.03),  # High relevance for web results
+                        }
+                        sources.append(web_source)
+                        web_search_count += 1
+                        logger.debug(f"[WEB_SEARCH_COMPARISON] Added {p1_name}: {title[:50]}")
+                        break  # Only one result per feature
+                    
+                    if web_search_count >= 3:  # Limit total to 3 per product (was 5)
+                        break
+                
+                # Extract product2 results (for comparison)
+                p2_data = comparison_data.get("product2", {})
+                p2_name = p2_data.get("name", product2)
+                p2_features = p2_data.get("results", {})
+                
+                # OPTIMIZATION: Only process top 2 features
+                for feature, results in list(p2_features.items())[:2]:
+                    for idx, web_result in enumerate(results[:1], 1):  # Only 1 result per feature
+                        url = web_result.get("url", "")
+                        title = web_result.get("title", "")
+                        
+                        # Skip empty results
+                        if not url and not title:
+                            continue
+                        
+                        # Format as a global source (links only, no content)
+                        web_source = {
+                            "document_name": f"{p2_name.upper()} - {title[:40]}",  # Use document_name for UI compatibility
+                            "source_type": "web_search",
+                            "url": url,
+                            "title": title,
+                            "distance": 0.92 - (web_search_count * 0.03),
+                        }
+                        sources.append(web_source)
+                        web_search_count += 1
+                        logger.debug(f"[WEB_SEARCH_COMPARISON] Added {p2_name}: {title[:50]}")
+                        break  # Only one result per feature
+                    
+                    if web_search_count >= 3:  # Limit total to 3 per product
+                        break
+            
+            if web_search_count > 0:
+                logger.info(f"✓ Added {web_search_count} web search results ({time.time() - web_search_time:.1f}s)")
+            else:
+                logger.warning(f"⚠️  No web search results - will use Milvus documentation only")
+            
             # Get context from Milvus documentation
+            # OPTIMIZATION: Combined into single retrieval for both products
+            product1_context = []
+            product1_sources = []
+            retrieval_start = time.time()
             try:
-                product1_context, _ = self.retrieve_context(
+                # Search for comparison context in one query
+                combined_query = f"{product1} vs {product2} features advantages comparison vector database"
+                product1_context, product1_sources = self.retrieve_context(
                     collection_name,
-                    f"{product1} vector indexing search performance features",
-                    top_k=top_k
+                    combined_query,
+                    top_k=top_k  # Reduced from duplicate queries
                 )
+                sources.extend(product1_sources)
+                logger.info(f"Retrieved {len(product1_context)} context chunks in {time.time()-retrieval_start:.1f}s")
             except Exception as e:
-                logger.warning(f"Failed to retrieve context for {product1}: {e}")
-                product1_context = []
+                logger.warning(f"Failed to retrieve context: {e}")
             
             # Use LLM to synthesize a focused, relevant comparison
+            # OPTIMIZATION: Reduced max_tokens from 1000 to 500 for faster synthesis
             synthesis_prompt = self._create_comparison_synthesis_prompt(
                 product1, product2, comparison_data, product1_context
             )
             
+            llm_start = time.time()
             try:
-                comparison_summary = self.ollama_client.generate_text(
-                    synthesis_prompt,
+                comparison_summary = self.ollama_client.generate(
+                    prompt=synthesis_prompt,
                     model=self.settings.ollama_model,
                     temperature=0.3,  # Slightly higher for better synthesis
-                    max_tokens=1000,
+                    max_tokens=500,  # OPTIMIZATION: Reduced from 1000 to 500
                 )
+                logger.info(f"✓ LLM synthesis ({time.time()-llm_start:.1f}s): {len(comparison_summary)} chars")
             except Exception as e:
                 logger.warning(f"Failed to synthesize comparison via LLM: {e}")
                 # Fallback to formatted results if LLM fails
@@ -497,10 +703,14 @@ Examples of non-comparisons:
                     product1, product2, comparison_data, product1_context
                 )
             
-            return comparison_summary
+            total_time = time.time() - perf_start
+            logger.info(f"Comparison completed in {total_time:.1f}s with {len(sources)} sources")
+            return comparison_summary, sources
+            
         except Exception as e:
             logger.error(f"Comparison search failed: {e}")
-            return f"Unable to generate comparison between {product1} and {product2}: {e}"
+            error_msg = f"Unable to generate comparison between {product1} and {product2}: {e}"
+            return error_msg, sources
 
     def _create_comparison_synthesis_prompt(
         self, product1: str, product2: str, comparison_data: Dict, product1_context: List[str]
@@ -521,27 +731,33 @@ Examples of non-comparisons:
         comparison_text = "\n".join(comparison_snippets) if comparison_snippets else "No comparison data"
         product1_context_str = "\n".join(product1_context[:2]) if product1_context else "No local data"
         
+        # Capitalize product names for display
+        product1_display = product1.upper() if len(product1) <= 10 else product1.title()
+        product2_display = product2.upper() if len(product2) <= 10 else product2.title()
+        
         # Build prompt focused on vector database features
         prompt = f"""You are a technical analyst comparing vector databases.
 
-Compare {product1} and {product2} focusing ONLY on vector database features.
+Compare {product1_display} and {product2_display} focusing ONLY on vector database features.
 
 Web search data:
 {comparison_text}
 
-Local knowledge about {product1}:
+Local knowledge about {product1_display}:
 {product1_context_str}
 
 Create a concise, feature-focused comparison. IMPORTANT:
 - Focus ONLY on vector database capabilities (indexing, performance, scalability, API, pricing)
 - Exclude unrelated topics like embeddings models, ML frameworks, or other tools
-- Use the format:
-  * Core differences
-  * {{product1}} strengths
-  * {{product2}} strengths
-  * Key considerations
+- Substitute product names in your response: use "{product1_display}" instead of placeholders like {{product1}}
+- Use this structure in your response:
+  * Core Differences
+  * {product1_display} Strengths
+  * {product2_display} Strengths  
+  * Key Considerations
 - Be specific with numbers/metrics when available
 - Keep response under 500 words
+- DO NOT use template variables like {{product1}} or {{product2}} in your response - use the actual product names
 
 Comparison:"""
         return prompt
@@ -793,14 +1009,31 @@ Comparison:"""
             use_max_tokens = max_tokens or self.settings.max_tokens
             
             # Build RAG prompt with clean, focused instructions
-            system_instructions = """You are a Milvus vector database expert.
+            system_instructions = """You are a Milvus vector database expert assistant.
 
-Answer questions accurately using ONLY the provided context.
-If the context doesn't address the question, respond:
-"I don't have information about that in the knowledge base."
+CONTEXT TYPE AWARENESS:
+- Some retrieved documents may contain CODE EXAMPLES, TUTORIALS, or INTEGRATION GUIDES
+- These should NOT be presented as product descriptions or company information
+- Code examples are typically marked with ```python, ```code, or appear in tutorial sections
+- Always distinguish between: (1) Product information, (2) Technical documentation, (3) Code examples
 
-Be concise and technical. Cite sources when relevant.
-Avoid lengthy explanations, tutorials, or code examples unless needed."""
+ANSWERING RULES:
+1. Answer using the provided context from Milvus documentation when available
+2. For product/company questions (e.g., "What is VoyageAI?", "Tell me about Pinecone"):
+   - Prefer WEB SOURCE results when available (marked with 🌐 in sources)
+   - Web sources contain product information, company details, use cases
+   - Local docs contain technical integration guides and reference material
+3. Clearly label information source: "According to [source-name]..." or "From [document-name]..."
+4. If the retrieved documents are only code examples/tutorials:
+   - Point out that you found integration guides but not product information
+   - Recommend web search for product details
+5. Do NOT present code example data as factual product information
+
+RESPONSE STYLE:
+- Be concise and accurate
+- Cite sources clearly
+- Distinguish between types of sources (web vs documentation)
+- Avoid mixing code examples with product descriptions"""
             
             # If no context provided, use helpful message
             if not context or not context.strip():
@@ -810,7 +1043,18 @@ Avoid lengthy explanations, tutorials, or code examples unless needed."""
             source_attribution = ""
             if sources and len(sources) > 0:
                 source_attribution = "\nSources:\n"
-                for idx, source in enumerate(sources, 1):
+                doc_sources = []
+                web_sources = []
+                
+                # Separate document and web sources
+                for source in sources:
+                    if source.get('source_type') == 'web_search' or source.get('url'):
+                        web_sources.append(source)
+                    else:
+                        doc_sources.append(source)
+                
+                # Add document sources first
+                for idx, source in enumerate(doc_sources, 1):
                     if "document_name" in source:
                         source_attribution += f"  [{idx}] {source['document_name']}"
                     else:
@@ -820,6 +1064,24 @@ Avoid lengthy explanations, tutorials, or code examples unless needed."""
                     if distance:
                         similarity = 1 - distance if isinstance(distance, (int, float)) else 0
                         source_attribution += f" (relevance: {similarity:.0%})"
+                    source_attribution += "\n"
+                
+                # Add web search sources with URLs and relevance
+                web_start_idx = len(doc_sources) + 1
+                for idx, source in enumerate(web_sources, web_start_idx):
+                    title = source.get('title', 'Web Result')
+                    url = source.get('url', '')
+                    source_attribution += f"  [{idx}] {title}"
+                    if url:
+                        source_attribution += f" ({url})"
+                    
+                    # Show relevance score for web sources (1.0 = best, stored as distance)
+                    distance = source.get('distance', 0)
+                    if distance and isinstance(distance, (int, float)):
+                        # For web sources, distance is already the relevance score (0-1)
+                        relevance_pct = int(distance * 100)
+                        source_attribution += f" (relevance: {relevance_pct}%)"
+                    
                     source_attribution += "\n"
             
             # Reordered RAG prompt: instructions → question → context → sources → request
@@ -1123,13 +1385,14 @@ Based on this context, please answer the question above:"""
             if is_comparative and products:
                 logger.info(f"Comparative question detected: {products[0]} vs {products[1]}")
                 try:
-                    comparison_result = self.search_comparison(
+                    comparison_result, comparison_sources = self.search_comparison(
                         products[0],
                         products[1],
                         collection_name=collection_name or "milvus_docs",
                         top_k=top_k,
                     )
-                    return (comparison_result, [])
+                    logger.info(f"Comparison returned {len(comparison_sources)} sources")
+                    return (comparison_result, comparison_sources)
                 except Exception as e:
                     logger.warning(f"Comparison search failed: {e}. Falling back to standard RAG.")
             
@@ -1143,6 +1406,7 @@ Based on this context, please answer the question above:"""
             
             # Check answer cache first (exact match)
             cache_key = (question, tuple(collections), top_k)
+            logger.debug(f"[CACHE_DEBUG] Cache key: question='{question[:40]}...', collections={collections}, top_k={top_k}")
             if cache_key in self.answer_cache:
                 logger.info(f"✓ Answer cache hit (exact match)")
                 cache_hits['answer_cache'] = True
@@ -1151,6 +1415,7 @@ Based on this context, please answer the question above:"""
                 logger.info(f"Total response time (cached): {total_time:.2f}s")
                 return cached_result
             else:
+                logger.debug(f"[CACHE_DEBUG] Answer cache miss: {len(self.answer_cache)} items in cache")
                 cache_hits['answer_cache'] = False
             
             # Generate embedding for semantic cache check
@@ -1165,7 +1430,7 @@ Based on this context, please answer the question above:"""
             
             # Check persistent response cache (semantic similarity)
             if self.response_cache and question_embedding is not None:
-                cached_response = self.response_cache.search_cache(question_embedding)
+                cached_response = self.response_cache.search_cache(question, question_embedding)
                 if cached_response:
                     similarity = cached_response.get('similarity', 0)
                     logger.info(f"✓ Response cache hit (semantic match, {similarity:.1%} similar)")
@@ -1198,30 +1463,45 @@ Based on this context, please answer the question above:"""
             logger.info(f"Context retrieval took {retrieval_time:.2f}s")
             
             # Add web search results as supplementary sources
+            web_search_results = []
             try:
                 web_search_start = time.time()
+                # Generate optimized search query for web search
+                web_search_query = self._generate_web_search_query(question)
+                logger.info(f"[WEB_SEARCH_DEBUG] Starting web search with query: '{web_search_query[:50]}'")
                 web_results = self.web_search.search(
-                    query=question,
+                    query=web_search_query,
                     max_results=3,
                     safe_search=True
                 )
+                logger.info(f"[WEB_SEARCH_DEBUG] Received {len(web_results) if web_results else 0} raw results from web search")
                 
-                # Format web search results with proper source_type for UI display
-                for web_result in web_results:
-                    sources.append({
-                        "source_type": "web_search",
-                        "url": web_result.get("url", ""),
-                        "title": web_result.get("title", "Web Result"),
-                        "snippet": web_result.get("snippet", ""),
-                    })
-                
-                web_search_time = time.time() - web_search_start
                 if web_results:
-                    logger.info(f"✓ Found {len(web_results)} web search results in {web_search_time:.2f}s")
+                    logger.info(f"✓ Web search returned {len(web_results)} results")
+                    # Format web search results with proper source_type and relevance scoring
+                    for idx, web_result in enumerate(web_results, 1):
+                        # Calculate relevance based on search rank (1.0 = perfect, descending)
+                        # Web search results are already ranked by relevance engine
+                        relevance_scores = [0.95, 0.88, 0.78]  # First, second, third results
+                        relevance = relevance_scores[idx - 1] if idx <= len(relevance_scores) else 0.7
+                        
+                        web_source = {
+                            "source_type": "web_search",
+                            "url": web_result.get("url", ""),
+                            "title": web_result.get("title", "Web Result"),
+                            "snippet": web_result.get("snippet", ""),
+                            "distance": relevance,  # Store relevance as distance (1.0 = best match)
+                        }
+                        logger.info(f"[WEB_SEARCH_DEBUG] Result {idx}: {web_source['title'][:40]}... from {web_source.get('url', 'NO_URL')[:50]}")
+                        sources.append(web_source)
+                        web_search_results.append(web_source)
+                    
+                    web_search_time = time.time() - web_search_start
+                    logger.info(f"✓ Web search completed in {web_search_time:.2f}s - Added {len(web_search_results)} sources to response")
                 else:
-                    logger.debug(f"No web search results found for query")
+                    logger.info(f"[WEB_SEARCH_DEBUG] Web search returned EMPTY result list for '{question[:30]}'")
             except Exception as e:
-                logger.warning(f"Web search failed (continuing without): {e}")
+                logger.error(f"[WEB_SEARCH_DEBUG] Web search EXCEPTION: {type(e).__name__}: {str(e)}", exc_info=True)
             
             # Build context text for LLM
             context_text = "\n".join([f"- {chunk}" for chunk in context_chunks])
@@ -1247,6 +1527,7 @@ Based on this context, please answer the question above:"""
             # Cache the result with sources
             result_tuple = (answer, sources)
             self._add_to_cache(self.answer_cache, cache_key, result_tuple)
+            logger.info(f"✓ Answer cached. Cache size now: {len(self.answer_cache)} items")
             
             # Store in persistent response cache for future semantic matches
             if self.response_cache and question_embedding is not None:
@@ -1351,51 +1632,76 @@ Based on this context, please answer the question above:"""
             retrieval_time = time.time() - retrieval_start
             
             # Add web search results as supplementary sources
+            web_search_results = []
             try:
                 web_search_start = time.time()
+                # Generate optimized search query for web search
+                web_search_query = self._generate_web_search_query(question)
+                logger.info(f"[WEB_SEARCH_DEBUG] Starting web search with query: '{web_search_query[:50]}'")
                 web_results = self.web_search.search(
-                    query=question,
+                    query=web_search_query,
                     max_results=3,
                     safe_search=True
                 )
+                logger.info(f"[WEB_SEARCH_DEBUG] Received {len(web_results) if web_results else 0} raw results from web search")
                 
-                # Format web search results with proper source_type for UI display
-                for web_result in web_results:
-                    sources.append({
-                        "source_type": "web_search",
-                        "url": web_result.get("url", ""),
-                        "title": web_result.get("title", "Web Result"),
-                        "snippet": web_result.get("snippet", ""),
-                    })
-                
-                web_search_time = time.time() - web_search_start
                 if web_results:
-                    logger.info(f"✓ Found {len(web_results)} web search results in {web_search_time:.2f}s")
+                    logger.info(f"✓ Web search returned {len(web_results)} results")
+                    # Format web search results with proper source_type and relevance scoring
+                    for idx, web_result in enumerate(web_results, 1):
+                        # Calculate relevance based on search rank (1.0 = perfect, descending)
+                        # Web search results are already ranked by relevance engine
+                        relevance_scores = [0.95, 0.88, 0.78]  # First, second, third results
+                        relevance = relevance_scores[idx - 1] if idx <= len(relevance_scores) else 0.7
+                        
+                        web_source = {
+                            "source_type": "web_search",
+                            "url": web_result.get("url", ""),
+                            "title": web_result.get("title", "Web Result"),
+                            "snippet": web_result.get("snippet", ""),
+                            "distance": relevance,  # Store relevance as distance (1.0 = best match)
+                        }
+                        logger.info(f"[WEB_SEARCH_DEBUG] Result {idx}: {web_source['title'][:40]}... from {web_source.get('url', 'NO_URL')[:50]}")
+                        sources.append(web_source)
+                        web_search_results.append(web_source)
+                    
+                    web_search_time = time.time() - web_search_start
+                    logger.info(f"✓ Web search completed in {web_search_time:.2f}s - Added {len(web_search_results)} sources to response")
                 else:
-                    logger.debug(f"No web search results found for query")
+                    logger.info(f"[WEB_SEARCH_DEBUG] Web search returned EMPTY result list for '{question[:30]}'")
             except Exception as e:
-                logger.warning(f"Web search failed (continuing without): {e}")
+                logger.error(f"[WEB_SEARCH_DEBUG] Web search EXCEPTION: {type(e).__name__}: {str(e)}", exc_info=True)
             
             # Build RAG prompt
             context_text = "\n".join([f"- {chunk}" for chunk in context_chunks])
             if not context_text.strip():
                 context_text = "No documents found in the knowledge base."
             
-            system_instructions = """You are a Milvus documentation assistant.
+            system_instructions = """You are a Milvus vector database expert assistant.
 
-SCOPE: Answer ONLY questions about Milvus, vector databases, vector search, embeddings, and RAG systems.
+CONTEXT TYPE AWARENESS:
+- Some retrieved documents may contain CODE EXAMPLES, TUTORIALS, or INTEGRATION GUIDES
+- These should NOT be presented as product descriptions or company information
+- Code examples are typically marked with ```python, ```code, or appear in tutorial sections
+- Always distinguish between: (1) Product information, (2) Technical documentation, (3) Code examples
 
-INSTRUCTIONS FOR OUT-OF-SCOPE QUESTIONS (not about Milvus/vectors/RAG):
-Respond with ONLY this message and nothing else:
-"I can only help with questions about Milvus, vector databases, and RAG systems."
+ANSWERING RULES:
+1. Answer using the provided context from Milvus documentation when available
+2. For product/company questions (e.g., "What is VoyageAI?", "Tell me about Pinecone"):
+   - Prefer WEB SOURCE results when available (marked with 🌐 in sources)
+   - Web sources contain product information, company details, use cases
+   - Local docs contain technical integration guides and reference material
+3. Clearly label information source: "According to [source-name]..." or "From [document-name]..."
+4. If the retrieved documents are only code examples/tutorials:
+   - Point out that you found integration guides but not product information
+   - Recommend web search for product details
+5. Do NOT present code example data as factual product information
 
-INSTRUCTIONS FOR IN-SCOPE QUESTIONS:
-- Use the provided documentation context
-- Answer concisely and factually based on official documentation
-- Do not provide lengthy explanations or tutorials
-- Do not share training material, notebooks, or example code
-- Focus on factual, accurate information about the topic
-- Cite the source documentation when applicable"""
+RESPONSE STYLE:
+- Be concise and accurate
+- Cite sources clearly
+- Distinguish between types of sources (web vs documentation)
+- Avoid mixing code examples with product descriptions"""
             
             rag_prompt = f"""{system_instructions}
 
@@ -1475,21 +1781,31 @@ User question: {question}"""
             # Construct RAG prompt
             context_text = "\n".join([f"- {chunk}" for chunk in context_chunks])
             
-            system_instructions = """You are a Milvus documentation assistant.
+            system_instructions = """You are a Milvus vector database expert assistant.
 
-SCOPE: Answer ONLY questions about Milvus, vector databases, vector search, embeddings, and RAG systems.
+CONTEXT TYPE AWARENESS:
+- Some retrieved documents may contain CODE EXAMPLES, TUTORIALS, or INTEGRATION GUIDES
+- These should NOT be presented as product descriptions or company information
+- Code examples are typically marked with ```python, ```code, or appear in tutorial sections
+- Always distinguish between: (1) Product information, (2) Technical documentation, (3) Code examples
 
-INSTRUCTIONS FOR OUT-OF-SCOPE QUESTIONS (not about Milvus/vectors/RAG):
-Respond with ONLY this message and nothing else:
-"I can only help with questions about Milvus, vector databases, and RAG systems."
+ANSWERING RULES:
+1. Answer using the provided context from Milvus documentation when available
+2. For product/company questions (e.g., "What is VoyageAI?", "Tell me about Pinecone"):
+   - Prefer WEB SOURCE results when available (marked with 🌐 in sources)
+   - Web sources contain product information, company details, use cases
+   - Local docs contain technical integration guides and reference material
+3. Clearly label information source: "According to [source-name]..." or "From [document-name]..."
+4. If the retrieved documents are only code examples/tutorials:
+   - Point out that you found integration guides but not product information
+   - Recommend web search for product details
+5. Do NOT present code example data as factual product information
 
-INSTRUCTIONS FOR IN-SCOPE QUESTIONS:
-- Use the provided documentation context
-- Answer concisely and factually based on official documentation
-- Do not provide lengthy explanations or tutorials
-- Do not share training material, notebooks, or example code
-- Focus on factual, accurate information about the topic
-- Cite the source documentation when applicable"""
+RESPONSE STYLE:
+- Be concise and accurate
+- Cite sources clearly
+- Distinguish between types of sources (web vs documentation)
+- Avoid mixing code examples with product descriptions"""
             
             rag_prompt = f"""{system_instructions}
 

@@ -50,12 +50,13 @@ function App() {
   const handleSendMessage = async (text) => {
     if (!text.trim() || isLoading) return;
 
-    // Add user message
+    // Add user message with timestamp (AgentCore compatibility)
     const userMessage = {
       id: nextIdRef.current++,
       text: text,
       role: 'user',
       isStreaming: false,
+      timestamp: new Date().toISOString(),
     };
     setMessages((prev) => [...prev, userMessage]);
     setIsLoading(true);
@@ -69,18 +70,36 @@ function App() {
       isStreaming: true,
       sources: [],
       timing: {},
+      timestamp: new Date().toISOString(),
     };
     setMessages((prev) => [...prev, assistantMessage]);
 
     try {
       const startTime = Date.now();
+      // Build conversation history for context awareness (Strands Agent standard format)
+      // MIGRATION: When integrating AgentCore, keep this frontend message format.
+      // AgentCore's SessionManager will handle server-side persistence automatically.
+      // Content format matches Strands Agent/AgentCore signature: [{ text: "..." }]
+      const conversationMessages = messages
+        .filter(m => m.role && m.text)
+        .map(m => ({
+          role: m.role,
+          content: [{ text: m.text }],  // Strands standard: content is list of ContentBlocks
+          timestamp: m.timestamp,
+        }))
+        .concat([{ 
+          role: 'user', 
+          content: [{ text: text }],  // Strands standard: wrap in ContentBlock
+          timestamp: new Date().toISOString(),
+        }]);
+      
       const response = await fetch(`${API_BASE_URL}/v1/chat/completions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          messages: [{ role: 'user', content: text }],
+          messages: conversationMessages,
           model: 'rag-agent',
           temperature: 0.1,  // Low temperature for factual responses
           top_p: 0.9,

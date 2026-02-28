@@ -117,3 +117,63 @@
   font-weight: 600;
   white-space: nowrap;
 }
+
+/* Web Search Source Styling */
+.source-item.web-source {
+  border-color: #e0f2fe;
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+}
+
+.source-item.web-source:hover {
+  border-color: #06b6d4;
+  box-shadow: 0 2px 8px rgba(6, 182, 212, 0.2);
+}
+
+.source-number.web-badge {
+  background: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%);
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.web-title {
+  color: #0369a1;
+  margin: 0;
+}
+
+.web-link {
+  color: #0369a1;
+  text-decoration: none;
+  font-weight: 600;
+  border-bottom: 1px solid transparent;
+  transition: all 0.2s;
+}
+
+.web-link:hover {
+  border-bottom-color: #0369a1;
+  color: #0284c7;
+}
+
+.web-source-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  background: #cffafe;
+  color: #0c4a6e;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.source-url {
+  display: inline-block;
+  padding: 2px 8px;
+  background: #f0f9ff;
+  color: #164e63;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 500;
+  font-family: monospace;
+  white-space: nowrap;
+}

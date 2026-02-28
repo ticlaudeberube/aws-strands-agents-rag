@@ -20,7 +20,7 @@ aws-stands-agents-rag/
 │   │   ├── __init__.py
 │   │   ├── milvus_client.py       # Milvus vector DB wrapper
 │   │   ├── ollama_client.py        # Ollama LLM client
-│   │   ├── web_search.py           # Web search client (DuckDuckGo)
+│   │   ├── web_search.py           # Web search client (Tavily)
 │   │   ├── tool_registry.py        # Tool management & discovery
 │   │   └── response_cache.py       # Response caching system
 │   ├── mcp/                         # Model Context Protocol

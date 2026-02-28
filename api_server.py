@@ -13,7 +13,7 @@ import json
 import time
 from pathlib import Path
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
@@ -42,9 +42,28 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 
 class Message(BaseModel):
-    """Chat message."""
+    """Chat message - Strands Agent standard format with optional timestamp.
+    
+    Matches Strands Agent/AgentCore message signature:
+    - content: List of ContentBlocks (text, toolUse, toolResult, etc.)
+    - timestamp: ISO 8601 for message ordering in AgentCore Memory
+    
+    MIGRATION NOTES FOR AGENTCORE:
+    - This structure is AgentCore-native and requires NO code changes
+    - AgentCore's SessionManager expects exactly this format
+    - Timestamp field will be used by AgentCoreMemorySessionManager for chronological ordering
+    - Keep this model as-is when migrating to AgentCore (no backwards compatibility needed)
+    
+    Example:
+    {
+        "role": "user",
+        "content": [{"text": "What is Milvus?"}],
+        "timestamp": "2025-02-28T12:34:56Z"
+    }
+    """
     role: str
-    content: str
+    content: List[Dict[str, Any]]  # Strands standard: list of ContentBlocks [{"text": "..."}, {"toolUse": ...}, etc.]
+    timestamp: Optional[str] = None  # ISO 8601 format for message ordering
 
 
 class ChatCompletionRequest(BaseModel):
@@ -235,6 +254,36 @@ def load_common_questions() -> List[str]:
     except Exception as e:
         logger.warning(f"Failed to load common questions: {e}")
         return []
+
+
+def extract_text_from_content(content: Any) -> str:
+    """Extract text from Strands Agent content format.
+    
+    Handles both formats:
+    - String: "text" (for backward compatibility)
+    - Strands ContentBlock list: [{"text": "..."}, {"toolUse": ...}, ...]
+    
+    Args:
+        content: Message content in any supported format
+        
+    Returns:
+        Extracted text string
+    """
+    if isinstance(content, str):
+        # Already a string
+        return content
+    
+    if isinstance(content, list):
+        # Strands format: [{"text": "..."}, ...]
+        text_parts = []
+        for block in content:
+            if isinstance(block, dict):
+                if "text" in block:
+                    text_parts.append(str(block["text"]))
+        return " ".join(text_parts) if text_parts else ""
+    
+    # Fallback
+    return str(content)
 
 
 def warm_response_cache(agent: "StrandsRAGAgent", settings) -> None:
@@ -678,6 +727,10 @@ async def list_models():
 async def chat_completions(request: ChatCompletionRequest, bypass_cache: bool = False):
     """OpenAI-compatible chat completions endpoint.
     
+    Accepts full conversation history for context-aware responses.
+    Designed for AgentCore compatibility: conversation history can be used
+    by the agent for clarification detection and context understanding.
+    
     Query Parameters:
         bypass_cache: Set to true to skip all caches and query LLM directly
                       Example: /v1/chat/completions?bypass_cache=true
@@ -692,15 +745,38 @@ async def chat_completions(request: ChatCompletionRequest, bypass_cache: bool = 
         if not request.messages:
             raise HTTPException(status_code=400, detail="No messages provided")
         
+        # Extract the last user message (current question)
+        # Content is in Strands format: [{ text: "..." }] or string
         user_message = None
         for msg in reversed(request.messages):
             if msg.role == "user":
-                user_message = msg.content
+                user_message = extract_text_from_content(msg.content)
                 break
         
         if not user_message:
             raise HTTPException(status_code=400, detail="No user message found")
         
+        # Build conversation history (Strands Agent standard format)
+        # Preserves full conversation context for future context-aware features
+        # Content is already in Strands format: List[ContentBlock]
+        # 
+        # MIGRATION TO AGENTCORE:
+        # When integrating AgentCoreMemorySessionManager:
+        # 1. The session_manager will auto-load: agent.messages = session_manager.list_messages(session_id)
+        # 2. You can DELETE the conversation_history building code below (this block)
+        # 3. Keep the ChatCompletionRequest structure - no API changes needed
+        # 4. The message format here matches SessionMessage.to_message() output exactly
+        # 5. Timestamps will be used for event ordering in AgentCore Memory
+        conversation_history = [
+            {
+                "role": msg.role,
+                "content": msg.content,  # Already in Strands format: [{ text: "..."}]
+                "timestamp": msg.timestamp,
+            }
+            for msg in request.messages
+        ]
+        
+        logger.info(f"Processing {len(conversation_history)} messages in conversation")
         if bypass_cache:
             logger.info(f"Query (CACHE BYPASSED): {user_message[:100]}...")
         else:
@@ -781,12 +857,20 @@ async def chat_completions(request: ChatCompletionRequest, bypass_cache: bool = 
 async def chat_completions_stream(request: ChatCompletionRequest):
     """Stream chat completions endpoint for real-time response streaming.
     
+    Accepts full conversation history for AgentCore-compatible context awareness.
     Returns Server-Sent Events (SSE) stream with answer chunks as they are generated.
     This provides a perceived immediate response while the full answer is being
     generated in the background.
     
     The stream yields chunks in the format: data: {chunk}\n\n
     Client can consume with JavaScript fetch() and EventSource API.
+    
+    MIGRATION NOTES FOR AGENTCORE:
+    - Same message handling as non-streaming endpoint
+    - Timestamp field is preserved in the request
+    - This endpoint signature is fully AgentCore-compatible
+    - When integrating AgentCore Runtime, the request contract stays the same
+    - No API signature changes needed for migration
     """
     try:
         current_agent = await get_or_init_agent()
@@ -795,16 +879,31 @@ async def chat_completions_stream(request: ChatCompletionRequest):
         if not request.messages:
             raise HTTPException(status_code=400, detail="No messages provided")
         
+        # Extract the last user message (current question)
+        # Content is in Strands format: [{ text: "..." }] or string
         user_message = None
         for msg in reversed(request.messages):
             if msg.role == "user":
-                user_message = msg.content
+                user_message = extract_text_from_content(msg.content)
                 break
         
         if not user_message:
             raise HTTPException(status_code=400, detail="No user message found")
         
-        logger.info(f"Stream Query: {user_message[:100]}...")
+        # Build conversation history (Strands Agent standard format)
+        # MIGRATION NOTE: Same as non-streaming endpoint
+        # When integrating AgentCore, delete this conversation_history building block
+        # AgentCore's SessionManager will auto-load: agent.messages = session_manager.list_messages(...)
+        conversation_history = [
+            {
+                "role": msg.role,
+                "content": msg.content,  # Already in Strands format: [{ text: "..."}]
+                "timestamp": msg.timestamp,
+            }
+            for msg in request.messages
+        ]
+        
+        logger.info(f"Stream Query: {user_message[:100]}... (conversation history: {len(conversation_history)} messages)")
         
         async def stream_generator():
             """Generator for streaming response with SSE format."""

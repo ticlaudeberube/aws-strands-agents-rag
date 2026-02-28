@@ -1197,6 +1197,32 @@ Based on this context, please answer the question above:"""
             retrieval_time = time.time() - retrieval_start
             logger.info(f"Context retrieval took {retrieval_time:.2f}s")
             
+            # Add web search results as supplementary sources
+            try:
+                web_search_start = time.time()
+                web_results = self.web_search.search(
+                    query=question,
+                    max_results=3,
+                    safe_search=True
+                )
+                
+                # Format web search results with proper source_type for UI display
+                for web_result in web_results:
+                    sources.append({
+                        "source_type": "web_search",
+                        "url": web_result.get("url", ""),
+                        "title": web_result.get("title", "Web Result"),
+                        "snippet": web_result.get("snippet", ""),
+                    })
+                
+                web_search_time = time.time() - web_search_start
+                if web_results:
+                    logger.info(f"✓ Found {len(web_results)} web search results in {web_search_time:.2f}s")
+                else:
+                    logger.debug(f"No web search results found for query")
+            except Exception as e:
+                logger.warning(f"Web search failed (continuing without): {e}")
+            
             # Build context text for LLM
             context_text = "\n".join([f"- {chunk}" for chunk in context_chunks])
             
@@ -1323,6 +1349,32 @@ Based on this context, please answer the question above:"""
                 top_k=top_k,
             )
             retrieval_time = time.time() - retrieval_start
+            
+            # Add web search results as supplementary sources
+            try:
+                web_search_start = time.time()
+                web_results = self.web_search.search(
+                    query=question,
+                    max_results=3,
+                    safe_search=True
+                )
+                
+                # Format web search results with proper source_type for UI display
+                for web_result in web_results:
+                    sources.append({
+                        "source_type": "web_search",
+                        "url": web_result.get("url", ""),
+                        "title": web_result.get("title", "Web Result"),
+                        "snippet": web_result.get("snippet", ""),
+                    })
+                
+                web_search_time = time.time() - web_search_start
+                if web_results:
+                    logger.info(f"✓ Found {len(web_results)} web search results in {web_search_time:.2f}s")
+                else:
+                    logger.debug(f"No web search results found for query")
+            except Exception as e:
+                logger.warning(f"Web search failed (continuing without): {e}")
             
             # Build RAG prompt
             context_text = "\n".join([f"- {chunk}" for chunk in context_chunks])

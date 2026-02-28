@@ -27,8 +27,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Configuration - read API_PORT from .env or default to 8001
-API_PORT = os.getenv("API_PORT", "8001")
+# Configuration - read API_PORT from .env or default to 8000
+API_PORT = os.getenv("API_PORT", "8000")
 API_HOST = f"http://localhost:{API_PORT}"
 API_ENDPOINT = f"{API_HOST}/v1/chat/completions?bypass_cache=true"  # Bypass cache for fresh answers
 HEALTH_ENDPOINT = f"{API_HOST}/health"

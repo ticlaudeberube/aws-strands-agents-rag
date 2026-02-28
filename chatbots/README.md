@@ -1,12 +1,47 @@
-# Examples
+# Chatbot Examples
 
-This directory contains example scripts for using the AWS Strands Agents RAG system.
+This directory contains chatbot examples for the AWS Strands Agents RAG system.
 
-## Interactive Chat
+## Overview
 
-An interactive chatbot that uses the RAG agent to answer questions about the Milvus documentation.
+Choose your preferred interface:
 
-### Usage
+| Option | Type | Technology | Best For |
+|--------|------|-----------|----------|
+| **React Chatbot** | Web UI | React + Streaming | Modern web interfaces, Deployments |
+| **Interactive Chat** | CLI | Python CLI | Testing, Quick setup |
+
+## React Web Chatbot
+
+A modern, streaming-enabled React chatbot with beautiful UI.
+
+### Quick Start
+
+```bash
+# Development
+npm start  # or: ./build.sh dev
+
+# Production build
+./build.sh build
+
+# Docker deployment
+./build.sh compose
+```
+
+**Features**
+- 🚀 Real-time streaming responses
+- 💬 Beautiful message UI
+- 📱 Responsive design
+- 🔌 Automatic API health checks
+
+**Documentation**: See [react-chatbot/README.md](react-chatbot/README.md) and [docs/REACT_DEPLOYMENT.md](../docs/REACT_DEPLOYMENT.md)
+
+### Deployment Options
+- **Local**: `npm start`
+- **Docker**: Multi-stage build with Nginx
+- **Serverless**: AWS Lambda + CloudFront with AgentCore
+
+## Interactive Python CLI Chatbot
 
 ```bash
 python examples/interactive_chat.py

@@ -329,7 +329,7 @@ With qwen2.5:0.5b model:
 **Solution**: 
 - Check similarity threshold (0.92 = 92% match required)
 - Some semantic variation requires regenration
-- Verify response_cache collection exists: `curl http://localhost:8001/health`
+- Verify response_cache collection exists: `curl http://localhost:8000/health`
 
 ### Memory Growing Unbounded
 **Problem**: Cache sizes keep increasing

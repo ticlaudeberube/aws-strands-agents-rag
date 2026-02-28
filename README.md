@@ -13,16 +13,18 @@ A high-performance Retrieval-Augmented Generation (RAG) system using AWS Strands
 - **Vector Database**: Milvus with optimized indexing, caching, and performance tuning
 - **Advanced Search**: Pagination, filtering by source, and async search capabilities
 - **Batch Processing**: Efficient embedding generation with parallel workers
-- **Caching System**: LRU caching for embeddings, searches, and answers
-- **Strands Agents Integration**: AWS Strands Agents SDK for intelligent agent capabilities
+- **Caching System**: LRU caching for embeddings, searches, and answers intelligent agent capabilities
 - **Multiple Document Loaders**: Support for files, URLs, and text documents
 - **Optimized Deployment**: Integrated Docker setup with performance optimizations
+- **React Web UI**: Modern streaming chatbot with beautiful interface
+- **Multiple Deployment Options**: Docker, Local, and Serverless with AgentCore
 
 ## 📚 Documentation
 
 **Getting Started**:
 - **[GETTING_STARTED.md](docs/GETTING_STARTED.md)** - Complete setup and configuration guide
 - **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** - System architecture, tools, and skills overview
+- **[REACT_DEPLOYMENT.md](docs/REACT_DEPLOYMENT.md)** - React chatbot deployment guide (Local, Docker, Serverless)
 
 **Development & Integration**:
 - **[DEVELOPMENT.md](docs/DEVELOPMENT.md)** - Development guide with code examples
@@ -348,6 +350,9 @@ LOADER_MILVUS_DB_NAME=knowledge_base
 # Collection Configuration
 OLLAMA_COLLECTION_NAME=milvus_rag_collection
 
+# API Server Configuration
+API_PORT=8000  # See API_PORT_STRATEGY.md for port conflict resolution
+
 # Performance Settings
 AGENT_CACHE_SIZE=500                    # LRU cache size for embeddings & queries
 EMBEDDING_BATCH_SIZE=32                 # Batch size for bulk embedding operations
@@ -358,6 +363,8 @@ EMBEDDING_DIM=768                       # Embedding vector dimension
 LOG_LEVEL=INFO
 BATCH_SIZE=10
 ```
+
+**Port Configuration:** See [API_PORT_STRATEGY.md](docs/API_PORT_STRATEGY.md) for detailed information about managing API ports during local development and handling port conflicts.
 
 **Collection Configuration Note:**
 The `OLLAMA_COLLECTION_NAME` is used consistently across:
@@ -787,7 +794,7 @@ Target coverage: > 80% overall, > 90% for core modules
 - **[PHASE_1_2_TESTING.md](docs/PHASE_1_2_TESTING.md)** - Testing guide from Phase 1-2
 - **[PHASE_1_2_QUICK_REFERENCE.md](docs/PHASE_1_2_QUICK_REFERENCE.md)** - Quick reference from Phase 1-2
 
-**Status**: ✅ Complete - 5 tools registered across 3 skills, MCP endpoints, optimized for Strands  
+**Status**: ✅ Complete - 6 tools registered across 3 skills, MCP endpoints, optimized for Strands  
 **Try it**: `python examples/phase_1_2_examples.py`
 
 ### Getting Started & Development
@@ -849,6 +856,7 @@ See [Strands Agents Deployment Guide](https://strandsagents.com/latest/documenta
 10. **Performance instrumentation** - Add detailed latency breakdown logging for each phase (scope check, retrieval, generation)
 11. **Multi-model support** - Support for multiple embedding and generation models simultaneously
 12. **Semantic deduplication** - Detect and filter near-duplicate context chunks before generation
+13. **Independent MCP Server** - Refactor MCP server as optional standalone microservice for high-scale production, multi-tenancy, and fault isolation (currently integrated with FastAPI)
 
 **Future Enhancements**:
 - Custom collection schemas for specialized data types

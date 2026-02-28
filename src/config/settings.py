@@ -54,7 +54,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     batch_size: int = 10
     user_agent: str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-    api_port: int = 8001  # API server port (reads API_PORT from .env, defaults to 8001)
+    api_port: int = 8000  # API server port (reads API_PORT from .env, defaults to 8000)
 
     # AWS Configuration (optional)
     aws_region: Optional[str] = "us-west-1"

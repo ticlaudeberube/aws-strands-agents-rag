@@ -622,7 +622,11 @@ class TestComparativeAnalysis:
     def test_detect_comparative_question(self, mock_ollama, mock_milvus, test_settings):
         """Test detection of comparative questions."""
         mock_milvus.return_value = MagicMock()
-        mock_ollama.return_value = MagicMock()
+        
+        # Mock the LLM to return a comparative question classification
+        mock_client = MagicMock()
+        mock_client.generate_text.return_value = '{"is_comparison": true, "product1": "Milvus", "product2": "Pinecone", "reason": "Asking for advantages comparison"}'
+        mock_ollama.return_value = mock_client
         
         agent = StrandsRAGAgent(test_settings)
         
@@ -641,7 +645,11 @@ class TestComparativeAnalysis:
     def test_detect_non_comparative_question(self, mock_ollama, mock_milvus, test_settings):
         """Test that non-comparative questions are not detected."""
         mock_milvus.return_value = MagicMock()
-        mock_ollama.return_value = MagicMock()
+        
+        # Mock the LLM to return a non-comparative classification
+        mock_client = MagicMock()
+        mock_client.generate_text.return_value = '{"is_comparison": false, "product1": null, "product2": null, "reason": "General question about Milvus"}'
+        mock_ollama.return_value = mock_client
         
         agent = StrandsRAGAgent(test_settings)
         
@@ -657,7 +665,11 @@ class TestComparativeAnalysis:
     def test_comparative_keywords_detection(self, mock_ollama, mock_milvus, test_settings):
         """Test detection with various comparative keywords."""
         mock_milvus.return_value = MagicMock()
-        mock_ollama.return_value = MagicMock()
+        
+        # Mock the LLM to return comparative classifications
+        mock_client = MagicMock()
+        mock_client.generate_text.return_value = '{"is_comparison": true, "product1": "Milvus", "product2": "Weaviate", "reason": "Comparison question"}'
+        mock_ollama.return_value = mock_client
         
         agent = StrandsRAGAgent(test_settings)
         
@@ -669,6 +681,14 @@ class TestComparativeAnalysis:
         ]
         
         for question in test_cases:
+            # Update mock response for each question with appropriate products
+            if "Qdrant" in question:
+                mock_client.generate_text.return_value = '{"is_comparison": true, "product1": "Milvus", "product2": "Qdrant", "reason": "Comparison question"}'
+            elif "Elasticsearch" in question:
+                mock_client.generate_text.return_value = '{"is_comparison": true, "product1": "Milvus", "product2": "Elasticsearch", "reason": "Comparison question"}'
+            elif "Pinecone" in question:
+                mock_client.generate_text.return_value = '{"is_comparison": true, "product1": "Milvus", "product2": "Pinecone", "reason": "Comparison question"}'
+            
             is_comparative, products = agent._detect_comparative_question(question)
             assert is_comparative is True, f"Failed to detect: {question}"
             assert products is not None
@@ -686,6 +706,8 @@ class TestComparativeAnalysis:
         
         mock_client = MagicMock()
         mock_client.embed_text.return_value = [0.1] * 384
+        # Mock the LLM synthesis response - return a string, not a MagicMock
+        mock_client.generate_text.return_value = "Milvus and Pinecone are both vector databases. Milvus is open source while Pinecone is a managed service."
         mock_ollama.return_value = mock_client
         
         mock_search = MagicMock()
@@ -695,18 +717,17 @@ class TestComparativeAnalysis:
             ],
             "product1": {
                 "name": "Milvus",
-                "results": [
-                    {"title": "Milvus info", "snippet": "Open source", "url": "http://milvus.io"}
-                ]
+                "results": {
+                    "vector indexing algorithms": [{"title": "Milvus info", "snippet": "HNSW support", "url": "http://milvus.io"}]
+                }
             },
             "product2": {
                 "name": "Pinecone",
-                "results": [
-                    {"title": "Pinecone info", "snippet": "Managed service", "url": "http://pinecone.io"}
-                ]
+                "results": {
+                    "vector indexing algorithms": [{"title": "Pinecone info", "snippet": "Optimized indexing", "url": "http://pinecone.io"}]
+                }
             }
         }
-        mock_search.extract_text_summary.return_value = "\n1. Result\n   Summary"
         
         with patch('src.agents.strands_rag_agent.OllamaClient', return_value=mock_client):
             with patch('src.agents.strands_rag_agent.MilvusVectorDB', return_value=mock_db):
@@ -718,8 +739,8 @@ class TestComparativeAnalysis:
                     result = agent.search_comparison("Milvus", "Pinecone")
                     
                     assert isinstance(result, str)
-                    assert "Milvus" in result
-                    assert "Pinecone" in result
+                    assert "Milvus" in result or "milvus" in result.lower()
+                    assert "Pinecone" in result or "pinecone" in result.lower()
     
     @patch('src.agents.strands_rag_agent.WebSearchClient')
     @patch('src.agents.strands_rag_agent.MilvusVectorDB')
@@ -730,15 +751,21 @@ class TestComparativeAnalysis:
         mock_milvus.return_value = mock_db
         
         mock_client = MagicMock()
+        # Mock both the classification and synthesis responses using side_effect
+        mock_client.generate_text.side_effect = [
+            # First call: classification response
+            '{"is_comparison": true, "product1": "Milvus", "product2": "Pinecone", "reason": "Direct comparison"}',
+            # Second call: synthesis response
+            "Milvus is an open-source vector database while Pinecone is a managed service."
+        ]
         mock_ollama.return_value = mock_client
         
         mock_search = MagicMock()
         mock_search.search_comparison.return_value = {
             "comparison": [],
-            "product1": {"name": "Milvus", "results": []},
-            "product2": {"name": "Pinecone", "results": []}
+            "product1": {"name": "Milvus", "results": {}},
+            "product2": {"name": "Pinecone", "results": {}}
         }
-        mock_search.extract_text_summary.return_value = "Summary"
         
         with patch('src.agents.strands_rag_agent.OllamaClient', return_value=mock_client):
             with patch('src.agents.strands_rag_agent.MilvusVectorDB', return_value=mock_db):

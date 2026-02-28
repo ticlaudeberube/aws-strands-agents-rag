@@ -3,13 +3,15 @@
 import logging
 import time
 import asyncio
+import re
+import json
 from typing import Optional, List, Dict, Tuple, AsyncIterator
 from collections import OrderedDict
 from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor
 
 from src.config import Settings
-from src.tools import MilvusVectorDB, OllamaClient, MilvusResponseCache
+from src.tools import MilvusVectorDB, OllamaClient, MilvusResponseCache, WebSearchClient
 
 logger = logging.getLogger(__name__)
 
@@ -96,6 +98,7 @@ class StrandsRAGAgent:
             timeout=settings.milvus_timeout,
             pool_size=settings.milvus_pool_size,
         )
+        self.web_search = WebSearchClient(timeout=10)
         
         # Initialize caching system (from RAGAgent)
         self.embedding_cache = OrderedDict()  # query -> EmbeddingCacheEntry (with TTL)
@@ -366,6 +369,212 @@ Answer YES or NO:"""
         except Exception as e:
             logger.warning(f"Failed to calculate confidence score: {e}")
             return 0.5  # Return neutral score on error
+
+    def _detect_comparative_question(self, question: str) -> Tuple[bool, Optional[Tuple[str, str]]]:
+        """Detect if question is asking for product comparison using LLM classification.
+        
+        Uses the language model to determine if the question is asking for a comparison
+        between two products, rather than relying on hardcoded keywords.
+        
+        Returns:
+            Tuple of (is_comparative, (product1, product2)) or (False, None)
+        """
+        classification_prompt = f"""Analyze this question and determine if it's asking for a comparison between two products or systems.
+
+Question: {question}
+
+Respond with ONLY a JSON object (no markdown, no explanation):
+{{
+    "is_comparison": true/false,
+    "product1": "name or null",
+    "product2": "name or null",
+    "reason": "brief reason"
+}}
+
+Examples of comparisons:
+- "What are Milvus advantages over Pinecone?"
+- "Compare Elasticsearch and Weaviate"
+- "How does Qdrant compare to Pinecone?"
+
+Examples of non-comparisons:
+- "What is Milvus?"
+- "How do I use vector databases?"
+- "Explain embeddings"
+"""
+        
+        try:
+            # Get LLM classification
+            response = self.ollama_client.generate_text(
+                classification_prompt,
+                model=self.settings.ollama_model,
+                temperature=0.1,  # Low temperature for deterministic classification
+                max_tokens=200,
+            )
+            
+            # Parse JSON response
+            response_text = response.strip()
+            if response_text.startswith("```"):
+                # Remove markdown code blocks if present
+                response_text = response_text.split("```")[1]
+                if response_text.startswith("json"):
+                    response_text = response_text[4:]
+                response_text = response_text.split("```")[0].strip()
+            
+            classification = json.loads(response_text)
+            
+            if classification.get("is_comparison") and classification.get("product1") and classification.get("product2"):
+                product1 = classification["product1"].strip().lower()
+                product2 = classification["product2"].strip().lower()
+                
+                logger.info(f"Comparative question detected via LLM: {product1} vs {product2}")
+                return True, (product1, product2)
+            
+            return False, None
+            
+        except (json.JSONDecodeError, KeyError, AttributeError) as e:
+            logger.warning(f"Failed to classify question as comparative: {e}")
+            return False, None
+        except Exception as e:
+            logger.error(f"Error in comparative question detection: {e}")
+            return False, None
+
+    def search_comparison(
+        self,
+        product1: str,
+        product2: str,
+        collection_name: str = "milvus_docs",
+        top_k: int = 3,
+    ) -> str:
+        """Search for comparison between two products using web search and local context.
+        
+        Combines Milvus documentation context with filtered web search results.
+        Uses LLM to synthesize a focused comparison without unrelated topics.
+        
+        Args:
+            product1: First product name
+            product2: Second product name
+            collection_name: Milvus collection to search for context
+            top_k: Number of results per search
+            
+        Returns:
+            Formatted comparison text
+        """
+        try:
+            logger.info(f"Generating comparison: {product1} vs {product2}")
+            
+            # Get web search results with feature-focused queries
+            comparison_data = self.web_search.search_comparison(
+                product1, product2, max_results=top_k
+            )
+            
+            # Get context from Milvus documentation
+            try:
+                product1_context, _ = self.retrieve_context(
+                    collection_name,
+                    f"{product1} vector indexing search performance features",
+                    top_k=top_k
+                )
+            except Exception as e:
+                logger.warning(f"Failed to retrieve context for {product1}: {e}")
+                product1_context = []
+            
+            # Use LLM to synthesize a focused, relevant comparison
+            synthesis_prompt = self._create_comparison_synthesis_prompt(
+                product1, product2, comparison_data, product1_context
+            )
+            
+            try:
+                comparison_summary = self.ollama_client.generate_text(
+                    synthesis_prompt,
+                    model=self.settings.ollama_model,
+                    temperature=0.3,  # Slightly higher for better synthesis
+                    max_tokens=1000,
+                )
+            except Exception as e:
+                logger.warning(f"Failed to synthesize comparison via LLM: {e}")
+                # Fallback to formatted results if LLM fails
+                comparison_summary = self._format_comparison_fallback(
+                    product1, product2, comparison_data, product1_context
+                )
+            
+            return comparison_summary
+        except Exception as e:
+            logger.error(f"Comparison search failed: {e}")
+            return f"Unable to generate comparison between {product1} and {product2}: {e}"
+
+    def _create_comparison_synthesis_prompt(
+        self, product1: str, product2: str, comparison_data: Dict, product1_context: List[str]
+    ) -> str:
+        """Create a prompt for LLM to synthesize a focused comparison.
+        
+        The LLM will filter out unrelated topics and focus on vector database features.
+        """
+        # Extract relevant snippets from comparison data
+        comparison_snippets = []
+        
+        if comparison_data.get("comparison"):
+            for result in comparison_data["comparison"][:2]:
+                snippet = result.get("snippet", "")
+                if snippet:
+                    comparison_snippets.append(snippet)
+        
+        comparison_text = "\n".join(comparison_snippets) if comparison_snippets else "No comparison data"
+        product1_context_str = "\n".join(product1_context[:2]) if product1_context else "No local data"
+        
+        # Build prompt focused on vector database features
+        prompt = f"""You are a technical analyst comparing vector databases.
+
+Compare {product1} and {product2} focusing ONLY on vector database features.
+
+Web search data:
+{comparison_text}
+
+Local knowledge about {product1}:
+{product1_context_str}
+
+Create a concise, feature-focused comparison. IMPORTANT:
+- Focus ONLY on vector database capabilities (indexing, performance, scalability, API, pricing)
+- Exclude unrelated topics like embeddings models, ML frameworks, or other tools
+- Use the format:
+  * Core differences
+  * {{product1}} strengths
+  * {{product2}} strengths
+  * Key considerations
+- Be specific with numbers/metrics when available
+- Keep response under 500 words
+
+Comparison:"""
+        return prompt
+
+    def _format_comparison_fallback(
+        self, product1: str, product2: str, comparison_data: Dict, product1_context: List[str]
+    ) -> str:
+        """Fallback formatting when LLM synthesis fails.
+        
+        Manually formats the comparison focusing on relevant content.
+        """
+        output = f"\n## {product1} vs {product2}\n\n"
+        
+        # Add comparison overview
+        output += "### Overview\n"
+        if comparison_data.get("comparison"):
+            for result in comparison_data["comparison"][:2]:
+                snippet = result.get("snippet", "")
+                if snippet and "vector" in snippet.lower():
+                    output += f"- {snippet[:150]}...\n"
+        
+        # Add local knowledge
+        output += f"\n### {product1.title()} Features\n"
+        if product1_context:
+            for chunk in product1_context[:2]:
+                output += f"- {chunk[:120]}\n"
+        
+        output += f"\n### Key Considerations\n"
+        output += f"- Compare on vector indexing methods (HNSW, IVF, etc.)\n"
+        output += f"- Evaluate query performance and scalability\n"
+        output += f"- Check supported vector dimensions and data types\n"
+        
+        return output
 
     # ========================================================================
     # RETRIEVAL SKILL TOOLS
@@ -908,6 +1117,21 @@ Based on this context, please answer the question above:"""
                 logger.info("Question is out-of-scope, skipping retrieval")
                 answer = "I can only help with questions about Milvus, vector databases, and RAG systems."
                 return (answer, [])
+            
+            # COMPARATIVE CHECK: Handle product comparisons
+            is_comparative, products = self._detect_comparative_question(question)
+            if is_comparative and products:
+                logger.info(f"Comparative question detected: {products[0]} vs {products[1]}")
+                try:
+                    comparison_result = self.search_comparison(
+                        products[0],
+                        products[1],
+                        collection_name=collection_name or "milvus_docs",
+                        top_k=top_k,
+                    )
+                    return (comparison_result, [])
+                except Exception as e:
+                    logger.warning(f"Comparison search failed: {e}. Falling back to standard RAG.")
             
             # Determine which collection(s) to search
             if collections is None:

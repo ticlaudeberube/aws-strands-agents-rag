@@ -5,7 +5,7 @@ import ChatInput from './components/ChatInput';
 
 // API Configuration from environment variables
 const API_HOST = process.env.REACT_APP_API_HOST || 'localhost';
-const API_PORT = process.env.REACT_APP_API_PORT || '8001';
+const API_PORT = process.env.REACT_APP_API_PORT || '8000';
 const API_BASE_URL = `http://${API_HOST}:${API_PORT}`;
 
 function App() {

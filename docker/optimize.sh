@@ -145,13 +145,18 @@ start_containers() {
     log_info "Starting optimized containers..."
     
     local COMPOSE_DIR="$(dirname "$0")"
+    local DOCKER_COMPOSE_CMD
     
     # Change to docker directory
     cd "$COMPOSE_DIR" || return 1
     
-    # Check if docker-compose command exists
-    if ! command -v docker-compose &> /dev/null; then
-        log_error "docker-compose not found. Please install Docker Desktop or docker-compose."
+    # Detect docker compose command (prefer 'docker compose' over 'docker-compose')
+    if command -v docker &> /dev/null && docker compose version &> /dev/null; then
+        DOCKER_COMPOSE_CMD="docker compose"
+    elif command -v docker-compose &> /dev/null; then
+        DOCKER_COMPOSE_CMD="docker-compose"
+    else
+        log_error "docker compose not found. Please install Docker Desktop or docker-compose."
         return 1
     fi
     
@@ -163,19 +168,20 @@ start_containers() {
     
     # Stop existing containers (without causing errors if they don't exist)
     log_info "Stopping existing containers..."
-    docker-compose down 2>/dev/null || log_warning "No running containers to stop"
+    $DOCKER_COMPOSE_CMD down 2>/dev/null || log_warning "No running containers to stop"
     
     # Wait a bit for cleanup
     sleep 2
     
     # Start new containers
-    log_info "Starting containers with docker-compose..."
-    if docker-compose up -d; then
+    log_info "Starting containers with docker compose..."
+    if $DOCKER_COMPOSE_CMD up -d; then
         log_success "Containers started successfully"
         return 0
     else
         log_error "Failed to start containers"
         log_error "Troubleshooting: Check that Docker Desktop is running and docker-compose.yml is valid"
+        log_error "  Try manually: $DOCKER_COMPOSE_CMD -f docker-compose.yml up -d"
         return 1
     fi
 }
@@ -191,17 +197,17 @@ Services:
   - MinIO Console:       http://localhost:9001
   - RAG API Server:      http://localhost:8000
 
-Useful Commands:
-  - View service logs:   docker-compose logs -f [service]
-  - Monitor resources:   docker stats
-  - Check service health: docker-compose ps
-  - Stop services:       docker-compose down
-
-Services:
+Container Services:
   - rag-etcd (etcd)      - Configuration and metadata storage
   - rag-minio (MinIO)    - Object storage
   - rag-milvus (Milvus)  - Vector database
   - rag-api (RAG API)    - API server
+
+Useful Commands:
+  - View service logs:   docker compose logs -f [service]
+  - Monitor resources:   docker stats
+  - Check service health: docker compose ps
+  - Stop services:       docker compose down
 
 EOF
 }
@@ -215,9 +221,9 @@ Real-time monitoring:
   docker stats
 
 Service-specific logs:
-  docker-compose logs -f milvus
-  docker-compose logs -f rag-api
-  docker-compose logs -f minio
+  docker compose logs -f milvus
+  docker compose logs -f rag-api
+  docker compose logs -f minio
 
 Health check:
   curl http://localhost:8000/health
@@ -317,7 +323,7 @@ main() {
                     log_error "Common fixes:"
                     log_error "  1. Ensure Docker Desktop is running"
                     log_error "  2. Check: docker ps"
-                    log_error "  3. Try: docker-compose -f docker/docker-compose.yml up -d"
+                    log_error "  3. Try: docker compose -f docker-compose.yml up -d"
                     exit 1
                 fi
                 ;;

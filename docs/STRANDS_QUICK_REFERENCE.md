@@ -10,7 +10,7 @@ The system uses a Strands-compliant architecture with proper tool organization a
 | **Tool Definition** | Methods with full docstrings and type hints |
 | **Tool Management** | Centralized ToolRegistry with skill-based organization |
 | **Protocol** | Model Context Protocol (MCP) for standard tool communication |
-| **Tools** | 5 tools organized into 3 skills |
+| **Tools** | 6 tools organized into 3 skills |
 | **Inference** | Ollama LLM (qwen2.5:0.5b) for fast local inference |
 | **Vectors** | Milvus for semantic search and storage |
 

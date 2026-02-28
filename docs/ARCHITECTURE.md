@@ -130,8 +130,10 @@ Skills organize related tools into logical groups for better management and disc
 - Purpose: Document search and exploration
 
 **AnswerGenerationSkill** (`src/agents/skills/answer_generation_skill.py`)
-- 1 tool: generate_answer
-- Purpose: Synthesize answers using LLM
+- 2 tools: 
+  - generate_answer
+  - search_comparison (web search for product comparisons)
+- Purpose: Synthesize answers and comparative analysis using LLM and web sources
 
 **KnowledgeBaseSkill** (`src/agents/skills/knowledge_base_skill.py`)
 - 1 tool: add_documents
@@ -162,13 +164,14 @@ retrieval (3 tools):
   - search_by_source
   - list_collections
 
-answer_generation (1 tool):
+answer_generation (2 tools):
   - generate_answer
+  - search_comparison (web search for comparative product analysis)
 
 knowledge_base (1 tool):
   - add_documents
 
-TOTAL: 5 tools across 3 skills
+TOTAL: 6 tools across 3 skills
 ```
 
 ---
@@ -325,7 +328,7 @@ Start API Server
     │   ├─→ Create KnowledgeBaseSkill(agent)
     │   │   └─→ Register 1 tool in registry
     │   │
-    │   └─→ Log: "MCP Server initialized with 5 tools across 3 skills"
+    │   └─→ Log: "MCP Server initialized with 6 tools across 3 skills"
     │
     ├─→ Load Common Questions
     │

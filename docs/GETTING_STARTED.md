@@ -210,7 +210,7 @@ AGENT_CACHE_SIZE=500              # LRU cache size
 
 # Application Configuration
 LOG_LEVEL=INFO
-API_PORT=8001
+API_PORT=8000
 ```
 
 **Key Configuration Notes:**

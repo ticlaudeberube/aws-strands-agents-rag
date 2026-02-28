@@ -24,7 +24,7 @@ A self-contained React chatbot interface for the Milvus RAG system with real-tim
 - Clear chat history button
 
 🔌 **Integration**
-- Connects to the RAG Agent API on `http://localhost:8001/v1/chat/completions` (streaming-enabled)
+- Connects to the RAG Agent API on `http://localhost:8000/v1/chat/completions` (streaming-enabled)
 - OpenAI-compatible API requests
 - Automatic API health check
 - Server-Sent Events (SSE) streaming support
@@ -60,7 +60,7 @@ User: "What is Milvus?"
 
 ### Prerequisites
 - Node.js 14+ installed
-- API server running on `http://localhost:8001` (with streaming support)
+- API server running on `http://localhost:8000` (with streaming support)
 
 ### Installation
 
@@ -75,12 +75,36 @@ npm install
 npm start
 ```
 
+Or use the helper script from project root:
+```bash
+./chatbots/build.sh dev
+```
+
 The app will open at `http://localhost:3000`
 
 **Make sure the API server is running:**
 ```bash
 # From the project root
 python api_server.py
+```
+
+## Deployment
+
+This React app can be deployed in multiple ways:
+- **Local Development**: `npm start` (development server)
+- **Docker**: Multi-stage build to production-ready image
+- **Serverless**: AWS Lambda + CloudFront with AgentCore
+
+For complete deployment instructions, see **[REACT_DEPLOYMENT.md](../../docs/REACT_DEPLOYMENT.md)**
+
+Quick deployment commands:
+```bash
+# Production build
+./chatbots/build.sh build
+
+# Docker deployment
+./chatbots/build.sh docker
+./chatbots/build.sh compose  # Full stack with Docker Compose
 ```
 
 ## Project Structure

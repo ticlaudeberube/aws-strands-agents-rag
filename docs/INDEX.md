@@ -33,11 +33,13 @@ Quick navigation for committed documentation in this project.
 - **[PROJECT_SUMMARY.md](PROJECT_SUMMARY.md)** - Project overview
 - **[DEVELOPMENT.md](DEVELOPMENT.md)** - Development guidelines
 
-### Getting Started
+### Deployment & Scaling
+- **[REACT_DEPLOYMENT.md](REACT_DEPLOYMENT.md)** - React chatbot deployment (Local, Docker, Serverless)
 - **[GETTING_STARTED.md](GETTING_STARTED.md)** - Installation and setup
 
 ### API & Integration
 - **[API_SERVER.md](API_SERVER.md)** - REST API and MCP endpoints
+- **[API_PORT_STRATEGY.md](API_PORT_STRATEGY.md)** - Port configuration and troubleshooting
 - **[STRANDS_QUICK_REFERENCE.md](STRANDS_QUICK_REFERENCE.md)** - Quick reference
 
 ### Performance & Configuration  

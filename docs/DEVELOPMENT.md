@@ -18,8 +18,9 @@ aws-stands-agents-rag/
 │   │       └── knowledge_base_skill.py     # Knowledge base tools
 │   ├── tools/                       # Tools and utilities
 │   │   ├── __init__.py
-│   │   ├── milvus_vector_db.py    # Milvus vector DB wrapper
+│   │   ├── milvus_client.py       # Milvus vector DB wrapper
 │   │   ├── ollama_client.py        # Ollama LLM client
+│   │   ├── web_search.py           # Web search client (DuckDuckGo)
 │   │   ├── tool_registry.py        # Tool management & discovery
 │   │   └── response_cache.py       # Response caching system
 │   ├── mcp/                         # Model Context Protocol
@@ -599,6 +600,49 @@ class OllamaClient:
     def embed_texts(texts: List[str], model: str) -> List[List[float]]
     def generate(prompt: str, model: str, stream: bool) -> str
     def is_available() -> bool
+```
+
+### WebSearchClient
+
+```python
+class WebSearchClient:
+    def __init__(timeout: int = 10)
+    
+    # Basic web search
+    def search(
+        query: str,
+        max_results: int = 5,
+        safe_search: bool = True
+    ) -> List[Dict[str, str]]  # [{"title", "snippet", "url", "source"}]
+    
+    # Comparative product search with feature-focused queries
+    def search_comparison(
+        product1: str,
+        product2: str,
+        max_results: int = 5
+    ) -> Dict[str, Any]  # {"comparison": [...], "product1": {...}, "product2": {...}}
+    
+    # Format search results as readable text
+    def extract_text_summary(
+        results: List[Dict[str, str]]
+    ) -> str
+```
+
+**Usage Example:**
+```python
+from src.tools.web_search import WebSearchClient
+
+web_search = WebSearchClient(timeout=10)
+
+# Basic search
+results = web_search.search("Milvus vector database features", max_results=3)
+
+# Comparative search (used by StrandsRAGAgent for comparative questions)
+comparison = web_search.search_comparison("Milvus", "Pinecone", max_results=5)
+
+# Extract formatted summary
+summary = web_search.extract_text_summary(results)
+print(summary)
 ```
 
 ## Deployment Considerations

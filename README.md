@@ -11,7 +11,7 @@ A high-performance Retrieval-Augmented Generation (RAG) system using AWS Strands
 - **Strands Agent Framework**: Built on StrandsRAGAgent with proper Strands Agents SDK integration
 - **Local LLM & Embeddings**: Uses Ollama with qwen2.5:0.5b for fast, efficient inference
 - **Vector Database**: Milvus with optimized indexing, caching, and performance tuning
-- **Advanced Search**: Pagination, filtering by source, and async search capabilities
+- **Advanced Search**: Filtering by source and async search capabilities
 - **Batch Processing**: Efficient embedding generation with parallel workers
 - **⚡ Intelligent Caching System**: 4-layer caching (embeddings, searches, answers, semantic responses)
   - **Cache warmup**: API auto-loads 16 pre-generated Q&A pairs on startup
@@ -628,24 +628,6 @@ docker-compose -f docker/docker-compose.yml restart
 
 ## Advanced Features
 
-### Pagination
-
-```python
-from src.agents.strands_rag_agent import StrandsRAGAgent
-
-agent = StrandsRAGAgent(settings=settings)
-
-# Get paginated results
-page = 0
-page_size = 5
-context, sources, total = agent.paginated_search(
-    collection_name="my_docs",
-    question="What is Milvus?",
-    page=page,
-    page_size=page_size
-)
-```
-
 ### Filtering by Source
 
 ```python
@@ -945,7 +927,7 @@ See [Strands Agents Deployment Guide](https://strandsagents.com/latest/documenta
 
 1. **Batch Processing**: Use `embed_texts()` with `batch_size` and `max_workers` for parallel embedding
 2. **Caching**: Leverage built-in LRU caching (embeddings, searches, answers) - configure `AGENT_CACHE_SIZE`
-3. **Pagination**: Use `paginated_search()` for large result sets instead of loading all at once
+3. **Filtering**: Use `search_by_source()` to limit results to specific document sources
 4. **Filtering**: Use source filters to narrow search scope and improve performance
 5. **Docker Optimization**: Run `./docker/optimize.sh --all` for automatic system and Docker tuning
 6. **Index Type**: Use HNSW (default) for balanced speed/accuracy, IVF_FLAT for large datasets

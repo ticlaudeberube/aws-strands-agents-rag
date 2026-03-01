@@ -285,7 +285,7 @@ db.insert_embeddings(
     ]
 )
 
-# Search with pagination
+# Search with offset support
 results = db.search(
     collection_name="my_collection",
     query_embedding=[0.1, 0.2, ...],
@@ -526,13 +526,6 @@ class MilvusVectorDB:
         source: str,
         limit: int = 5
     ) -> List[Dict]
-    
-    def search_with_pagination(
-        collection_name: str,
-        query_embedding: List[float],
-        page: int = 0,
-        page_size: int = 10
-    ) -> Tuple[List[Dict], int]
 ```
 
 ### OllamaClient

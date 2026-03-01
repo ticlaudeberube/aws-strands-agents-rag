@@ -376,36 +376,3 @@ class MilvusVectorDB:
             limit=limit,
             filter_expr=filter_expr,
         )
-    
-    def search_with_pagination(
-        self,
-        collection_name: str,
-        query_embedding: List[float],
-        page: int = 0,
-        page_size: int = 10,
-    ) -> Tuple[List[Dict[str, Any]], int]:
-        """Search with pagination support.
-
-        Args:
-            collection_name: Name of the collection to search
-            query_embedding: Query embedding vector
-            page: Page number (0-indexed)
-            page_size: Results per page
-
-        Returns:
-            Tuple of (results, total_count)
-        """
-        offset = page * page_size
-        results = self.search(
-            collection_name=collection_name,
-            query_embedding=query_embedding,
-            limit=page_size,
-            offset=offset,
-        )
-        
-        # Note: Milvus doesn't return total count directly, so we estimate
-        # by adding 1 to check if there are more results
-        has_more = len(results) >= page_size
-        estimated_total = (page + 2) * page_size if has_more else (page * page_size + len(results))
-        
-        return results, estimated_total

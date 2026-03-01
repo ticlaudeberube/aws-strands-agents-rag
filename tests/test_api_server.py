@@ -108,20 +108,6 @@ class TestAPIValidation:
         assert "messages" not in request_data
 
 
-class TestAPIPagination:
-    """Test pagination support."""
-    
-    def test_search_with_pagination_params(self, api_client):
-        """Test that pagination parameters are properly formatted."""
-        request_data = {
-            "messages": [{"role": "user", "content": "test"}],
-            "model": "rag-agent",
-            # Pagination would be added as an extension
-        }
-        
-        assert "messages" in request_data
-        assert len(request_data["messages"]) == 1
-
 
 class TestAPIErrorHandling:
     """Test error handling."""

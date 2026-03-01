@@ -625,7 +625,7 @@ class TestComparativeAnalysis:
         
         # Mock the LLM to return a comparative question classification
         mock_client = MagicMock()
-        mock_client.generate_text.return_value = '{"is_comparison": true, "product1": "Milvus", "product2": "Pinecone", "reason": "Asking for advantages comparison"}'
+        mock_client.generate.return_value = '{"is_comparison": true, "product1": "Milvus", "product2": "Pinecone", "reason": "Asking for advantages comparison"}'
         mock_ollama.return_value = mock_client
         
         agent = StrandsRAGAgent(test_settings)
@@ -648,7 +648,7 @@ class TestComparativeAnalysis:
         
         # Mock the LLM to return a non-comparative classification
         mock_client = MagicMock()
-        mock_client.generate_text.return_value = '{"is_comparison": false, "product1": null, "product2": null, "reason": "General question about Milvus"}'
+        mock_client.generate.return_value = '{"is_comparison": false, "product1": null, "product2": null, "reason": "General question about Milvus"}'
         mock_ollama.return_value = mock_client
         
         agent = StrandsRAGAgent(test_settings)
@@ -668,7 +668,7 @@ class TestComparativeAnalysis:
         
         # Mock the LLM to return comparative classifications
         mock_client = MagicMock()
-        mock_client.generate_text.return_value = '{"is_comparison": true, "product1": "Milvus", "product2": "Weaviate", "reason": "Comparison question"}'
+        mock_client.generate.return_value = '{"is_comparison": true, "product1": "Milvus", "product2": "Weaviate", "reason": "Comparison question"}'
         mock_ollama.return_value = mock_client
         
         agent = StrandsRAGAgent(test_settings)
@@ -683,11 +683,11 @@ class TestComparativeAnalysis:
         for question in test_cases:
             # Update mock response for each question with appropriate products
             if "Qdrant" in question:
-                mock_client.generate_text.return_value = '{"is_comparison": true, "product1": "Milvus", "product2": "Qdrant", "reason": "Comparison question"}'
+                mock_client.generate.return_value = '{"is_comparison": true, "product1": "Milvus", "product2": "Qdrant", "reason": "Comparison question"}'
             elif "Elasticsearch" in question:
-                mock_client.generate_text.return_value = '{"is_comparison": true, "product1": "Milvus", "product2": "Elasticsearch", "reason": "Comparison question"}'
+                mock_client.generate.return_value = '{"is_comparison": true, "product1": "Milvus", "product2": "Elasticsearch", "reason": "Comparison question"}'
             elif "Pinecone" in question:
-                mock_client.generate_text.return_value = '{"is_comparison": true, "product1": "Milvus", "product2": "Pinecone", "reason": "Comparison question"}'
+                mock_client.generate.return_value = '{"is_comparison": true, "product1": "Milvus", "product2": "Pinecone", "reason": "Comparison question"}'
             
             is_comparative, products = agent._detect_comparative_question(question)
             assert is_comparative is True, f"Failed to detect: {question}"
@@ -707,7 +707,7 @@ class TestComparativeAnalysis:
         mock_client = MagicMock()
         mock_client.embed_text.return_value = [0.1] * 384
         # Mock the LLM synthesis response - return a string, not a MagicMock
-        mock_client.generate_text.return_value = "Milvus and Pinecone are both vector databases. Milvus is open source while Pinecone is a managed service."
+        mock_client.generate.return_value = "Milvus and Pinecone are both vector databases. Milvus is open source while Pinecone is a managed service."
         mock_ollama.return_value = mock_client
         
         mock_search = MagicMock()
@@ -736,11 +736,11 @@ class TestComparativeAnalysis:
                     agent.vector_db = mock_db
                     agent.web_search = mock_search
                     
-                    result = agent.search_comparison("Milvus", "Pinecone")
+                    comparison_text, sources = agent.search_comparison("Milvus", "Pinecone")
                     
-                    assert isinstance(result, str)
-                    assert "Milvus" in result or "milvus" in result.lower()
-                    assert "Pinecone" in result or "pinecone" in result.lower()
+                    assert isinstance(comparison_text, str)
+                    assert "Milvus" in comparison_text or "milvus" in comparison_text.lower()
+                    assert "Pinecone" in comparison_text or "pinecone" in comparison_text.lower()
     
     @patch('src.agents.strands_rag_agent.WebSearchClient')
     @patch('src.agents.strands_rag_agent.MilvusVectorDB')
@@ -752,7 +752,7 @@ class TestComparativeAnalysis:
         
         mock_client = MagicMock()
         # Mock both the classification and synthesis responses using side_effect
-        mock_client.generate_text.side_effect = [
+        mock_client.generate.side_effect = [
             # First call: classification response
             '{"is_comparison": true, "product1": "Milvus", "product2": "Pinecone", "reason": "Direct comparison"}',
             # Second call: synthesis response

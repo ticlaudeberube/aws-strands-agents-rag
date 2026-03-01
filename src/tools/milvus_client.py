@@ -160,7 +160,13 @@ class MilvusVectorDB:
             
             # Prepare data with enhanced metadata extraction
             import json
+            import time
+            import random
             data = []
+            
+            # Generate a base ID for this batch (to avoid duplicates across batches)
+            base_id = int(time.time() * 1000) % (2**31 - 1)  # Use 31-bit safe timestamp
+            
             for idx, (emb, text, meta) in enumerate(zip(embeddings, texts, metadata)):
                 # Extract common metadata fields for scalar filtering
                 document_name = meta.get("document_name") or meta.get("filename", "")
@@ -169,8 +175,15 @@ class MilvusVectorDB:
                 # Store metadata as JSON string for full preservation
                 metadata_json = json.dumps(meta)
                 
+                # Generate unique ID: combine base timestamp with random number for uniqueness
+                unique_id = base_id + idx + random.randint(1, 999)
+                # Ensure it's a 31-bit positive integer for safety
+                unique_id = abs(unique_id) % (2**31 - 1)
+                if unique_id == 0:
+                    unique_id = 1
+                
                 record = {
-                    "id": idx + 1,  # IDs start from 1
+                    "id": unique_id,  # Use safe unique IDs
                     "vector": emb,  # Use 'vector' for MilvusClient API
                     "text": text,
                     "document_name": document_name,
@@ -189,7 +202,17 @@ class MilvusVectorDB:
             if isinstance(insert_count, list):
                 insert_count = len(insert_count)
             
-            logger.info(f"Inserted {insert_count} embeddings with metadata extracted for filtering")
+            logger.info(f"Inserted {insert_count} embeddings into {collection_name}")
+            logger.debug(f"  Insert result full: {result}")
+            logger.debug(f"  Generated {len(data)} records with IDs: {[r['id'] for r in data]}")
+            
+            # Flush the collection to ensure data is written to disk
+            try:
+                self.client.flush(collection_name=collection_name, db_name=self.db_name)
+                logger.debug(f"  Flushed collection {collection_name}")
+            except Exception as flush_error:
+                logger.warning(f"  Could not flush collection: {flush_error}")
+            
             return result.get("insert_count", [])
 
         except Exception as e:

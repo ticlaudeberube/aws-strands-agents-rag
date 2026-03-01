@@ -4,6 +4,14 @@ This guide will walk you through setting up and running the StrandsRAGAgent RAG 
 
 **Note**: This system uses **qwen2.5:0.5b** (500M parameters) as the optimal model, providing 85% faster inference compared to larger models while maintaining high-quality answers. See [Model Performance Comparison](MODEL_PERFORMANCE_COMPARISON.md) for detailed benchmarks.
 
+## Features
+
+- **Smart Caching**: Response cache with semantic similarity and entity validation
+- **Cache Warmup**: 16 Q&A pairs pre-loaded on startup (ENABLE_CACHE_WARMUP=true)
+- **Knowledge Base**: Milvus vector database for document retrieval
+- **Opt-In Web Search**: Explicit globe icon (🌐) trigger, no automatic web search
+- **Entity Validation**: Prevents cached cross-product responses
+
 ## Prerequisites Checklist
 
 - [ ] Python 3.10 or higher installed
@@ -211,6 +219,11 @@ AGENT_CACHE_SIZE=500              # LRU cache size
 # Application Configuration
 LOG_LEVEL=INFO
 API_PORT=8000
+
+# Cache Configuration
+# Enable/disable response cache warmup on startup (pre-loads Q&A pairs from data/answers.json)
+# Set to false to skip cache warmup in development/testing environments
+ENABLE_CACHE_WARMUP=true
 ```
 
 **Key Configuration Notes:**
@@ -269,7 +282,42 @@ Features:
 - Type "exit" to quit
 - Uses RAG to provide context-aware answers
 
-### Example 3: Load Your Own Documents
+### Example 3: React Web Chatbot
+
+**Modern streaming-enabled web interface with globe icon for forced web search:**
+
+```bash
+# Navigate to React chatbot directory
+cd chatbots/react-chatbot
+
+# Install dependencies
+npm install
+
+# Start the development server
+npm start
+
+# Open http://localhost:3000 in your browser
+```
+
+**Features:**
+- Beautiful modern web UI
+- Real-time streaming responses
+- 🌐 **Globe icon** - Click to force web-only search
+- Source attribution (documents + web search results)
+- Clean, intuitive interface
+
+**Using the Globe Icon:**
+1. Click the **🌐 globe icon** in the chat input area (toggles ON/OFF)
+2. Icon changes color when active
+3. Type your question
+4. Press Send
+5. System searches ONLY the web, ignores documentation
+
+For detailed React chatbot documentation, see:
+- [`chatbots/react-chatbot/README.md`](../chatbots/react-chatbot/README.md)
+- [`docs/REACT_DEPLOYMENT.md`](./REACT_DEPLOYMENT.md) - Deployment options
+
+### Example 4: Load Your Own Documents
 
 Edit `examples/file_based_rag.py`:
 

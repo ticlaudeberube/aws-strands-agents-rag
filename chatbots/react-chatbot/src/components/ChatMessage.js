@@ -12,9 +12,15 @@ function ChatMessage({ message }) {
       </div>
       <div className="message-content">
         <p className="message-text">
-          {message.text}
-          {message.isStreaming && !message.text && (
-            <span className="streaming-cursor">
+          {message.text && typeof message.text === 'string' && message.text.includes('<a') ? (
+            // Render HTML links safely
+            <span dangerouslySetInnerHTML={{ __html: message.text }} />
+          ) : (
+            // Render plain text
+            message.text
+          )}
+          {message.isStreaming && (
+            <span className="streaming-indicator">
               <span className="dot"></span>
               <span className="dot"></span>
               <span className="dot"></span>

@@ -12,8 +12,39 @@ from concurrent.futures import ThreadPoolExecutor
 
 from src.config import Settings
 from src.tools import MilvusVectorDB, OllamaClient, MilvusResponseCache, WebSearchClient
+from src.agents import prompts
 
 logger = logging.getLogger(__name__)
+
+
+def convert_markdown_links_to_html(text: str) -> str:
+    """Convert markdown links [text](url) to HTML links <a href="url">text</a>.
+    
+    This is a safety post-processor to ensure all links are HTML format,
+    even if the LLM occasionally generates markdown despite instructions.
+    
+    Args:
+        text: Text potentially containing markdown links
+        
+    Returns:
+        Text with all markdown links converted to HTML links
+    """
+    # Pattern to match [text](url) - handles nested brackets and URLs
+    # Matches: [anything](url) where url is in parentheses
+    pattern = r'\[([^\[\]]+)\]\(([^)]+)\)'
+    
+    def replace_with_html(match):
+        link_text = match.group(1)
+        url = match.group(2)
+        return f'<a href="{url}">{link_text}</a>'
+    
+    converted = re.sub(pattern, replace_with_html, text)
+    
+    if converted != text:
+        logger.info(f"[MARKDOWN_CONVERSION] Converted markdown links to HTML in response")
+    
+    return converted
+
 
 
 @dataclass
@@ -71,6 +102,9 @@ class StrandsRAGAgent:
     Note: This is structured to support Strands Agent framework patterns.
     """
 
+    # Centralized formatting rules for all LLM responses
+    FORMATTING_RULES = prompts.FORMATTING_RULES
+
     def __init__(self, settings: Settings, cache_size: int = None, embedding_cache_ttl: int = 3600):
         """Initialize Strands RAG Agent.
         
@@ -104,6 +138,9 @@ class StrandsRAGAgent:
         self.embedding_cache = OrderedDict()  # query -> EmbeddingCacheEntry (with TTL)
         self.search_cache = OrderedDict()  # (collection, query, top_k) -> context chunks
         self.answer_cache = OrderedDict()  # (question, collection, top_k) -> answer
+        
+        # Track sources from last streaming call (for API to retrieve)
+        self._last_stream_sources = []
         
         # Initialize persistent response cache for semantic matching
         try:
@@ -276,15 +313,8 @@ class StrandsRAGAgent:
         
         # Only use LLM for ambiguous cases (10% of questions)
         try:
-            scope_check_prompt = """Classify as YES or NO only.
-Is this about: vector databases, vectors, embeddings, RAG, retrieval, or database search?
-
-Question: {question}
-
-Answer YES or NO:"""
-            
             response = self.ollama_client.generate(
-                prompt=scope_check_prompt.format(question=question),
+                prompt=prompts.ScopeCheckPrompts.LLM_CLASSIFICATION.format(question=question),
                 model=self.settings.ollama_model,
                 temperature=0.0,
                 max_tokens=3,
@@ -482,39 +512,10 @@ Answer YES or NO:"""
             logger.debug(f"Quick check: No comparison keywords found, skipping LLM classification")
             return False, None
         
-        classification_prompt = f"""Analyze this question and determine if it's asking for a comparison between two products, databases, or systems.
-
-Question: {question}
-
-Respond with ONLY a JSON object (no markdown, no explanation):
-{{
-    "is_comparison": true/false,
-    "product1": "name or null",
-    "product2": "name or null",
-    "reason": "brief reason"
-}}
-
-IMPORTANT: Only return is_comparison=true if the question explicitly asks to COMPARE two distinct products.
-
-Examples of comparisons:
-- "What are Milvus advantages over Pinecone?"
-- "Compare Elasticsearch and Weaviate"
-- "How does Qdrant compare to Pinecone?"
-- "PostgreSQL vs Milvus" 
-- "Which is better - Pinecone or Qdrant?"
-
-Examples of non-comparisons (DO NOT CLASSIFY AS COMPARISON):
-- "What is Milvus?" (asking about ONE product only)
-- "How do I use vector databases?"
-- "Explain embeddings"
-- "Tell me about Milvus" (about ONE product)
-- "What are the features of Pinecone?" (about ONE product)
-"""
-        
         try:
             # Get LLM classification
             response = self.ollama_client.generate(
-                prompt=classification_prompt,
+                prompt=prompts.ComparisonPrompts.COMPARISON_DETECTION.format(question=question),
                 model=self.settings.ollama_model,
                 temperature=0.0,  # Zero temperature for strict deterministic classification
                 max_tokens=200,
@@ -546,6 +547,27 @@ Examples of non-comparisons (DO NOT CLASSIFY AS COMPARISON):
         except Exception as e:
             logger.error(f"Error in comparative question detection: {e}")
             return False, None
+
+    def _should_use_web_search(self, question: str) -> bool:
+        """Detect if a question should automatically include web search.
+        
+        DISABLED: Automatic product/question detection has been removed.
+        Web search is now ONLY triggered explicitly via force_web_search=true (globe icon).
+        
+        This ensures:
+        - Cache hits run fast (<1ms)
+        - Knowledge base queries run fast (~1-2s)
+        - Web search only happens when user explicitly requests it
+        
+        Args:
+            question: User question
+            
+        Returns:
+            Always False - web search must be explicitly requested
+        """
+        # DISABLED: All automatic web search detection removed per requirements
+        # Web search is now strictly opt-in via force_web_search=true
+        return False
 
     def search_comparison(
         self,
@@ -736,30 +758,12 @@ Examples of non-comparisons (DO NOT CLASSIFY AS COMPARISON):
         product2_display = product2.upper() if len(product2) <= 10 else product2.title()
         
         # Build prompt focused on vector database features
-        prompt = f"""You are a technical analyst comparing vector databases.
-
-Compare {product1_display} and {product2_display} focusing ONLY on vector database features.
-
-Web search data:
-{comparison_text}
-
-Local knowledge about {product1_display}:
-{product1_context_str}
-
-Create a concise, feature-focused comparison. IMPORTANT:
-- Focus ONLY on vector database capabilities (indexing, performance, scalability, API, pricing)
-- Exclude unrelated topics like embeddings models, ML frameworks, or other tools
-- Substitute product names in your response: use "{product1_display}" instead of placeholders like {{product1}}
-- Use this structure in your response:
-  * Core Differences
-  * {product1_display} Strengths
-  * {product2_display} Strengths  
-  * Key Considerations
-- Be specific with numbers/metrics when available
-- Keep response under 500 words
-- DO NOT use template variables like {{product1}} or {{product2}} in your response - use the actual product names
-
-Comparison:"""
+        prompt = prompts.ComparisonPrompts.COMPARISON_SYNTHESIS.format(
+            product1_display=product1_display,
+            product2_display=product2_display,
+            comparison_text=comparison_text,
+            product1_context_str=product1_context_str,
+        )
         return prompt
 
     def _format_comparison_fallback(
@@ -1008,33 +1012,11 @@ Comparison:"""
             use_temperature = temperature if temperature is not None else 0.1
             use_max_tokens = max_tokens or self.settings.max_tokens
             
-            # Build RAG prompt with clean, focused instructions
-            system_instructions = """You are a Milvus vector database expert assistant.
-
-CONTEXT TYPE AWARENESS:
-- Some retrieved documents may contain CODE EXAMPLES, TUTORIALS, or INTEGRATION GUIDES
-- These should NOT be presented as product descriptions or company information
-- Code examples are typically marked with ```python, ```code, or appear in tutorial sections
-- Always distinguish between: (1) Product information, (2) Technical documentation, (3) Code examples
-
-ANSWERING RULES:
-1. Answer using the provided context from Milvus documentation when available
-2. For product/company questions (e.g., "What is VoyageAI?", "Tell me about Pinecone"):
-   - Prefer WEB SOURCE results when available (marked with 🌐 in sources)
-   - Web sources contain product information, company details, use cases
-   - Local docs contain technical integration guides and reference material
-3. Clearly label information source: "According to [source-name]..." or "From [document-name]..."
-4. If the retrieved documents are only code examples/tutorials:
-   - Point out that you found integration guides but not product information
-   - Recommend web search for product details
-5. Do NOT present code example data as factual product information
-
-RESPONSE STYLE:
-- Be concise and accurate
-- Cite sources clearly
-- Distinguish between types of sources (web vs documentation)
-- Avoid mixing code examples with product descriptions"""
-            
+            # Use centralized RAG system instructions from prompts module with formatting rules
+            system_instructions = prompts.RAGPrompts.SYSTEM_INSTRUCTIONS.format(
+                formatting_rules=prompts.FORMATTING_RULES
+            )
+                        
             # If no context provided, use helpful message
             if not context or not context.strip():
                 context = "No documents found in the knowledge base. Please ensure documents have been loaded."
@@ -1084,15 +1066,13 @@ RESPONSE STYLE:
                     
                     source_attribution += "\n"
             
-            # Reordered RAG prompt: instructions → question → context → sources → request
-            rag_prompt = f"""{system_instructions}
-
-Question: {question}
-
-Relevant context from Milvus:
-{context}{source_attribution}
-
-Based on this context, please answer the question above:"""
+            # Use RAG prompt template from centralized module
+            rag_prompt = prompts.RAGPrompts.PROMPT_TEMPLATE.format(
+                system_instructions=system_instructions,
+                question=question,
+                context=context,
+                source_attribution=source_attribution
+            )
             
             logger.debug(f"LLM Generation Params: temperature={use_temperature}, max_tokens={use_max_tokens}")
             
@@ -1443,7 +1423,12 @@ Based on this context, please answer the question above:"""
                     
                     total_time = time.time() - start_time
                     logger.info(f"Total response time (semantic cache): {total_time:.2f}s")
+                    logger.info(f"✓ Used cached answer - NO web search needed (answer found from pre-generated Q&A)")
                     return result_tuple
+                else:
+                    logger.info(f"Cache miss: No semantically similar cached answer found")
+            else:
+                logger.debug(f"Response cache not available or no embedding generated")
             
             # Retrieve relevant context (from single or multiple collections)
             retrieval_start = time.time()
@@ -1462,47 +1447,6 @@ Based on this context, please answer the question above:"""
             retrieval_time = time.time() - retrieval_start
             logger.info(f"Context retrieval took {retrieval_time:.2f}s")
             
-            # Add web search results as supplementary sources
-            web_search_results = []
-            try:
-                web_search_start = time.time()
-                # Generate optimized search query for web search
-                web_search_query = self._generate_web_search_query(question)
-                logger.info(f"[WEB_SEARCH_DEBUG] Starting web search with query: '{web_search_query[:50]}'")
-                web_results = self.web_search.search(
-                    query=web_search_query,
-                    max_results=3,
-                    safe_search=True
-                )
-                logger.info(f"[WEB_SEARCH_DEBUG] Received {len(web_results) if web_results else 0} raw results from web search")
-                
-                if web_results:
-                    logger.info(f"✓ Web search returned {len(web_results)} results")
-                    # Format web search results with proper source_type and relevance scoring
-                    for idx, web_result in enumerate(web_results, 1):
-                        # Calculate relevance based on search rank (1.0 = perfect, descending)
-                        # Web search results are already ranked by relevance engine
-                        relevance_scores = [0.95, 0.88, 0.78]  # First, second, third results
-                        relevance = relevance_scores[idx - 1] if idx <= len(relevance_scores) else 0.7
-                        
-                        web_source = {
-                            "source_type": "web_search",
-                            "url": web_result.get("url", ""),
-                            "title": web_result.get("title", "Web Result"),
-                            "snippet": web_result.get("snippet", ""),
-                            "distance": relevance,  # Store relevance as distance (1.0 = best match)
-                        }
-                        logger.info(f"[WEB_SEARCH_DEBUG] Result {idx}: {web_source['title'][:40]}... from {web_source.get('url', 'NO_URL')[:50]}")
-                        sources.append(web_source)
-                        web_search_results.append(web_source)
-                    
-                    web_search_time = time.time() - web_search_start
-                    logger.info(f"✓ Web search completed in {web_search_time:.2f}s - Added {len(web_search_results)} sources to response")
-                else:
-                    logger.info(f"[WEB_SEARCH_DEBUG] Web search returned EMPTY result list for '{question[:30]}'")
-            except Exception as e:
-                logger.error(f"[WEB_SEARCH_DEBUG] Web search EXCEPTION: {type(e).__name__}: {str(e)}", exc_info=True)
-            
             # Build context text for LLM
             context_text = "\n".join([f"- {chunk}" for chunk in context_chunks])
             
@@ -1520,6 +1464,14 @@ Based on this context, please answer the question above:"""
             generation_time = time.time() - generation_start
             logger.info(f"Answer generation took {generation_time:.2f}s")
             logger.debug(f"Generated answer: {answer[:200]}...")
+            
+            # Validate that an answer was generated (not empty)
+            if not answer or not answer.strip():
+                logger.warning(f"⚠️  LLM returned empty answer for question: {question[:60]}")
+                logger.warning(f"   Retrieved {len(context_chunks)} documents, but LLM failed to generate response")
+                logger.warning(f"   Check Ollama connectivity: {self.settings.ollama_host}:{self.settings.ollama_port}")
+                # Don't return empty - return at least a summary of retrieved documents
+                answer = f"I found {len(context_chunks)} relevant documents for your question but failed to generate a summary. Please check logs or try again."
             
             # Calculate confidence score based on retrieval quality and answer characteristics
             confidence_score = self._calculate_confidence_score(sources, answer)
@@ -1631,84 +1583,22 @@ Based on this context, please answer the question above:"""
             )
             retrieval_time = time.time() - retrieval_start
             
-            # Add web search results as supplementary sources
-            web_search_results = []
-            try:
-                web_search_start = time.time()
-                # Generate optimized search query for web search
-                web_search_query = self._generate_web_search_query(question)
-                logger.info(f"[WEB_SEARCH_DEBUG] Starting web search with query: '{web_search_query[:50]}'")
-                web_results = self.web_search.search(
-                    query=web_search_query,
-                    max_results=3,
-                    safe_search=True
-                )
-                logger.info(f"[WEB_SEARCH_DEBUG] Received {len(web_results) if web_results else 0} raw results from web search")
-                
-                if web_results:
-                    logger.info(f"✓ Web search returned {len(web_results)} results")
-                    # Format web search results with proper source_type and relevance scoring
-                    for idx, web_result in enumerate(web_results, 1):
-                        # Calculate relevance based on search rank (1.0 = perfect, descending)
-                        # Web search results are already ranked by relevance engine
-                        relevance_scores = [0.95, 0.88, 0.78]  # First, second, third results
-                        relevance = relevance_scores[idx - 1] if idx <= len(relevance_scores) else 0.7
-                        
-                        web_source = {
-                            "source_type": "web_search",
-                            "url": web_result.get("url", ""),
-                            "title": web_result.get("title", "Web Result"),
-                            "snippet": web_result.get("snippet", ""),
-                            "distance": relevance,  # Store relevance as distance (1.0 = best match)
-                        }
-                        logger.info(f"[WEB_SEARCH_DEBUG] Result {idx}: {web_source['title'][:40]}... from {web_source.get('url', 'NO_URL')[:50]}")
-                        sources.append(web_source)
-                        web_search_results.append(web_source)
-                    
-                    web_search_time = time.time() - web_search_start
-                    logger.info(f"✓ Web search completed in {web_search_time:.2f}s - Added {len(web_search_results)} sources to response")
-                else:
-                    logger.info(f"[WEB_SEARCH_DEBUG] Web search returned EMPTY result list for '{question[:30]}'")
-            except Exception as e:
-                logger.error(f"[WEB_SEARCH_DEBUG] Web search EXCEPTION: {type(e).__name__}: {str(e)}", exc_info=True)
-            
-            # Build RAG prompt
+            # Build RAG prompt using centralized prompts
             context_text = "\n".join([f"- {chunk}" for chunk in context_chunks])
             if not context_text.strip():
                 context_text = "No documents found in the knowledge base."
             
-            system_instructions = """You are a Milvus vector database expert assistant.
-
-CONTEXT TYPE AWARENESS:
-- Some retrieved documents may contain CODE EXAMPLES, TUTORIALS, or INTEGRATION GUIDES
-- These should NOT be presented as product descriptions or company information
-- Code examples are typically marked with ```python, ```code, or appear in tutorial sections
-- Always distinguish between: (1) Product information, (2) Technical documentation, (3) Code examples
-
-ANSWERING RULES:
-1. Answer using the provided context from Milvus documentation when available
-2. For product/company questions (e.g., "What is VoyageAI?", "Tell me about Pinecone"):
-   - Prefer WEB SOURCE results when available (marked with 🌐 in sources)
-   - Web sources contain product information, company details, use cases
-   - Local docs contain technical integration guides and reference material
-3. Clearly label information source: "According to [source-name]..." or "From [document-name]..."
-4. If the retrieved documents are only code examples/tutorials:
-   - Point out that you found integration guides but not product information
-   - Recommend web search for product details
-5. Do NOT present code example data as factual product information
-
-RESPONSE STYLE:
-- Be concise and accurate
-- Cite sources clearly
-- Distinguish between types of sources (web vs documentation)
-- Avoid mixing code examples with product descriptions"""
-            
-            rag_prompt = f"""{system_instructions}
-
-Context from Milvus documentation:
-{context_text}
-
-User question: {question}"""
+            # Use RAG prompts (knowledge base only, no web search)
+            system_instructions = prompts.RAGPrompts.SYSTEM_INSTRUCTIONS.format(
+                formatting_rules=self.FORMATTING_RULES
+            )
+                        
+            rag_prompt = prompts.RAGPrompts.PROMPT_TEMPLATE.format(
+                system_instructions=system_instructions,
+                question=question,
+                context=context_text,
+                source_attribution=""
+            )
             
             # Generate answer (fresh LLM generation, don't use answer cache)
             generation_start = time.time()
@@ -1728,11 +1618,123 @@ User question: {question}"""
             total_time = time.time() - start_time
             logger.info(f"Total response time (no cache): {total_time:.2f}s (retrieval: {retrieval_time:.2f}s, generation: {generation_time:.2f}s)")
             
+            # Convert any markdown links to HTML format
+            answer = convert_markdown_links_to_html(answer)
+            
             return answer, sources
             
         except Exception as e:
             logger.error(f"Error in no_cache answer: {e}")
             raise
+
+    def answer_question_web_search_only(
+        self,
+        question: str,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+    ) -> Tuple[str, List[Dict]]:
+        """Answer a question using ONLY web search - no knowledge base retrieval.
+        
+        This is used for the globe icon (🌐) force web search feature.
+        Completely bypasses the Milvus knowledge base and returns only web results.
+
+        Args:
+            question: User question
+            temperature: LLM temperature (0.0-2.0, lower=more deterministic)
+            max_tokens: Maximum tokens to generate
+
+        Returns:
+            Tuple of (answer, web_sources_only)
+        """
+        try:
+            start_time = time.time()
+            logger.info(f"[WEB_SEARCH_ONLY] 🌐 Forcing web search for: {question[:60]}")
+            
+            sources = []
+            
+            # DO WEB SEARCH ONLY - No knowledge base retrieval
+            try:
+                web_search_start = time.time()
+                # Generate optimized search query for web search
+                web_search_query = self._generate_web_search_query(question)
+                logger.info(f"[WEB_SEARCH_ONLY] Web search query: '{web_search_query[:50]}'")
+                logger.info(f"[WEB_SEARCH_ONLY] About to call self.web_search.search() with max_results=5")
+                
+                web_results = self.web_search.search(
+                    query=web_search_query,
+                    max_results=5
+                )
+                logger.info(f"[WEB_SEARCH_ONLY] web_results type: {type(web_results)}, value: {web_results}")
+                logger.info(f"[WEB_SEARCH_ONLY] Returned {len(web_results) if web_results else 0} web results")
+                
+                if web_results:
+                    logger.info(f"[WEB_SEARCH_ONLY] Processing {len(web_results)} results...")
+                    # Format web search results with proper metadata
+                    for idx, web_result in enumerate(web_results, 1):
+                        relevance_scores = [0.99, 0.95, 0.90, 0.85, 0.80]
+                        relevance = relevance_scores[idx - 1] if idx <= len(relevance_scores) else 0.75
+                        
+                        web_source = {
+                            "source_type": "web_search",
+                            "url": web_result.get("url", ""),
+                            "title": web_result.get("title", "Web Result"),
+                            "snippet": web_result.get("snippet", ""),
+                            "distance": relevance,
+                        }
+                        logger.info(f"[WEB_SEARCH_ONLY] Appending source {idx}: {web_source['title'][:40]}...")
+                        sources.append(web_source)
+                    
+                    web_search_time = time.time() - web_search_start
+                    logger.info(f"✓ Web search completed in {web_search_time:.2f}s - {len(sources)} sources appended")
+                else:
+                    logger.warning(f"[WEB_SEARCH_ONLY] ⚠️ Web search returned NO RESULTS for query: '{web_search_query[:60]}'")
+                    logger.warning(f"[WEB_SEARCH_ONLY] ⚠️ This usually means TAVILY_API_KEY is not set. Check your environment variables.")
+                    logger.warning(f"[WEB_SEARCH_ONLY] ⚠️ To enable web search: export TAVILY_API_KEY='your-key-here'")
+                    
+            except Exception as e:
+                logger.error(f"[WEB_SEARCH_ONLY] Exception during web search: {e}", exc_info=True)
+            
+            # Build answer from web results only (no knowledge base context)
+            if sources:
+                # Create context from web search results
+                web_context = "\n".join([
+                    f"- {s.get('title', 'Web Result')}: {s.get('snippet', '')}"
+                    for s in sources
+                ])
+                logger.info(f"[WEB_SEARCH_ONLY] ✓ Using {len(sources)} web search results as context")
+            else:
+                web_context = "No web search results found."
+                logger.warning(f"[WEB_SEARCH_ONLY] ⚠️ No web search results available. Check that TAVILY_API_KEY is set.")
+            
+            # Format the web search prompt with formatting rules
+            rag_prompt = prompts.format_web_search_prompt(web_context, question)
+            
+            # Generate answer from web results
+            generation_start = time.time()
+            use_temperature = temperature if temperature is not None else 0.1
+            use_max_tokens = max_tokens if max_tokens is not None else self.settings.max_tokens
+            
+            answer = self.ollama_client.generate(
+                prompt=rag_prompt,
+                model=self.settings.ollama_model,
+                temperature=use_temperature,
+                max_tokens=use_max_tokens,
+            )
+            generation_time = time.time() - generation_start
+            logger.info(f"Answer generation took {generation_time:.2f}s")
+            
+            total_time = time.time() - start_time
+            logger.info(f"Total web-search-only response time: {total_time:.2f}s")
+            logger.info(f"[WEB_SEARCH_ONLY] Final response: {len(sources)} sources, {len(answer)} chars")
+            
+            # Convert any markdown links to HTML format
+            answer = convert_markdown_links_to_html(answer)
+            
+            return answer, sources
+            
+        except Exception as e:
+            logger.error(f"Error in web_search_only answer: {e}", exc_info=True)
+            return f"Error during web search: {str(e)}", []
 
     async def stream_answer(
         self,
@@ -1748,6 +1750,15 @@ User question: {question}"""
         This provides a perceived immediate response while the full answer
         is being generated in the background.
 
+        Handles all question types:
+        - Cached questions (fast, from cache)
+        - Cache misses (retrieval + generation from knowledge base)
+        - Comparisons (e.g., "Compare Milvus vs Pinecone")
+        - Security attacks (rejected immediately)
+        - Out-of-scope questions (rejected immediately)
+        
+        Note: Web search is NOT automatic. Use force_web_search=true for explicit web search.
+
         Args:
             collection_name: Name of the collection to search
             question: User question
@@ -1758,6 +1769,9 @@ User question: {question}"""
         Yields:
             Chunks of the generated answer as they are produced
         """
+        # Initialize sources at the start so it's always available
+        self._last_stream_sources = []
+        
         try:
             # SECURITY CHECK: Detect obvious attack patterns first (no LLM overhead)
             if self._is_security_attack(question):
@@ -1771,6 +1785,43 @@ User question: {question}"""
                 yield "I can only help with questions about Milvus, vector databases, and RAG systems."
                 return
             
+            # COMPARATIVE CHECK: Handle product comparisons first (before RAG)
+            comparison_sources = []
+            is_comparative, products = self._detect_comparative_question(question)
+            if is_comparative and products:
+                logger.info(f"Comparative question detected (STREAMING): {products[0]} vs {products[1]}")
+                try:
+                    comparison_result, comparison_sources = self.search_comparison(
+                        products[0],
+                        products[1],
+                        collection_name=collection_name,
+                        top_k=top_k,
+                    )
+                    # Stream the comparison result in meaningful chunks (sentences/paragraphs)
+                    # Split by paragraph breaks first, then by sentences
+                    paragraphs = comparison_result.split('\n\n')
+                    for para in paragraphs:
+                        if not para.strip():
+                            continue
+                        # Split paragraphs into sentences for better streaming
+                        sentences = [s.strip() for s in para.split('. ')]
+                        for sentence in sentences:
+                            if sentence:
+                                # Add period back if it's not the last sentence in response
+                                if not sentence.endswith(('.', '!', '?', '\n')):
+                                    sentence += '. '
+                                # Yield the sentence as a meaningful chunk
+                                yield sentence + ' '
+                        # Add paragraph break after each paragraph
+                        yield '\n\n'
+                    
+                    # Store sources for API to retrieve
+                    self._last_stream_sources = comparison_sources
+                    logger.info(f"Comparison streaming completed with {len(comparison_sources)} sources")
+                    return
+                except Exception as e:
+                    logger.warning(f"Comparison search failed: {e}. Falling back to standard RAG.")
+            
             # Retrieve context
             context_chunks, sources = self.retrieve_context(
                 collection_name=collection_name,
@@ -1781,90 +1832,276 @@ User question: {question}"""
             # Construct RAG prompt
             context_text = "\n".join([f"- {chunk}" for chunk in context_chunks])
             
-            system_instructions = """You are a Milvus vector database expert assistant.
-
-CONTEXT TYPE AWARENESS:
-- Some retrieved documents may contain CODE EXAMPLES, TUTORIALS, or INTEGRATION GUIDES
-- These should NOT be presented as product descriptions or company information
-- Code examples are typically marked with ```python, ```code, or appear in tutorial sections
-- Always distinguish between: (1) Product information, (2) Technical documentation, (3) Code examples
-
-ANSWERING RULES:
-1. Answer using the provided context from Milvus documentation when available
-2. For product/company questions (e.g., "What is VoyageAI?", "Tell me about Pinecone"):
-   - Prefer WEB SOURCE results when available (marked with 🌐 in sources)
-   - Web sources contain product information, company details, use cases
-   - Local docs contain technical integration guides and reference material
-3. Clearly label information source: "According to [source-name]..." or "From [document-name]..."
-4. If the retrieved documents are only code examples/tutorials:
-   - Point out that you found integration guides but not product information
-   - Recommend web search for product details
-5. Do NOT present code example data as factual product information
-
-RESPONSE STYLE:
-- Be concise and accurate
-- Cite sources clearly
-- Distinguish between types of sources (web vs documentation)
-- Avoid mixing code examples with product descriptions"""
-            
-            rag_prompt = f"""{system_instructions}
-
-Context from Milvus documentation:
-{context_text}
-
-User question: {question}"""
+            # Use RAG system instructions with formatting rules (knowledge base only)
+            system_instructions = prompts.RAGPrompts.SYSTEM_INSTRUCTIONS.format(
+                formatting_rules=self.FORMATTING_RULES
+            )
+                                    
+            rag_prompt = prompts.RAGPrompts.PROMPT_TEMPLATE.format(
+                system_instructions=system_instructions,
+                question=question,
+                context=context_text,
+                source_attribution=""
+            )
             
             logger.info(f"Starting stream generation for: {question[:50]}...")
             
-            # Generate answer using sync generator, run in thread pool to avoid blocking
-            loop = asyncio.get_event_loop()
-            
-            def generate_chunks():
-                """Run the actual streaming generation."""
-                all_chunks = []
-                try:
-                    # Use provided parameters or defaults from settings
-                    use_temperature = temperature if temperature is not None else 0.1
-                    use_max_tokens = max_tokens if max_tokens is not None else self.settings.max_tokens
-                    
-                    for chunk in self.ollama_client.generate_stream(
-                        prompt=rag_prompt,
-                        model=self.settings.ollama_model,
-                        temperature=use_temperature,
-                        max_tokens=use_max_tokens,
-                    ):
-                        all_chunks.append(chunk)
-                        logger.debug(f"Generated chunk: {chunk[:20]}...")
-                except Exception as e:
-                    logger.error(f"Error during generation: {e}", exc_info=True)
-                    all_chunks.append(f"\n[Error: {str(e)}]")
-                return all_chunks
-            
-            # Run generation in thread pool
+            # Stream answer from LLM in real-time (don't accumulate)
+            # Key: We yield chunks immediately as they come from Ollama, not wait for all chunks
             try:
-                chunks = await loop.run_in_executor(None, generate_chunks)
-                logger.info(f"Generated {len(chunks)} chunks")
+                use_temperature = temperature if temperature is not None else 0.1
+                use_max_tokens = max_tokens if max_tokens is not None else self.settings.max_tokens
                 
-                # Yield all chunks
-                for chunk in chunks:
-                    yield chunk
-                    # Small delay to simulate streaming
-                    await asyncio.sleep(0.001)
+                buffer = ""
+                MIN_BUFFER_SIZE = 5  # Accumulate ~5+ characters (roughly 1 word)
+                chunk_count = 0
+                
+                # Stream chunks directly from Ollama without accumulating all first
+                for chunk in self.ollama_client.generate_stream(
+                    prompt=rag_prompt,
+                    model=self.settings.ollama_model,
+                    temperature=use_temperature,
+                    max_tokens=use_max_tokens,
+                ):
+                    buffer += chunk
+                    chunk_count += 1
+                    
+                    # Yield when buffer reaches word size or ends with punctuation/newline
+                    if len(buffer) >= MIN_BUFFER_SIZE or buffer.endswith(('.', '!', '?', '\n', ' ')):
+                        yield buffer
+                        buffer = ""
+                        # Small delay to make streaming visible (0.01s = 10ms per chunk)
+                        await asyncio.sleep(0.01)
+                
+                # Yield any remaining buffer
+                if buffer:
+                    yield buffer
+                
+                logger.info(f"Stream generation completed: {chunk_count} raw chunks -> buffered for UI")
+                
+                # Store sources for API to retrieve
+                self._last_stream_sources = sources
                 
             except Exception as e:
-                logger.error(f"Error in thread pool execution: {e}", exc_info=True)
+                logger.error(f"Error during streaming generation: {e}", exc_info=True)
                 yield f"\n[Error: {str(e)}]"
                 return
-            
-            # Format and yield sources at the end
-            if sources:
-                yield "\n\n[Sources]\n"
-                for i, source in enumerate(sources[:3], 1):
-                    doc_name = source.get('document_name', 'Unknown')
-                    yield f"{i}. {doc_name}\n"
         
         except Exception as e:
             logger.error(f"Stream answer failed: {e}", exc_info=True)
+            yield f"[Error: {str(e)}]"
+
+    async def stream_answer_no_cache(
+        self,
+        collection_name: str,
+        question: str,
+        top_k: int = 10,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+    ):
+        """Stream answer bypassing all caches - queries LLM directly with fresh retrieval.
+        
+        Streams chunks of the answer in real-time with fresh knowledge base context (no web search).
+        
+        Skips:
+        - Answer cache (exact match)
+        - Embedding cache
+        - Search cache
+        - Response cache (semantic match)
+        
+        Args:
+            collection_name: Name of the collection to search
+            question: User question
+            top_k: Number of context chunks to retrieve
+            temperature: LLM temperature
+            max_tokens: Maximum tokens to generate
+            
+        Yields:
+            Chunks of the generated answer as they are produced
+        """
+        # Initialize sources at the start so it's always available
+        self._last_stream_sources = []
+        sources = []
+        
+        try:
+            logger.info(f"[STREAM_NO_CACHE] Answering: {question[:60]}")
+            
+            # SECURITY CHECK
+            if self._is_security_attack(question):
+                yield "I can only help with questions about Milvus, vector databases, and RAG systems."
+                self._last_stream_sources = []
+                return
+            
+            # SCOPE CHECK
+            if not self._is_question_in_scope(question):
+                yield "I can only help with questions about Milvus, vector databases, and RAG systems."
+                self._last_stream_sources = []
+                return
+            
+            # Fresh retrieval (no caching)
+            context_chunks, sources = self.retrieve_context(
+                collection_name=collection_name,
+                query=question,
+                top_k=top_k,
+            )
+            
+            # Build RAG prompt
+            context_text = "\n".join([f"- {chunk}" for chunk in context_chunks])
+            if not context_text.strip():
+                context_text = "No documents found in the knowledge base."
+            
+            # Use RAG system instructions with formatting rules (knowledge base only)
+            system_instructions = prompts.RAGPrompts.SYSTEM_INSTRUCTIONS.format(
+                formatting_rules=self.FORMATTING_RULES
+            )
+
+            rag_prompt = prompts.RAGPrompts.PROMPT_TEMPLATE.format(
+                system_instructions=system_instructions,
+                question=question,
+                context=context_text,
+                source_attribution=""
+            )
+            
+            logger.info(f"Starting stream generation (no cache): {question[:50]}...")
+            
+            try:
+                use_temperature = temperature if temperature is not None else 0.1
+                use_max_tokens = max_tokens if max_tokens is not None else self.settings.max_tokens
+                
+                buffer = ""
+                MIN_BUFFER_SIZE = 5
+                chunk_count = 0
+                
+                for chunk in self.ollama_client.generate_stream(
+                    prompt=rag_prompt,
+                    model=self.settings.ollama_model,
+                    temperature=use_temperature,
+                    max_tokens=use_max_tokens,
+                ):
+                    buffer += chunk
+                    chunk_count += 1
+                    
+                    if len(buffer) >= MIN_BUFFER_SIZE or buffer.endswith(('.', '!', '?', '\n', ' ')):
+                        yield buffer
+                        buffer = ""
+                        # Small delay to make streaming visible (0.01s = 10ms per chunk)
+                        await asyncio.sleep(0.01)
+                
+                if buffer:
+                    yield buffer
+                
+                logger.info(f"Stream generation completed (no cache): {chunk_count} chunks")
+                self._last_stream_sources = sources
+                
+            except Exception as e:
+                logger.error(f"Error during streaming generation (no cache): {e}", exc_info=True)
+                yield f"\n[Error: {str(e)}]"
+                return
+        
+        except Exception as e:
+            logger.error(f"Stream answer (no cache) failed: {e}", exc_info=True)
+            yield f"[Error: {str(e)}]"
+
+    async def stream_answer_web_search_only(
+        self,
+        question: str,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+    ):
+        """Stream answer using ONLY web search - no knowledge base retrieval.
+        
+        Streams chunks of the answer in real-time with web search results only.
+        
+        Args:
+            question: User question
+            temperature: LLM temperature
+            max_tokens: Maximum tokens to generate
+            
+        Yields:
+            Chunks of the generated answer as they are produced
+        """
+        sources = []
+        self._last_stream_sources = []  # Initialize immediately so it's always set
+        
+        try:
+            logger.info(f"[STREAM_WEB_ONLY] 🌐 Forcing web search for: {question[:60]}")
+            
+            # Web search only - no knowledge base retrieval
+            try:
+                web_search_query = self._generate_web_search_query(question)
+                web_results = self.web_search.search(query=web_search_query, max_results=5)
+                
+                if web_results:
+                    for idx, web_result in enumerate(web_results, 1):
+                        relevance_scores = [0.99, 0.95, 0.90, 0.85, 0.80]
+                        relevance = relevance_scores[idx - 1] if idx <= len(relevance_scores) else 0.75
+                        web_source = {
+                            "source_type": "web_search",
+                            "url": web_result.get("url", ""),
+                            "title": web_result.get("title", "Web Result"),
+                            "snippet": web_result.get("snippet", ""),
+                            "distance": relevance,
+                        }
+                        sources.append(web_source)
+                    logger.info(f"✓ Web search completed: {len(sources)} sources")
+            except Exception as e:
+                logger.error(f"[STREAM_WEB_ONLY] Web search error: {e}")
+            
+            # Build answer from web results only
+            if sources:
+                web_context = "\n".join([
+                    f"- {s.get('title', 'Web Result')}: {s.get('snippet', '')}"
+                    for s in sources
+                ])
+            else:
+                web_context = "No web search results found."
+            
+            # Use web search prompts from centralized module
+            rag_prompt = prompts.format_web_search_prompt(web_context, question)
+            
+            logger.info(f"Starting stream generation (web only): {question[:50]}...")
+            
+            try:
+                use_temperature = temperature if temperature is not None else 0.1
+                use_max_tokens = max_tokens if max_tokens is not None else self.settings.max_tokens
+                
+                buffer = ""
+                MIN_BUFFER_SIZE = 5
+                chunk_count = 0
+                
+                for chunk in self.ollama_client.generate_stream(
+                    prompt=rag_prompt,
+                    model=self.settings.ollama_model,
+                    temperature=use_temperature,
+                    max_tokens=use_max_tokens,
+                ):
+                    buffer += chunk
+                    chunk_count += 1
+                    
+                    if len(buffer) >= MIN_BUFFER_SIZE or buffer.endswith(('.', '!', '?', '\n', ' ')):
+                        yield buffer
+                        buffer = ""
+                        # Small delay to make streaming visible (0.01s = 10ms per chunk)
+                        await asyncio.sleep(0.01)
+                
+                if buffer:
+                    yield buffer
+                
+                logger.info(f"Stream generation completed (web only): {chunk_count} chunks")
+                # Always update sources at the end of successful streaming
+                self._last_stream_sources = sources
+                
+            except Exception as e:
+                logger.error(f"Error during streaming generation (web only): {e}", exc_info=True)
+                # Still preserve sources even if streaming failed
+                self._last_stream_sources = sources
+                yield f"\n[Error: {str(e)}]"
+                return
+        
+        except Exception as e:
+            logger.error(f"Stream answer (web only) failed: {e}", exc_info=True)
+            # Ensure sources are set even on outer exception
+            self._last_stream_sources = sources
             yield f"[Error: {str(e)}]"
 
     async def answer_question_async(

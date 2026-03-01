@@ -73,7 +73,43 @@
   }
 }
 
-/* Streaming cursor animation */
+/* Streaming indicator animation */
+.streaming-indicator {
+  display: inline-flex;
+  gap: 2px;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+.streaming-indicator .dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background-color: currentColor;
+  opacity: 0.6;
+  animation: streamingBounce 1.4s infinite;
+}
+
+.streaming-indicator .dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.streaming-indicator .dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes streamingBounce {
+  0%, 60%, 100% {
+    opacity: 0.6;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-6px);
+  }
+}
+
+/* Legacy streaming-cursor class (kept for backward compatibility) */
 .streaming-cursor {
   display: inline-flex;
   gap: 2px;
@@ -98,17 +134,6 @@
   animation-delay: 0.4s;
 }
 
-@keyframes streamingBounce {
-  0%, 60%, 100% {
-    opacity: 0.6;
-    transform: translateY(0);
-  }
-  30% {
-    opacity: 1;
-    transform: translateY(-6px);
-  }
-}
-
 /* Timing info display */
 .timing-info {
   font-size: 12px;
@@ -117,5 +142,34 @@
   padding: 0 16px;
   font-style: italic;
 }
+
+/* HTML Link Styling for Clickable Links */
+.message-text a {
+  color: #0084ff;
+  text-decoration: none;
+  font-weight: 500;
+  border-bottom: 1px solid #0084ff;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.message-text a:hover {
+  color: #0056b3;
+  border-bottom-color: #0056b3;
+  background-color: rgba(0, 84, 179, 0.05);
+  border-radius: 2px;
+  padding: 0 2px;
+}
+
+.message-text a:visited {
+  color: #7b2cbf;
+  border-bottom-color: #7b2cbf;
+}
+
+.message-text a:visited:hover {
+  color: #5a1d8f;
+  border-bottom-color: #5a1d8f;
+}
+
 
 

@@ -3,11 +3,14 @@ import './ChatInput.css';
 
 function ChatInput({ onSendMessage, disabled, placeholder }) {
   const [input, setInput] = useState('');
+  const [forceWebSearch, setForceWebSearch] = useState(false);
 
   const handleSend = () => {
     if (input.trim()) {
-      onSendMessage(input);
+      console.log(`[ChatInput] Sending message with forceWebSearch=${forceWebSearch}:`, input);
+      onSendMessage(input, forceWebSearch);
       setInput('');
+      setForceWebSearch(false);  // Reset after sending
     }
   };
 
@@ -29,6 +32,14 @@ function ChatInput({ onSendMessage, disabled, placeholder }) {
         disabled={disabled}
         rows="1"
       />
+      <button
+        className={`web-search-btn ${forceWebSearch ? 'active' : ''}`}
+        onClick={() => setForceWebSearch(!forceWebSearch)}
+        disabled={disabled}
+        title={forceWebSearch ? 'Force web search enabled' : 'Force web search (disabled)'}
+      >
+        🌐
+      </button>
       <button
         className="send-btn"
         onClick={handleSend}

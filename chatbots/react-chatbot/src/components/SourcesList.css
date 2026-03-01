@@ -62,30 +62,28 @@
 .source-content {
   flex: 1;
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  flex-direction: row;
+  gap: 8px;
+  align-items: center;
 }
 
 .source-filename {
+  display: flex;
+  gap: 0.5rem;
   margin: 0;
   color: #667eea;
   font-weight: 600;
   font-size: 12px;
-  word-break: break-word;
-}
-
-.source-text {
-  margin: 0;
-  color: #374151;
-  line-height: 1.4;
-  font-size: 12px;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .source-meta {
   display: flex;
   gap: 8px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
+  white-space: nowrap;
 }
 
 .relevance-badge {
@@ -166,14 +164,16 @@
   white-space: nowrap;
 }
 
-.source-url {
-  display: inline-block;
-  padding: 2px 8px;
-  background: #f0f9ff;
-  color: #164e63;
-  border-radius: 4px;
-  font-size: 10px;
-  font-weight: 500;
-  font-family: monospace;
-  white-space: nowrap;
+/* Web source section styling */
+.web-sources-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.local-sources-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }

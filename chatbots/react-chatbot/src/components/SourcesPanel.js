@@ -73,7 +73,6 @@ function SourcesPanel({ sources, isLoading, timing }) {
                       {source.title || 'Web Result'}
                     </a>
                   </p>
-                  {source.snippet && <p className="sources-panel-text web-snippet">{source.snippet}</p>}
                   <div className="sources-panel-meta">
                     <span className="web-source-badge">🔗 Web Search</span>
                     <span className="web-domain">{new URL(source.url).hostname}</span>

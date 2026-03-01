@@ -38,6 +38,10 @@ function SourcesList({ sources, timing }) {
     return (milliseconds / 1000).toFixed(2) + 's';
   };
 
+  // Separate web and local sources
+  const webSources = uniqueSources.filter(s => s.source_type === 'web_search' || s.url);
+  const localSources = uniqueSources.filter(s => s.source_type !== 'web_search' && !s.url);
+
   return (
     <div className="sources-container">
       <div className="sources-header">
@@ -49,47 +53,70 @@ function SourcesList({ sources, timing }) {
         )}
       </div>
       <div className="sources-list">
-        {uniqueSources.map((source, index) => {
-          const isWebSource = source.source_type === 'web_search' || source.url;
-          return (
-            <div key={index} className={`source-item ${isWebSource ? 'web-source' : ''}`}>
-              <div className={`source-number ${isWebSource ? 'web-badge' : ''}`}>
-                {isWebSource ? '🌐' : index + 1}
-              </div>
-              <div className="source-content">
-                {isWebSource ? (
-                  <>
-                    <p className="source-filename web-title">
-                      <a href={source.url} target="_blank" rel="noopener noreferrer" className="web-link">
-                        {source.title || 'Web Result'}
-                      </a>
-                    </p>
-                    {source.snippet && <p className="source-text">{source.snippet}</p>}
-                    <div className="source-meta">
-                      <span className="web-source-badge">🔗 Web Search</span>
-                      <span className="source-url">{new URL(source.url).hostname}</span>
-                      {source.distance && (
-                        <span className="relevance-badge">
-                          ✓ {getRelevancePercentage(source.distance)}% relevant
-                        </span>
-                      )}
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <p className="source-filename">{source.document_name || source.text?.substring(0, 50) + '...' || 'Unknown'}</p>
-                    <p className="source-text">{source.text}</p>
-                    <div className="source-meta">
+        {/* Web sources first */}
+        {webSources.length > 0 && (
+          <div className="web-sources-section">
+            {webSources.map((source, index) => (
+              <div key={`web-${index}`} className="source-item web-source">
+                <div className="source-number web-badge">🌐</div>
+                <div className="source-content">
+                  <p className="source-filename web-title">
+                    {source.distance && (
                       <span className="relevance-badge">
                         ✓ {getRelevancePercentage(source.distance)}% relevant
                       </span>
-                    </div>
-                  </>
-                )}
+                    )}
+                    <a 
+                      href={source.url} 
+                      target="_blank" 
+                      rel="noopener noreferrer" 
+                      className="web-link"
+                      title={source.url}
+                    >
+                      {source.title || 'Web Result'}
+                    </a>
+                  </p>
+                  <div className="source-meta">
+                    <span className="web-source-badge">🔗 Web Search</span>
+                  </div>
+                </div>
               </div>
-            </div>
-          );
-        })}
+            ))}
+          </div>
+        )}
+        
+        {/* Local document sources */}
+        {localSources.length > 0 && (
+          <div className="local-sources-section">
+            {localSources.map((source, index) => (
+              <div key={`local-${index}`} className="source-item">
+                <div className="source-number">{webSources.length + index + 1}</div>
+                <div className="source-content">
+                  <p className="source-filename">
+                    {source.distance && (
+                      <span className="relevance-badge">
+                        ✓ {getRelevancePercentage(source.distance)}% relevant
+                      </span>
+                    )}
+                    {source.url ? (
+                      <a 
+                        href={source.url} 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="web-link"
+                        title={source.url}
+                      >
+                        {source.document_name || source.text?.substring(0, 50) + '...' || 'Unknown'}
+                      </a>
+                    ) : (
+                      <span>{source.document_name || source.text?.substring(0, 50) + '...' || 'Unknown'}</span>
+                    )}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

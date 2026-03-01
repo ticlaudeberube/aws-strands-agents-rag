@@ -7,7 +7,11 @@ from src.config.settings import get_settings
 from src.tools.ollama_client import OllamaClient
 
 settings = get_settings()
-ollama = OllamaClient(settings)
+ollama = OllamaClient(
+    host=settings.ollama_host,
+    timeout=settings.ollama_timeout,
+    pool_size=settings.ollama_pool_size,
+)
 
 question = "What are Milvus advantages over Pinecone?"
 

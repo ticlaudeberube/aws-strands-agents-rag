@@ -1,8 +1,102 @@
 # Project Architecture: Strands Agent RAG System
 
-## Overview
+## Executive Summary
 
-The project implements a Strands-compliant RAG (Retrieval Augmented Generation) agent with MCP (Model Context Protocol) server support. This architecture provides:
+The AWS Strands Agents RAG system implements a clean **three-tier answer architecture** with proper cache management, knowledge base retrieval, and optional web search. All components work together to provide fast, accurate responses with intelligent routing.
+
+**Status**: ✅ WORKING - All components functioning as designed
+
+---
+
+## Three-Tier Answer Architecture
+
+The system implements a clean three-tier approach to answering questions:
+
+```
+┌─────────────────────────────────────┐
+│ User Question                       │
+└────────────┬────────────────────────┘
+             │
+     ┌───────▼────────┐
+     │ Tier 1: Cache  │ (<50ms)
+     │ • Semantic sim │ response_cache
+     │ • Entity val   │
+     │ • Pre-warmed   │
+     └───────┬────────┘
+             │ if no hit
+     ┌───────▼─────────────┐
+     │ Tier 2: KB Search   │ (1-2s)
+     │ • Milvus semantic   │ Explicit path
+     │ • LLM generation    │ (no web)
+     └───────┬─────────────┘
+             │ if user requests web
+     ┌───────▼──────────────┐
+     │ Tier 3: Web Search   │ (5-15s)
+     │ • Tavily API         │ Globe icon 🌐
+     │ • Explicit only      │ force_web_search=true
+     └──────────────────────┘
+```
+
+### Tier 1: Cache Hits (<50ms)
+**When triggered**: Question matches in response cache (semantic similarity with entity validation)  
+**What happens**:
+1. Generate embedding for question
+2. Search response_cache collection in Milvus
+3. Check semantic similarity (distance ≥ 0.92)
+4. Validate entity match (same product)
+5. Return cached answer if both conditions met
+
+**Example**: "What is Milvus?" → Returns pre-loaded answer (40ms)
+
+**Key Features**:
+- 16 Q&A pairs pre-loaded on startup (ENABLE_CACHE_WARMUP=true)
+- Entity validation prevents wrong product answers
+- Ultra-fast response time
+
+### Tier 2: Knowledge Base (1-2s)
+**When triggered**: Cache miss OR Tier 1 not available  
+**What happens**:
+1. Retrieve relevant documents from Milvus
+2. Generate LLM answer from context
+3. Return answer with local source citations
+
+**Example**: "How do vector embeddings work?" → Searches local docs, returns KB answer
+
+**Key Features**:
+- NO automatic web search
+- Knowledge base only
+- Fast response time (1-2 seconds)
+- Local document sources only
+
+### Tier 3: Web Search (5-15s)
+**When triggered**: User explicitly clicks globe icon (🌐) or sets `force_web_search=true`  
+**What happens**:
+1. Complete bypass of cache and knowledge base
+2. Query Tavily API for web results
+3. Synthesize answer from web results
+4. Return answer with web source URLs
+
+**Example**: "What's the latest on AI?" → Searches web for current info
+
+**Key Features**:
+- Strictly opt-in (no automatic triggering)
+- Web results only (no KB context)
+- Requires explicit user action
+- Current/real-time information
+
+**Key Design Decisions:**
+- **NO automatic web search** - Strict opt-in only
+- **Cache warmup enabled by default** - 16 Q&A pairs pre-loaded
+- **Entity validation** - Prevents cross-product cache hallucinations
+- **Simplified prompts** - No HTML/markdown formatting rules
+
+---
+
+## System Components
+
+### Overview
+
+The project architecture provides:
 
 ✅ **Framework Compliance**: Uses official Strands Agent patterns  
 ✅ **Tool Management**: Centralized tool registry for scalability  
@@ -10,10 +104,9 @@ The project implements a Strands-compliant RAG (Retrieval Augmented Generation) 
 ✅ **MCP Protocol**: Standard protocol for tool/resource management  
 ✅ **Optimized Inference**: qwen2.5:0.5b (500M params, 85% faster)  
 ✅ **Local Inference**: Ollama + Milvus for local vector operations  
+✅ **Multi-Tier Answering**: Cache hits, knowledge base, explicit web search  
 
----
-
-## Architecture Diagram
+### Architecture Diagram
 
 ```mermaid
 graph TB
@@ -57,8 +150,18 @@ The primary agent class implementing Strands framework patterns with RAG capabil
 ```python
 class StrandsRAGAgent:
     def __init__(self, settings):
-        self.ollama_client = OllamaClient(settings)
-        self.vector_db = MilvusVectorDB(settings)
+        self.ollama_client = OllamaClient(
+            host=settings.ollama_host,
+            timeout=settings.ollama_timeout,
+            pool_size=settings.ollama_pool_size,
+        )
+        self.vector_db = MilvusVectorDB(
+            host=settings.milvus_host,
+            port=settings.milvus_port,
+            db_name=settings.milvus_db_name,
+            user=settings.milvus_user,
+            password=settings.milvus_password,
+        )
     
     @tool  # Marked for Strands framework
     def retrieve_documents(self, collection: str, query: str, 

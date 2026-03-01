@@ -47,13 +47,13 @@ function App() {
     }
   };
 
-  const handleSendMessage = async (text) => {
+  const handleSendMessage = async (text, forceWebSearch = false) => {
     if (!text.trim() || isLoading) return;
 
     // Add user message with timestamp (AgentCore compatibility)
     const userMessage = {
       id: nextIdRef.current++,
-      text: text,
+      text: forceWebSearch ? `🌐 ${text}` : text,
       role: 'user',
       isStreaming: false,
       timestamp: new Date().toISOString(),
@@ -103,7 +103,8 @@ function App() {
           model: 'rag-agent',
           temperature: 0.1,  // Low temperature for factual responses
           top_p: 0.9,
-          stream: false,
+          stream: true,  // Enable streaming
+          force_web_search: forceWebSearch,  // NEW: Force web search parameter
         }),
       });
 
@@ -111,20 +112,87 @@ function App() {
         throw new Error(`API error: ${response.status}`);
       }
 
-      const data = await response.json();
-      const assistantText =
-        data.choices?.[0]?.message?.content || 'No response received';
-      const sources = data.sources || [];
-      
+      // Helper function to parse streaming chunks
+      const parseStreamChunk = (line, fullText, setFullText, assistantMessageId, sourcesRef) => {
+        // Skip empty lines and comment lines
+        if (!line || line.startsWith(':')) return fullText;
+
+        // Parse SSE format: "data: {json}"
+        if (line.startsWith('data: ')) {
+          const jsonStr = line.substring(6).trim();
+          if (!jsonStr) return fullText;
+
+          try {
+            const data = JSON.parse(jsonStr);
+            
+            // Extract sources if present in this chunk
+            if (data.sources && Array.isArray(data.sources)) {
+              sourcesRef.current = data.sources;
+            }
+            
+            // Extract text chunk from streaming response
+            if (data.choices && data.choices[0]) {
+              const delta = data.choices[0].delta || {};
+              if (delta.content) {
+                const newText = fullText + delta.content;
+                
+                // Update message with new text while streaming
+                setMessages((prev) => {
+                  const newMessages = [...prev];
+                  const messageIndex = newMessages.findIndex(m => m.id === assistantMessageId);
+                  if (messageIndex !== -1) {
+                    newMessages[messageIndex].text = newText;
+                    newMessages[messageIndex].isStreaming = true;
+                    // Update sources if available
+                    if (sourcesRef.current && sourcesRef.current.length > 0) {
+                      newMessages[messageIndex].sources = sourcesRef.current;
+                    }
+                  }
+                  return newMessages;
+                });
+                
+                return newText;
+              }
+            }
+          } catch (e) {
+            console.error('Failed to parse SSE data:', jsonStr, e);
+          }
+        }
+        return fullText;
+      };
+
+      // Process streaming response using Server-Sent Events (SSE)
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let fullText = '';
+      const sourcesRef = { current: [] };  // Use ref to track sources
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value, { stream: true });
+          const lines = chunk.split('\n');
+
+          for (const line of lines) {
+            fullText = parseStreamChunk(line, fullText, setMessages, assistantMessageId, sourcesRef);
+          }
+        }
+      } finally {
+        reader.releaseLock();
+      }
+
       const endTime = Date.now();
       const totalTime = (endTime - startTime) / 1000;
 
+      // Finalize message when streaming completes
       setMessages((prev) => {
         const newMessages = [...prev];
         const messageIndex = newMessages.findIndex(m => m.id === assistantMessageId);
         if (messageIndex !== -1) {
-          newMessages[messageIndex].text = assistantText;
-          newMessages[messageIndex].sources = sources;
+          newMessages[messageIndex].text = fullText || 'No response received';
+          newMessages[messageIndex].sources = sourcesRef.current;
           newMessages[messageIndex].timing = { total_time_ms: Math.round(totalTime * 1000) };
           newMessages[messageIndex].isStreaming = false;
         }

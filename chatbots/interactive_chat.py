@@ -8,6 +8,10 @@ from pathlib import Path
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+# Load environment variables from .env file (required for TAVILY_API_KEY and other secrets)
+from dotenv import load_dotenv
+load_dotenv()
+
 from src.config.settings import get_settings
 from src.agents.strands_rag_agent import StrandsRAGAgent
 

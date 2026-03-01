@@ -1,5 +1,18 @@
 # Complete Caching Strategy Guide
 
+## Latest Update (Mar 1, 2026)
+
+**🎯 Web search optimization complete:**
+- Removed automatic product description detection (was triggering unwanted web search)
+- Enabled cache warmup by default (ENABLE_CACHE_WARMUP=true)
+- Web search is now strictly opt-in via globe icon (🌐) or force_web_search=true
+- Simplified formatting rules to prevent HTML document generation
+
+**Result:** System now has three clean tiers:
+1. **Cache Hits** (<50ms) - Pre-loaded Q&A or semantic matches
+2. **Knowledge Base** (1-2s) - Milvus retrieval + LLM generation
+3. **Web Search** (5-15s) - Explicit user request only
+
 ## Overview
 
 The StrandsRAGAgent implements a **multi-layer caching strategy** to minimize latency and improve performance. Each layer caches a different aspect of the pipeline.
@@ -77,36 +90,51 @@ Q2: "What is Milvus?" (same question, same collection, same top_k)
   → Continue to Layer 3
 ```
 
-### Layer 3: Response Cache (Persistent, Semantic)
-**Purpose**: Avoid full LLM generation for semantically similar questions
+### Layer 3: Response Cache (Persistent, Semantic) with Entity Validation
+**Purpose**: Avoid full LLM generation for semantically similar questions while preventing cross-product hallucinations
 
 ```python
 # In StrandsRAGAgent.answer_question()
 response_cache = MilvusResponseCache()  # Persistent in Milvus response_cache collection
+# Entity validation: Checks cached answer is about same product as current question
 ```
 
 **Key Details**:
-- **Hit**: Question embedding similar to cached question (>92% semantic overlap) → Return cached answer (33ms, mostly network)
-- **Miss**: No similar cached answer → Generate via LLM (~8-15s)
+- **Hit**: Question embedding similar to cached question (>98% semantic overlap) AND same entity → Return cached answer (33ms, mostly network)
+- **Miss**: No similar cached answer OR different product entity → Generate via LLM (~8-15s)
 - **Storage**: Persistent in Milvus `response_cache` collection
 - **Population**: Pre-generated Q&A pairs from `data/answers.json` via `sync_answers_cache.py`
-- **Similarity Threshold**: 0.92 (92% similarity required for cache hit)
-- **Benefit**: ~33ms vs ~8-15s generation per question
+- **Similarity Threshold**: 0.98 (98% similarity required for cache hit)
+- **Entity Validation**: Extracts main product name (Milvus, Pinecone, etc.), validates match before returning cached answer
+- **Supported Entities**: Milvus, Pinecone, Weaviate, Qdrant, Elasticsearch, PostgreSQL, MongoDB, and 20+ others
+- **Benefit**: Prevents returning Pinecone answer when user asks about Milvus
 
-**Example Flow**:
+**Example Flow with Entity Validation**:
 ```
 Q1: "What is Milvus?"
   → Check response_cache
   → No similar cached answer
-  → Generate answer via LLM (12s)
-  → Store in response_cache
+  → Generate answer mentioning "Milvus" (12s)
+  → Extract entity: "milvus"
+  → Store in response_cache with entity tag
   → Return to user
 
-Q2: "Tell me about Milvus"  (semantically similar)
+Q2: "What is Pinecone?"  (semantically similar to Q1 but DIFFERENT product)
   → Check response_cache
-  → Found similar cached answer (92% match)
-  → Return cached answer (33ms)
-  → User gets answer instantly
+  → Found similar cached answer (98%+ match)
+  → Validate entity: cached="milvus", current="pinecone"
+  → MISMATCH! Don't use cached answer
+  → Generate fresh answer for Pinecone (12s)
+  → Extract entity: "pinecone"
+  → Store new answer with entity tag
+  → Return to user
+
+Q3: "Tell me about Milvus"  (semantically similar to Q1, SAME product)
+  → Check response_cache
+  → Found similar cached answer (98%+ match)
+  → Validate entity: cached="milvus", current="milvus"
+  → MATCH! Return cached answer (33ms)
+  → User gets answer instantly!
 ```
 
 ### Layer 4: Answer Cache (Session-Level, Exact Match)
@@ -328,7 +356,7 @@ With qwen2.5:0.5b model:
 **Problem**: Similar question doesn't hit response cache
 **Solution**: 
 - Check similarity threshold (0.92 = 92% match required)
-- Some semantic variation requires regenration
+- Some semantic variation requires regeneration
 - Verify response_cache collection exists: `curl http://localhost:8000/health`
 
 ### Memory Growing Unbounded

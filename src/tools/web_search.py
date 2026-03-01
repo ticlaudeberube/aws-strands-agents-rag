@@ -118,6 +118,14 @@ class WebSearchClient:
             timeout: Request timeout in seconds
         """
         self.tavily = TavilySearchClient(api_key=tavily_api_key, timeout=timeout)
+        
+        # Diagnostic logging
+        if self.tavily.api_key:
+            api_key_preview = f"{self.tavily.api_key[:10]}..." if len(self.tavily.api_key) > 10 else "***"
+            logger.info(f"[WEB_SEARCH_INIT] ✓ Tavily API key loaded: {api_key_preview}")
+        else:
+            logger.warning(f"[WEB_SEARCH_INIT] ⚠️ NO Tavily API key found!")
+            logger.warning(f"[WEB_SEARCH_INIT] ⚠️ Check that TAVILY_API_KEY is set in .env or environment")
 
     def search(
         self,

@@ -2,68 +2,42 @@
 
 Quick navigation for committed documentation in this project.
 
+**Quick Start By Role:**
+- **New Developer**: Start with [README.md](../README.md) → [GETTING_STARTED.md](#getting-started--quick-reference) → [ARCHITECTURE.md](#system-architecture--development)
+- **API Developer**: [API_SERVER.md](#api--integration) → [ARCHITECTURE.md](#system-architecture--development)
+- **Feature Developer**: [DEVELOPMENT.md](#system-architecture--development) → [ARCHITECTURE.md](#system-architecture--development)
+- **DevOps/Deployment**: [GETTING_STARTED.md](#getting-started--quick-reference) → [REACT_DEPLOYMENT.md](#deployment)
+
 ---
 
-## 🎯 For Different Roles
+## 🚀 Recent Updates
 
-### New Developer (First Time)
-1. [README.md](../README.md) - Project overview
-2. [ARCHITECTURE.md](ARCHITECTURE.md) - System architecture
-3. [DEVELOPMENT.md](DEVELOPMENT.md) - Development patterns
+**Three-Tier Architecture (Mar 1, 2026)**: Response caching, knowledge base retrieval, and opt-in web search. See [ARCHITECTURE.md](#system-architecture--development) for details.
 
-### API Integration Developer
-1. [ARCHITECTURE.md](ARCHITECTURE.md) - Architecture overview
-2. [API_SERVER.md](API_SERVER.md) - Endpoint reference
-3. [GETTING_STARTED.md](GETTING_STARTED.md) - Setup guide
-
-### Agent Developer
-1. [ARCHITECTURE.md](ARCHITECTURE.md) - Full architecture
-2. [DEVELOPMENT.md](DEVELOPMENT.md) - Development guidelines
-
-### DevOps / Deployment
-1. [GETTING_STARTED.md](GETTING_STARTED.md) - Setup
-2. [PROJECT_SUMMARY.md](PROJECT_SUMMARY.md) - Project overview
+**Cache Warmup Enabled (Mar 1, 2026)**: API server now automatically pre-loads Q&A pairs on startup for sub-50ms responses. See [CACHING_STRATEGY.md](#system-architecture--development) for implementation details.
 
 ---
 
 ## 📚 Committed Documentation Files
 
-### Core Architecture
-- **[ARCHITECTURE.md](ARCHITECTURE.md)** - Complete system architecture
-- **[PROJECT_SUMMARY.md](PROJECT_SUMMARY.md)** - Project overview
-- **[DEVELOPMENT.md](DEVELOPMENT.md)** - Development guidelines
+### System Architecture & Development
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** - Three-tier system architecture (Cache → KB → Web Search) + complete component details
+- **[DEVELOPMENT.md](DEVELOPMENT.md)** - Development guidelines and patterns
+- **[CACHING_STRATEGY.md](CACHING_STRATEGY.md)** - Response cache architecture and configuration
 
-### Deployment & Scaling
-- **[REACT_DEPLOYMENT.md](REACT_DEPLOYMENT.md)** - React chatbot deployment (Local, Docker, Serverless)
-- **[GETTING_STARTED.md](GETTING_STARTED.md)** - Installation and setup
+### Getting Started & Quick Reference
+- **[GETTING_STARTED.md](GETTING_STARTED.md)** - Installation and setup guide
+- **[STRANDS_QUICK_REFERENCE.md](STRANDS_QUICK_REFERENCE.md)** - Quick reference for common tasks
 
 ### API & Integration
-- **[API_SERVER.md](API_SERVER.md)** - REST API and MCP endpoints
-- **[API_PORT_STRATEGY.md](API_PORT_STRATEGY.md)** - Port configuration and troubleshooting
-- **[STRANDS_QUICK_REFERENCE.md](STRANDS_QUICK_REFERENCE.md)** - Quick reference
+- **[API_SERVER.md](API_SERVER.md)** - REST API and MCP server endpoints
 
-### Performance & Configuration  
-- **[MODEL_PERFORMANCE_COMPARISON.md](MODEL_PERFORMANCE_COMPARISON.md)** - Model benchmarking
-- **[CACHING_STRATEGY.md](CACHING_STRATEGY.md)** - Caching architecture
-- **[RESPONSE_CACHE.md](RESPONSE_CACHE.md)** - Response caching
-- **[COLLECTION_CONFIG.md](COLLECTION_CONFIG.md)** - Collection management
-- **[STREAMING_IMPLEMENTATION.md](STREAMING_IMPLEMENTATION.md)** - Streaming support
+### Performance
+- **[MODEL_PERFORMANCE_COMPARISON.md](MODEL_PERFORMANCE_COMPARISON.md)** - Model benchmarking and performance analysis
+
+### Deployment
+- **[REACT_DEPLOYMENT.md](REACT_DEPLOYMENT.md)** - React chatbot deployment (Local, Docker, Serverless)
 
 ---
 
-## 🔧 Common Tasks
-
-| Task | Document |
-|------|----------|
-| Set up project | [GETTING_STARTED.md](GETTING_STARTED.md) |
-| Understand system | [ARCHITECTURE.md](ARCHITECTURE.md) |
-| Use the API | [API_SERVER.md](API_SERVER.md) |
-| Develop features | [DEVELOPMENT.md](DEVELOPMENT.md) |
-| Compare models | [MODEL_PERFORMANCE_COMPARISON.md](MODEL_PERFORMANCE_COMPARISON.md) |
-| Optimize caching | [CACHING_STRATEGY.md](CACHING_STRATEGY.md) |
-| Configure collections | [COLLECTION_CONFIG.md](COLLECTION_CONFIG.md) |
-| Enable streaming | [STREAMING_IMPLEMENTATION.md](STREAMING_IMPLEMENTATION.md) |
-
----
-
-**Note**: This index lists only committed/staged documentation files.
+**Note**: This index documents only committed/staged documentation files in docs/ + README.md at root (9 total).

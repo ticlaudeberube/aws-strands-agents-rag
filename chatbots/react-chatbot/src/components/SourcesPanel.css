@@ -141,11 +141,6 @@
   -webkit-line-clamp: 1;
 }
 
-.sources-panel-text.text-snippet {
-  font-style: italic;
-  color: #6b7280;
-}
-
 .sources-panel-filename {
   font-size: 10px;
   color: #9ca3af;
@@ -196,12 +191,6 @@
 .web-source-link:hover {
   border-bottom-color: #0369a1;
   color: #0284c7;
-}
-
-.web-snippet {
-  color: #475569;
-  font-style: italic;
-  -webkit-line-clamp: 2;
 }
 
 .sources-panel-meta {

@@ -30,31 +30,107 @@ This is an AWS Strands Agents RAG system that uses Milvus for vector database op
 5. **Documentation Updates**: When making changes to user-facing code, scripts, or instructions, update corresponding documentation files to reflect the changes. This includes updating setup instructions, command paths, and error messages.
 
 ## Documentation Organization
-**Important**: Follow this documentation structure:
-- **Global Project Documentation**: Located at project root
-  - `README.md` - Main project overview and quick start (ONLY documentation at root level)
-- **All Other Documentation**: Located in `docs/` folder
-  - Feature guides: `docs/GETTING_STARTED.md`, `docs/LATENCY_OPTIMIZATION.md`, etc.
-  - Technical references: `docs/API_SERVER.md`, `docs/CACHING_STRATEGY.md`, etc.
-  - Development guides: `docs/DEVELOPMENT.md`, `docs/PROJECT_SUMMARY.md`, etc.
 
-**When Updating Documentation**:
-- If adding/modifying getting started → update `docs/GETTING_STARTED.md`
-- If adding/modifying API endpoints → update `docs/API_SERVER.md`
-- If adding/modifying performance → update `docs/LATENCY_OPTIMIZATION.md`
-- If documenting a new feature → create in `docs/FEATURE_NAME.md`
-- If updating project-level info → update root `README.md` ONLY
-- **Never** create documentation files outside `docs/` folder (except `README.md`)
+### Structure (DRY - Single Source of Truth)
+- **README.md** (root): High-level overview, architecture diagrams, quick start, doc index **ONLY**
+- **docs/GETTING_STARTED.md**: Complete setup, configuration, troubleshooting
+- **docs/DEVELOPMENT.md**: Code examples, API usage, advanced features
+- **docs/ARCHITECTURE.md**: System design, component overview, data flow
+- **docs/API_SERVER.md**: REST endpoints, health checks, MCP details
+- **docs/LATENCY_OPTIMIZATION.md**: Performance tuning, caching strategies
+- **docs/*.md**: Feature/topic-specific guides (one file per major topic)
 
-**Consolidation Rule**: 
-- Avoid duplicate documentation across multiple files
-- Consolidate related topics into single comprehensive guides
-- Use cross-references (links) to related documentation instead of copy-pasting content
+### README.md Rules (Keep It Lean)
+✅ **Include**:
+- Project description (1-2 sentences)
+- Key features (bullet points)
+- Architecture diagram (ASCII or Mermaid)
+- Data flow diagram (visual only)
+- Documentation index table linking to docs/
+- Quick start (5-10 lines max, with link to full guide)
+- Project structure overview
 
-## Feature development guidelines
-- You should not implement new features without implicitly requesting  permission to do so. Always ask for clarification and approval before implementing new features or making significant changes to the codebase. This ensures that all changes align with project goals and maintain code quality.
+❌ **Never Include**:
+- Setup details (link to `docs/GETTING_STARTED.md`)
+- Configuration options (link to `docs/GETTING_STARTED.md#configuration`)
+- Code examples beyond 5 lines (link to `docs/DEVELOPMENT.md`)
+- Troubleshooting steps (link to `docs/GETTING_STARTED.md#troubleshooting`)
+- Performance tips (link to `docs/LATENCY_OPTIMIZATION.md`)
+- Docker commands (link to `docker/README.md`)
+- Detailed roadmap (condensed version only)
+
+### Documentation Consolidation (DRY Principle)
+**Rule**: Never duplicate content across files
+- If information exists in `docs/GETTING_STARTED.md`, don't repeat it in `docs/DEVELOPMENT.md`
+- Use **cross-references** (links) instead of copy-pasting
+- When updating a fact, update the canonical source only
+
+**Canonical Sources**:
+| Topic | Canonical File |
+|-------|---|
+| Setup, config, troubleshooting | `docs/GETTING_STARTED.md` |
+| Code examples, API usage, features | `docs/DEVELOPMENT.md` |
+| System architecture, components | `docs/ARCHITECTURE.md` |
+| Performance, caching, optimization | `docs/LATENCY_OPTIMIZATION.md` |
+| REST API, endpoints | `docs/API_SERVER.md` |
+| Docker, containers | `docker/README.md` |
+| Testing | `tests/README.md` |
+
+### Documentation Index Updates
+When creating/updating docs:
+1. Update documentation table in README.md to include new resources
+2. If creating new docs/FILE.md, add to appropriate category in table
+3. Keep table up-to-date when moving or renaming files
+
+### Configuration Changes
+When updating `.env`, `settings.py`, or configuration:
+- **Always** update `docs/GETTING_STARTED.md#configuration` section
+- **Always** update `.env.example` with new variables
+- Update `docs/LATENCY_OPTIMIZATION.md` if performance-related
+- Update README.md only if major feature change
+- Never document config in multiple files
+
+### Feature Documentation
+When adding new features:
+1. Document in appropriate canonical file (see table above)
+2. Add example code to `docs/DEVELOPMENT.md` or create focused guide
+3. Add link to README.md documentation index (if major feature)
+4. Don't create redundant "how-to" docs for the same feature
+
+### Link Standards
+- Use relative paths: `[text](docs/FILE.md)` or `[text](docs/FILE.md#section)`
+- Link to specific sections when granular: `[Setup](docs/GETTING_STARTED.md#setup)`
+- Use meaningful link text: `[Performance tips](docs/LATENCY_OPTIMIZATION.md)` not `click here`
+
+### Documentation Updates When Code Changes
+**Always synchronize**:
+- Model names in `.env.example` ↔ `src/config/settings.py` ↔ docs
+- Configuration variables ↔ `docs/GETTING_STARTED.md` 
+- API endpoints ↔ `docs/API_SERVER.md`
+- Setup commands ↔ `docs/GETTING_STARTED.md` ↔ README quick start
+
+## Documentation Quality Checklist
+
+**Before submitting documentation changes:**
+- [ ] No duplicate content exists in other files
+- [ ] All cross-references use correct relative paths
+- [ ] Code examples are in canonical file (`docs/DEVELOPMENT.md`)
+- [ ] Setup/config steps are in `docs/GETTING_STARTED.md`
+- [ ] All links are tested and working
+- [ ] If code changed, docs updated to match
+- [ ] README.md remains lean (<300 lines)
+- [ ] No long lists or detailed procedures in README (linked instead)
+
+## Feature Development Guidelines
+
+You should not implement new features without explicitly requesting permission to do so. Always ask for clarification and approval before implementing new features or making significant changes to the codebase. This ensures that all changes align with project goals and maintain code quality.
 
 When developing new features or making changes to the codebase:
+- **Always** ask for approval before major changes
+- **Always** update documentation simultaneously with code
+- **Always** use canonical sources for documentation
+- **Never** duplicate content across doc files
+- **Never** put detailed content in README.md (link instead)
 ## Helpful Commands
 - Document loaders: `document-loaders/load_milvus_docs_ollama.py`
 - Interactive chat: `python chatbots/interactive_chat.py`

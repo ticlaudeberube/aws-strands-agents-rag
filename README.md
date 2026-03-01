@@ -23,7 +23,11 @@ A high-performance Retrieval-Augmented Generation (RAG) system using AWS Strands
 - **Multiple Document Loaders**: Support for files, URLs, and text documents
 - **Optimized Deployment**: Integrated Docker setup with performance optimizations
 - **React Web UI**: Modern streaming chatbot with globe icon for explicit web search and clean source display
-- **Multiple Deployment Options**: Docker, Local, and Serverless with AgentCore
+- **Multiple Deployment Options**: Docker, Local, and Serverless with AgentCore (in progress)
+
+- **Todos:**
+  - [ ] **Serverless Deployment with AgentCore**: Lambda handler, SAM template, CloudFront distribution
+  - [ ] **Caching Migration for AgentCore**: Replace in-memory caches with AgentCore's SessionManager for conversation history caching
 
 ## 📚 Documentation
 
@@ -291,7 +295,7 @@ cd ..
 # Download and install from https://ollama.ai
 
 # Pull required models
-ollama pull mistral      # For text generation
+ollama pull Qwen2.5:0.5b      # For text generation
 ollama pull all-minilm   # For embeddings (or nomic-embed-text)
 
 # Start Ollama server (usually runs on http://localhost:11434)
@@ -350,7 +354,7 @@ uv run python examples/interactive_chat.py
 ```env
 # Ollama Configuration
 OLLAMA_HOST=http://localhost:11434
-OLLAMA_MODEL=mistral:latest
+OLLAMA_MODEL=Qwen2.5:0.5b
 OLLAMA_EMBED_MODEL=nomic-embed-text:v1.5
 
 # Milvus Configuration
@@ -464,7 +468,7 @@ agent.agent.add_tool(custom_tool)
 ## Available Ollama Models
 
 ### For Text Generation
-- `mistral` - Fast, high-quality reasoning
+- `Qwen2.5:0.5b` - Fast, high-quality reasoning
 - `llama2` - Meta's LLama 2 model
 - `neural-chat` - Intel's Neural Chat
 - `dolphin-mixtral` - Enhanced Mixtral variant

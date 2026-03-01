@@ -354,7 +354,7 @@ embeddings = client.embed_texts(["text1", "text2"])
 # Generate text
 response = client.generate(
     prompt="What is AI?",
-    model="mistral"
+    model="Qwen2.5:0.5b"
 )
 ```
 
@@ -551,7 +551,7 @@ class OllamaClient:
     
     def generate(
         prompt: str,
-        model: str = "mistral",
+        model: str = "Qwen2.5:0.5b",
         stream: bool = False,
         temperature: float = 0.1
     ) -> str

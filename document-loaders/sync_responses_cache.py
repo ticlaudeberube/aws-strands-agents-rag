@@ -4,7 +4,7 @@
 This script loads question-answer pairs with their embeddings into Milvus
 response_cache collection, enabling instant semantic cache hits for common questions.
 
-Usage: python document-loaders/sync_answers_cache.py
+Usage: python document-loaders/sync_responses_cache.py
 """
 
 import json
@@ -40,16 +40,16 @@ ollama_client = OllamaClient(
     timeout=settings.ollama_timeout,
 )
 
-def load_answers_cache():
+def load_responses_cache():
     """Load pre-generated Q&A pairs into response cache.
     
-    Always runs to sync answers into the cache.
+    Always runs to sync responses into the cache."""
     """
     try:
-        with open("./data/answers.json", "r", encoding="utf-8") as f:
+        with open("./data/responses.json", "r", encoding="utf-8") as f:
             data = json.load(f)
     except FileNotFoundError:
-        print("❌ Error: ./data/answers.json not found")
+        print("❌ Error: ./data/responses.json not found")
         print("   Please create with format:")
         print("   {")
         print('     "qa_pairs": [')
@@ -64,7 +64,7 @@ def load_answers_cache():
     
     qa_pairs = data.get("qa_pairs", [])
     if not qa_pairs:
-        print("❌ No Q&A pairs found in answers.json")
+        print("❌ No Q&A pairs found in responses.json")
         return
     
     # Use configured collection name for all Q&A pairs
@@ -87,7 +87,7 @@ def load_answers_cache():
     
     print(f"\nLoading {len(qa_pairs)} Q&A pairs into response_cache...")
     print("=" * 70)
-    logger.info(f"Processing {len(qa_pairs)} Q&A pairs from answers.json")
+    logger.info(f"Processing {len(qa_pairs)} Q&A pairs from responses.json")
     
     embeddings = []
     texts = []
@@ -146,7 +146,7 @@ def load_answers_cache():
         return
     
     print("\n" + "=" * 70)
-    print("✓ Answers cache population complete!")
+    print("✓ Responses cache population complete!")
     print(f"  Questions cached: {len(embeddings)}")
     print(f"  Similarity threshold: 92%")
     
@@ -162,8 +162,8 @@ def load_answers_cache():
     logger.info(f"Similarity threshold: 92%")
     logger.info("="*70)
     
-    logger.info("✓ Cache sync complete - answers are now available for semantic matching!")
+    logger.info("✓ Cache sync complete - responses are now available for semantic matching!")
 
 
 if __name__ == "__main__":
-    load_answers_cache()
+    load_responses_cache()

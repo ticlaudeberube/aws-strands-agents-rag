@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Generate answers.json from common_questions by querying the API.
+"""Generate responses.json from common_questions by querying the API.
 
 This script:
 1. Reads questions from config/common_questions.json
-2. Queries the API to get answers for each question
-3. Saves Q&A pairs to data/answers.json for later cache loading
+2. Queries the API to get responses for each question
+3. Saves Q&A pairs to data/responses.json for later cache loading
 """
 
 import json
@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 # Configuration - read API_PORT from .env or default to 8000
 API_PORT = os.getenv("API_PORT", "8000")
 API_HOST = f"http://localhost:{API_PORT}"
-API_ENDPOINT = f"{API_HOST}/v1/chat/completions?bypass_cache=true"  # Bypass cache for fresh answers
+API_ENDPOINT = f"{API_HOST}/v1/chat/completions?bypass_cache=true"  # Bypass cache for fresh responses
 HEALTH_ENDPOINT = f"{API_HOST}/health"
 
 def check_api_health():
@@ -57,8 +57,8 @@ def load_common_questions():
         logger.error("❌ Error: ./config/common_questions.json not found")
         return []
 
-def query_api_for_answer(question: str) -> str:
-    """Query API to get answer for a question.
+def query_api_for_response(question: str) -> str:
+    """Query API to get response for a question.
     
     Args:
         question: The question to ask
@@ -71,7 +71,7 @@ def query_api_for_answer(question: str) -> str:
         
         payload = {
             "messages": [
-                {"role": "user", "content": question}
+                {"role": "user", "content": [{"text": question}]}
             ],
             "model": "rag-agent"
         }
@@ -86,11 +86,11 @@ def query_api_for_answer(question: str) -> str:
         
         if response.status_code == 200:
             data = response.json()
-            # Extract answer from response
+            # Extract response from message
             if data.get("choices") and len(data["choices"]) > 0:
-                answer = data["choices"][0].get("message", {}).get("content", "")
-                logger.info(f"✓ Received answer ({len(answer)} chars): {answer[:100]}...")
-                return answer.strip()
+                response_text = data["choices"][0].get("message", {}).get("content", "")
+                logger.info(f"✓ Received response ({len(response_text)} chars): {response_text[:100]}...")
+                return response_text.strip()
         else:
             logger.error(f"API error: {response.status_code} - {response.text}")
             return ""
@@ -105,8 +105,8 @@ def query_api_for_answer(question: str) -> str:
         logger.error(f"Failed to parse API response: {e}")
         return ""
 
-def generate_answers():
-    """Generate answers.json from common questions."""
+def generate_responses():
+    """Generate responses.json from common questions."""
     
     # Check API health
     logger.info("Checking API health...")
@@ -131,53 +131,53 @@ def generate_answers():
     
     for i, question in enumerate(questions, 1):
         start_time = time.time()
-        answer = query_api_for_answer(question)
+        response_text = query_api_for_response(question)
         elapsed = time.time() - start_time
         
-        if answer:
-            logger.info(f"{i}. Answer generated in {elapsed:.1f}s - {len(answer)} characters")
+        if response_text:
+            logger.info(f"{i}. Response generated in {elapsed:.1f}s - {len(response_text)} characters")
             qa_pairs.append({
                 "question": question,
-                "answer": answer,
+                "answer": response_text,
                 "collection": "milvus_rag_collection"
             })
         else:
-            logger.warning(f"{i}. Failed to get answer for: {question}")
+            logger.warning(f"{i}. Failed to get response for: {question}")
     
     if not qa_pairs:
-        logger.error("❌ No answers generated")
+        logger.error("❌ No responses generated")
         return
     
-    # Save to answers.json
+    # Save to responses.json
     output_data = {
         "qa_pairs": qa_pairs,
         "description": "Pre-generated question-answer pairs for response cache",
         "generated_count": len(qa_pairs),
         "total_expected": len(questions),
         "version": "1.0",
-        "usage": "Run: python document-loaders/sync_answers_cache.py to load into response_cache"
+        "usage": "Run: python document-loaders/sync_responses_cache.py to load into response_cache"
     }
     
-    output_path = Path("./data/answers.json")
+    output_path = Path("./data/responses.json")
     output_path.parent.mkdir(parents=True, exist_ok=True)
     
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(output_data, f, indent=2, ensure_ascii=False)
     
     logger.info("\n" + "=" * 70)
-    logger.info(f"✓ Generated answers.json")
+    logger.info(f"✓ Generated responses.json")
     logger.info(f"  Location: {output_path}")
     logger.info(f"=" * 70)
     
     # Calculate and log cache statistics
-    total_answers_cached = len(qa_pairs)
+    total_responses_cached = len(qa_pairs)
     total_chars_cached = sum(len(qa.get("answer", "")) for qa in qa_pairs)
-    avg_answer_length = total_chars_cached / total_answers_cached if total_answers_cached > 0 else 0
+    avg_response_length = total_chars_cached / total_responses_cached if total_responses_cached > 0 else 0
     
     logger.info(f"\nCache Statistics:")
-    logger.info(f"  ✓ Q&A pairs generated: {total_answers_cached}/{len(questions)}")
+    logger.info(f"  ✓ Q&A pairs generated: {total_responses_cached}/{len(questions)}")
     logger.info(f"  ✓ Total characters cached: {total_chars_cached:,}")
-    logger.info(f"  ✓ Average answer length: {avg_answer_length:.0f} characters")
+    logger.info(f"  ✓ Average response length: {avg_response_length:.0f} characters")
     
     if len(qa_pairs) < len(questions):
         failed_count = len(questions) - len(qa_pairs)
@@ -186,7 +186,7 @@ def generate_answers():
         logger.info(f"  ✓ All questions cached successfully!")
     
     logger.info(f"\nNext step to load into response cache:")
-    logger.info(f"  python document-loaders/sync_answers_cache.py")
+    logger.info(f"  python document-loaders/sync_responses_cache.py")
 
 if __name__ == "__main__":
-    generate_answers()
+    generate_responses()

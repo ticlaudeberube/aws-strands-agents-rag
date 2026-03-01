@@ -364,7 +364,7 @@ OLLAMA_COLLECTION_NAME=milvus_rag_collection
 
 # API Server Configuration
 API_PORT=8000  # See API_PORT_STRATEGY.md for port conflict resolution
-ENABLE_CACHE_WARMUP=true  # Pre-load Q&A pairs from data/answers.json on startup (enables instant responses)
+ENABLE_CACHE_WARMUP=true  # Pre-load Q&A pairs from data/responses.json on startup (enables instant responses)
 
 # Performance Settings
 AGENT_CACHE_SIZE=500                    # LRU cache size for embeddings & queries

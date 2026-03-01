@@ -299,9 +299,9 @@ def extract_text_from_content(content: Any) -> str:
 
 
 def warm_response_cache(agent: "StrandsRAGAgent", settings) -> None:
-    """Pre-warm response cache with answers from answers.json on startup.
+    """Pre-warm response cache with responses from responses.json on startup.
     
-    Automatically loads Q&A pairs from data/answers.json into the response cache
+    Automatically loads Q&A pairs from data/responses.json into the response cache
     for semantic matching, as long as the file exists.
     
     Args:
@@ -313,20 +313,20 @@ def warm_response_cache(agent: "StrandsRAGAgent", settings) -> None:
         return
     
     try:
-        answers_path = Path(__file__).parent / "data" / "answers.json"
-        if not answers_path.exists():
-            logger.debug(f"answers.json not found at {answers_path}, skipping cache warming")
+        responses_path = Path(__file__).parent / "data" / "responses.json"
+        if not responses_path.exists():
+            logger.debug(f"responses.json not found at {responses_path}, skipping cache warming")
             return
         
-        with open(answers_path, "r", encoding="utf-8") as f:
+        with open(responses_path, "r", encoding="utf-8") as f:
             data = json.load(f)
         
         qa_pairs = data.get("qa_pairs", [])
         if not qa_pairs:
-            logger.warning("No Q&A pairs found in answers.json")
+            logger.warning("No Q&A pairs found in responses.json")
             return
         
-        logger.info(f"Warming response cache with {len(qa_pairs)} Q&A pairs from answers.json...")
+        logger.info(f"Warming response cache with {len(qa_pairs)} Q&A pairs from responses.json...")
         
         skipped = 0
         for qa in qa_pairs:
@@ -365,7 +365,7 @@ def warm_response_cache(agent: "StrandsRAGAgent", settings) -> None:
                 logger.info(f"  (Skipped {skipped} invalid pairs)")
         
     except FileNotFoundError:
-        logger.debug("answers.json not found, skipping cache warming")
+        logger.debug("responses.json not found, skipping cache warming")
     except Exception as e:
         logger.warning(f"Failed to warm response cache: {e}")
 

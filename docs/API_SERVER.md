@@ -479,7 +479,7 @@ OLLAMA_HOST=http://host.docker.internal:11434  # Docker desktop connects to host
 OLLAMA_COLLECTION_NAME=milvus_rag_collection
 
 # Cache Configuration
-ENABLE_CACHE_WARMUP=true                   # Pre-load Q&A pairs from data/answers.json on startup
+ENABLE_CACHE_WARMUP=true                   # Pre-load Q&A pairs from data/responses.json on startup
 
 # Performance
 AGENT_CACHE_SIZE=500

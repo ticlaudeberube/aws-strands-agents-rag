@@ -103,7 +103,7 @@ response_cache = MilvusResponseCache()  # Persistent in Milvus response_cache co
 - **Hit**: Question embedding similar to cached question (>98% semantic overlap) AND same entity → Return cached answer (33ms, mostly network)
 - **Miss**: No similar cached answer OR different product entity → Generate via LLM (~8-15s)
 - **Storage**: Persistent in Milvus `response_cache` collection
-- **Population**: Pre-generated Q&A pairs from `data/answers.json` via `sync_answers_cache.py`
+- **Population**: Pre-generated Q&A pairs from `data/responses.json` via `sync_responses_cache.py`
 - **Similarity Threshold**: 0.98 (98% similarity required for cache hit)
 - **Entity Validation**: Extracts main product name (Milvus, Pinecone, etc.), validates match before returning cached answer
 - **Supported Entities**: Milvus, Pinecone, Weaviate, Qdrant, Elasticsearch, PostgreSQL, MongoDB, and 20+ others
@@ -190,7 +190,7 @@ agent_cache_size: int = 500  # LRU cache size for embeddings, searches, and answ
 
 ### Step 1: Add Q&A Pairs to Cache File
 
-Edit `data/answers.json`:
+Edit `data/responses.json`:
 ```json
 {
   "qa_pairs": [
@@ -209,7 +209,7 @@ Edit `data/answers.json`:
   "generated_count": 17,
   "total_expected": 17,
   "version": "1.0",
-  "usage": "Run: python document-loaders/sync_answers_cache.py to load into response_cache"
+  "usage": "Run: python document-loaders/sync_responses_cache.py to load into response_cache"
 }
 ```
 
@@ -217,12 +217,12 @@ Edit `data/answers.json`:
 
 ```bash
 cd /Users/claude/Documents/workspace/aws-strands-agents-rag
-python document-loaders/sync_answers_cache.py
+python document-loaders/sync_responses_cache.py
 ```
 
 **Output**:
 ```
-Warming response cache with 17 Q&A pairs from answers.json...
+Warming response cache with Q&A pairs from responses.json...
 Generating embeddings: 100%|████████| 17/17 [00:05<00:00, 3.45 items/s]
 Inserting into response_cache...
 ✓ Cached response for: What is Milvus?
@@ -281,7 +281,7 @@ Answer generation took 8.18s
 ## Best Practices
 
 ### 1. Populate Response Cache Early
-- Add frequently asked questions to `data/answers.json` before deployment
+- Add frequently asked questions to `data/responses.json` before deployment
 - Reduces first-request latency for common queries
 
 ### 2. Monitor Cache Hit Rates
@@ -369,8 +369,8 @@ With qwen2.5:0.5b model:
 ### Outdated Cached Answers
 **Problem**: Documentation changed but cached answer is old
 **Solution**:
-- Edit `data/answers.json`
-- Run `python document-loaders/sync_answers_cache.py` to update
+- Edit `data/responses.json`
+- Run `python document-loaders/sync_responses_cache.py` to update
 - Restart API server
 
 ## Summary

@@ -221,7 +221,7 @@ LOG_LEVEL=INFO
 API_PORT=8000
 
 # Cache Configuration
-# Enable/disable response cache warmup on startup (pre-loads Q&A pairs from data/answers.json)
+# Enable/disable response cache warmup on startup (pre-loads Q&A pairs from data/responses.json)
 # Set to false to skip cache warmup in development/testing environments
 ENABLE_CACHE_WARMUP=true
 ```
@@ -456,7 +456,7 @@ For detailed performance tuning guide, see [LATENCY_OPTIMIZATION.md](LATENCY_OPT
 1. **Current Setup is Optimized**: Default neural-chat + top_k=3 achieves 3-5s / <100ms cached
 2. **For Even Faster**: Try `orca-mini` model (1-2s, lower quality)
 3. **For Better Quality**: Use more context (`top_k=5`) and longer responses (`max_tokens=512`)
-4. **Cache Warm-up**: Run `python document-loaders/sync_answers_cache.py` for <100ms responses
+4. **Cache Warm-up**: Run `python document-loaders/sync_responses_cache.py` for <100ms responses
 5. **Streaming**: Use `/v1/chat/completions/stream` endpoint for progressive results
 6. **Disable Logging**: Set `LOG_LEVEL=WARNING` in .env for production
 

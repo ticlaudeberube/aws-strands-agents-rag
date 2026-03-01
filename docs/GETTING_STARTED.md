@@ -245,6 +245,43 @@ python document-loaders/add_sample_docs.py
 # ✓ Collection 'milvus_rag_collection' now has 6 documents
 ```
 
+## Step 5a: Load Embeddings (Optional - For Faster Reloads)
+
+If you've already processed documents and want to reload embeddings without reprocessing:
+
+**Option 1: Load from Full Milvus Documentation**
+
+Populate vector database with complete Milvus documentation:
+
+```bash
+python document-loaders/load_milvus_docs_ollama.py
+
+# This will:
+# - Download Milvus documentation
+# - Generate embeddings for all documents
+# - Store embeddings in Milvus
+# - Cache embeddings to data/embeddings.json
+# - Takes 5-15 minutes depending on hardware
+```
+
+**Option 2: Load Cached Embeddings (Fast Path)**
+
+If embeddings have already been generated load them directly:
+
+```bash
+python document-loaders/load_embeddings_from_json.py
+
+# This will:
+# - Load pre-cached embeddings from data/embeddings.json
+# - Import them into Milvus without reprocessing
+# - Takes <1 minute (no embedding computation needed)
+```
+
+**When to use each option:**
+- Use **Option 1** first time or when you have new documentation
+- Use **Option 2** for faster reloads on subsequent runs
+- Skip this step if you only want to use sample documents (Step 5)
+
 ## Step 6: Start API Server
 
 ```bash

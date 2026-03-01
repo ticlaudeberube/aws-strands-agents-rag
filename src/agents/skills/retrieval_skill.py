@@ -8,11 +8,11 @@ logger = logging.getLogger(__name__)
 
 class RetreivalSkill:
     """Skill for searching and retrieving documents.
-    
+
     This skill provides tools for semantic search and document retrieval
     from the Milvus vector database.
     """
-    
+
     # Skill documentation (would be extended with markdown in production)
     SKILL_DESCRIPTION = """
     # Retrieval Skill
@@ -30,16 +30,16 @@ class RetreivalSkill:
     - User wants docs from specific source → search_by_source filters results
     - User wants to see available data → list_collections shows options
     """
-    
+
     @staticmethod
     def register_tools(registry: ToolRegistry, agent) -> None:
         """Register retrieval tools with the agent.
-        
+
         Args:
             registry: Tool registry to register with
             agent: StrandsRAGAgent instance
         """
-        
+
         # Tool 1: retrieve_documents
         registry.register_tool(
             ToolDefinition(
@@ -69,7 +69,7 @@ class RetreivalSkill:
                 skill_category="retrieval",
             )
         )
-        
+
         # Tool 2: search_by_source
         registry.register_tool(
             ToolDefinition(
@@ -98,7 +98,7 @@ class RetreivalSkill:
                 skill_category="retrieval",
             )
         )
-        
+
         # Tool 3: list_collections
         registry.register_tool(
             ToolDefinition(
@@ -109,5 +109,5 @@ class RetreivalSkill:
                 skill_category="retrieval",
             )
         )
-        
+
         logger.info("Retrieval skill registered (3 tools)")

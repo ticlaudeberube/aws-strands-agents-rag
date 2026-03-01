@@ -1,4 +1,5 @@
 """Configuration settings for the application."""
+
 import os
 from pydantic_settings import BaseSettings
 from pydantic import ConfigDict
@@ -7,13 +8,14 @@ from typing import Optional
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables and .env file."""
+
     model_config = ConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
-        extra='ignore'  # Ignore extra env variables
+        extra="ignore",  # Ignore extra env variables
     )
-    
+
     # Ollama Configuration
     ollama_host: str = "http://localhost:11434"
     ollama_model: str = os.getenv("OLLAMA_MODEL", "qwen2.5:0.5b")
@@ -42,10 +44,10 @@ class Settings(BaseSettings):
     ollama_num_threads: int = 6
     tokenizers_parallelism: bool = False
     pytorch_mps_high_watermark_ratio: float = 0.0
-    
+
     # LLM Generation Optimization
     max_tokens: int = 256  # Limit output length for faster generation (256 tokens ≈ 1-2s vs 3-4s)
-    
+
     # Caching Configuration
     agent_cache_size: int = 500  # LRU cache size for embeddings, searches, and answers
     embedding_batch_size: int = 32  # Batch size for bulk embedding operations
@@ -55,7 +57,9 @@ class Settings(BaseSettings):
     batch_size: int = 10
     user_agent: str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
     api_port: int = 8000  # API server port (reads API_PORT from .env, defaults to 8000)
-    enable_cache_warmup: bool = False  # Enable/disable response cache warmup on startup (reads ENABLE_CACHE_WARMUP from .env)
+    enable_cache_warmup: bool = (
+        False  # Enable/disable response cache warmup on startup (reads ENABLE_CACHE_WARMUP from .env)
+    )
 
     # AWS Configuration (optional)
     aws_region: Optional[str] = "us-west-1"

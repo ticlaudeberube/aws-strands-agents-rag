@@ -38,7 +38,7 @@ class MilvusVectorDB:
         self.port = port
         self.timeout = timeout
         self.pool_size = pool_size
-        
+
         try:
             # Try with authentication first
             self.client = MilvusClient(
@@ -51,7 +51,9 @@ class MilvusVectorDB:
         except ConnectionError as e:
             logger.error(f"❌ Cannot connect to Milvus at {uri}")
             logger.error("   Is Milvus running? Check: cd docker && docker-compose ps")
-            raise RuntimeError(f"Milvus connection failed at {host}:{port}. Make sure Milvus is running.") from e
+            raise RuntimeError(
+                f"Milvus connection failed at {host}:{port}. Make sure Milvus is running."
+            ) from e
         except Exception as auth_error:
             logger.warning(f"Auth failed, trying without credentials: {auth_error}")
             # Fall back to no auth
@@ -61,8 +63,10 @@ class MilvusVectorDB:
             except Exception as e:
                 logger.error(f"❌ Cannot connect to Milvus at {uri}")
                 logger.error("   Is Milvus running? Check: cd docker && docker-compose ps")
-                raise RuntimeError(f"Milvus connection failed at {host}:{port}. Make sure Milvus is running.") from e
-        
+                raise RuntimeError(
+                    f"Milvus connection failed at {host}:{port}. Make sure Milvus is running."
+                ) from e
+
         self.db_name = db_name
         self._ensure_database()
 
@@ -107,7 +111,7 @@ class MilvusVectorDB:
                 "metric_type": metric_type,
                 "index_type": index_type,
             }
-            
+
             # Set index-specific parameters
             if index_type == "HNSW":
                 index_params["params"] = {
@@ -118,7 +122,7 @@ class MilvusVectorDB:
                 index_params["params"] = {
                     "nlist": 128,  # Number of clusters
                 }
-            
+
             self.client.create_collection(
                 collection_name=collection_name,
                 dimension=embedding_dim,
@@ -157,31 +161,32 @@ class MilvusVectorDB:
         try:
             if metadata is None:
                 metadata = [{"source": "unknown"} for _ in texts]
-            
+
             # Prepare data with enhanced metadata extraction
             import json
             import time
             import random
+
             data = []
-            
+
             # Generate a base ID for this batch (to avoid duplicates across batches)
             base_id = int(time.time() * 1000) % (2**31 - 1)  # Use 31-bit safe timestamp
-            
+
             for idx, (emb, text, meta) in enumerate(zip(embeddings, texts, metadata)):
                 # Extract common metadata fields for scalar filtering
                 document_name = meta.get("document_name") or meta.get("filename", "")
                 source = meta.get("source", "unknown")
-                
+
                 # Store metadata as JSON string for full preservation
                 metadata_json = json.dumps(meta)
-                
+
                 # Generate unique ID: combine base timestamp with random number for uniqueness
                 unique_id = base_id + idx + random.randint(1, 999)
                 # Ensure it's a 31-bit positive integer for safety
                 unique_id = abs(unique_id) % (2**31 - 1)
                 if unique_id == 0:
                     unique_id = 1
-                
+
                 record = {
                     "id": unique_id,  # Use safe unique IDs
                     "vector": emb,  # Use 'vector' for MilvusClient API
@@ -197,22 +202,22 @@ class MilvusVectorDB:
                 data=data,
                 db_name=self.db_name,
             )
-            
+
             insert_count = result.get("insert_count", 0)
             if isinstance(insert_count, list):
                 insert_count = len(insert_count)
-            
+
             logger.info(f"Inserted {insert_count} embeddings into {collection_name}")
             logger.debug(f"  Insert result full: {result}")
             logger.debug(f"  Generated {len(data)} records with IDs: {[r['id'] for r in data]}")
-            
+
             # Flush the collection to ensure data is written to disk
             try:
                 self.client.flush(collection_name=collection_name, db_name=self.db_name)
                 logger.debug(f"  Flushed collection {collection_name}")
             except Exception as flush_error:
                 logger.warning(f"  Could not flush collection: {flush_error}")
-            
+
             return result.get("insert_count", [])
 
         except Exception as e:
@@ -245,7 +250,7 @@ class MilvusVectorDB:
             # Default search parameters optimized for HNSW
             if search_params is None:
                 search_params = {"ef": 64}  # Trade-off between speed and accuracy
-            
+
             results = self.client.search(
                 collection_name=collection_name,
                 data=[query_embedding],
@@ -267,22 +272,24 @@ class MilvusVectorDB:
                     # Stop after limit
                     if len(processed_results) >= limit:
                         break
-                    
+
                     entity = result.get("entity", {})
-                    processed_results.append({
-                        "text": entity.get("text", ""),
-                        "metadata": entity.get("metadata", "{}"),
-                        "document_name": entity.get("document_name", ""),
-                        "source": entity.get("source", ""),
-                        "distance": result.get("distance", 0),
-                    })
+                    processed_results.append(
+                        {
+                            "text": entity.get("text", ""),
+                            "metadata": entity.get("metadata", "{}"),
+                            "document_name": entity.get("document_name", ""),
+                            "source": entity.get("source", ""),
+                            "distance": result.get("distance", 0),
+                        }
+                    )
 
             return processed_results
 
         except Exception as e:
             logger.error(f"Search failed: {e}")
             raise
-    
+
     async def search_async(
         self,
         collection_name: str,
@@ -316,7 +323,7 @@ class MilvusVectorDB:
                 limit,
                 offset,
                 search_params,
-                filter_expr
+                filter_expr,
             )
 
     def delete_collection(self, collection_name: str) -> bool:
@@ -350,7 +357,7 @@ class MilvusVectorDB:
         except Exception as e:
             logger.error(f"Failed to list collections: {e}")
             return []
-    
+
     def search_by_source(
         self,
         collection_name: str,

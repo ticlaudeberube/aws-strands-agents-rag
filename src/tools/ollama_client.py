@@ -1,4 +1,5 @@
 """Ollama integration for embeddings and LLM."""
+
 import os
 import requests
 from requests.adapters import HTTPAdapter
@@ -34,10 +35,10 @@ class OllamaClient:
         self.embedding_endpoint = f"{host}/api/embeddings"
         self.generate_endpoint = f"{host}/api/generate"
         self.tags_endpoint = f"{host}/api/tags"
-        
+
         # Create session with connection pooling and retry logic
         self.session = requests.Session()
-        
+
         # Configure retry strategy
         retry_strategy = Retry(
             total=3,
@@ -45,7 +46,7 @@ class OllamaClient:
             status_forcelist=[429, 500, 502, 503, 504],
             allowed_methods=["HEAD", "GET", "DELETE", "POST"],
         )
-        
+
         # Apply retry strategy to both HTTP and HTTPS
         adapter = HTTPAdapter(
             max_retries=retry_strategy,
@@ -54,13 +55,13 @@ class OllamaClient:
         )
         self.session.mount("http://", adapter)
         self.session.mount("https://", adapter)
-    
+
     def is_available(self, timeout: Optional[int] = None) -> bool:
         """Check if Ollama server is available.
-        
+
         Args:
             timeout: Request timeout in seconds (uses default if None)
-            
+
         Returns:
             True if Ollama is available, False otherwise
         """
@@ -71,13 +72,13 @@ class OllamaClient:
         except Exception as e:
             logger.warning(f"Ollama server not available: {e}")
             return False
-    
+
     def get_available_models(self, timeout: Optional[int] = None) -> List[str]:
         """Get list of available models from Ollama.
-        
+
         Args:
             timeout: Request timeout in seconds (uses default if None)
-            
+
         Returns:
             List of available model names
         """
@@ -91,10 +92,10 @@ class OllamaClient:
         except Exception as e:
             logger.error(f"Failed to get models from Ollama: {e}")
             return []
-    
+
     def close(self):
         """Close the session and clean up resources."""
-        if hasattr(self, 'session'):
+        if hasattr(self, "session"):
             self.session.close()
             logger.info("Ollama client session closed")
 
@@ -115,7 +116,9 @@ class OllamaClient:
             Embedding vector
         """
         if model is None:
-            model = get_settings().ollama_embed_model or os.getenv("OLLAMA_EMBEDDING_MODEL", "nomic-embed-text:v1.5")
+            model = get_settings().ollama_embed_model or os.getenv(
+                "OLLAMA_EMBEDDING_MODEL", "nomic-embed-text:v1.5"
+            )
         _timeout = timeout if timeout is not None else self.timeout
         try:
             response = self.session.post(
@@ -127,14 +130,22 @@ class OllamaClient:
             result = response.json()
             return result.get("embedding", [])
         except requests.exceptions.ConnectionError as e:
-            logger.error(f"❌ Cannot connect to Ollama at {self.host}. Make sure Ollama is running: ollama serve")
-            raise RuntimeError(f"Ollama connection failed. Is Ollama running at {self.host}?") from e
+            logger.error(
+                f"❌ Cannot connect to Ollama at {self.host}. Make sure Ollama is running: ollama serve"
+            )
+            raise RuntimeError(
+                f"Ollama connection failed. Is Ollama running at {self.host}?"
+            ) from e
         except requests.exceptions.Timeout as e:
-            logger.error(f"❌ Ollama request timeout ({_timeout}s). Model '{model}' may be slow or not loaded. Check: ollama list")
+            logger.error(
+                f"❌ Ollama request timeout ({_timeout}s). Model '{model}' may be slow or not loaded. Check: ollama list"
+            )
             raise RuntimeError(f"Ollama request timed out. Try: ollama pull {model}") from e
         except requests.exceptions.HTTPError as e:
             if e.response.status_code == 404:
-                logger.error(f"❌ Model '{model}' not found in Ollama. Pull it with: ollama pull {model}")
+                logger.error(
+                    f"❌ Model '{model}' not found in Ollama. Pull it with: ollama pull {model}"
+                )
                 raise RuntimeError(f"Model '{model}' not found. Run: ollama pull {model}") from e
             logger.error(f"HTTP Error: {e.response.status_code} - {e.response.text}")
             raise
@@ -164,21 +175,20 @@ class OllamaClient:
             model = get_settings().ollama_embed_model or "nomic-embed-text:v1.5"
         if not texts:
             return []
-        
+
         # Default to 4 workers for parallel embedding requests
         if max_workers is None:
             max_workers = 4
-        
+
         embeddings = [None] * len(texts)  # Pre-allocate to maintain order
-        
+
         # Use ThreadPoolExecutor for parallel embedding requests
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             # Submit all tasks and track their original indices
             future_to_index = {
-                executor.submit(self.embed_text, text, model): idx
-                for idx, text in enumerate(texts)
+                executor.submit(self.embed_text, text, model): idx for idx, text in enumerate(texts)
             }
-            
+
             # Collect results maintaining original order
             completed = 0
             for future in as_completed(future_to_index):
@@ -191,7 +201,7 @@ class OllamaClient:
                 except Exception as e:
                     logger.error(f"Failed to embed text at index {idx}: {e}")
                     raise
-        
+
         logger.info(f"Batch embedded {len(texts)} texts using {max_workers} workers")
         return embeddings
 
@@ -226,14 +236,16 @@ class OllamaClient:
                 "stream": stream,
                 "temperature": temperature,
             }
-            
+
             # Only add num_predict if max_tokens is explicitly set and > 0
             if max_tokens is not None and max_tokens > 0:
                 payload["num_predict"] = max_tokens
-                logger.info(f"Using token limit: max_tokens={max_tokens} (num_predict={max_tokens})")
+                logger.info(
+                    f"Using token limit: max_tokens={max_tokens} (num_predict={max_tokens})"
+                )
             else:
                 logger.info(f"No token limit (max_tokens={max_tokens})")
-            
+
             response = self.session.post(
                 self.generate_endpoint,
                 json=payload,
@@ -243,11 +255,19 @@ class OllamaClient:
             result = response.json()
             return result.get("response", "")
         except requests.exceptions.ConnectionError as e:
-            logger.error(f"❌ Cannot connect to Ollama at {self.host}. Make sure Ollama is running: ollama serve")
-            raise RuntimeError(f"Ollama connection failed. Is Ollama running at {self.host}?") from e
+            logger.error(
+                f"❌ Cannot connect to Ollama at {self.host}. Make sure Ollama is running: ollama serve"
+            )
+            raise RuntimeError(
+                f"Ollama connection failed. Is Ollama running at {self.host}?"
+            ) from e
         except requests.exceptions.Timeout as e:
-            logger.error(f"❌ Ollama request timeout (120s). Model '{model}' may be slow or not loaded. Check: ollama list")
-            raise RuntimeError(f"Ollama request timed out loading model '{model}'. Try: ollama pull {model}") from e
+            logger.error(
+                f"❌ Ollama request timeout (120s). Model '{model}' may be slow or not loaded. Check: ollama list"
+            )
+            raise RuntimeError(
+                f"Ollama request timed out loading model '{model}'. Try: ollama pull {model}"
+            ) from e
         except Exception as e:
             logger.error(f"Generation failed: {e}")
             raise
@@ -276,7 +296,7 @@ class OllamaClient:
         if model is None:
             model = get_settings().ollama_model or "qwen2.5:0.5b"
         import json
-        
+
         try:
             payload = {
                 "prompt": prompt,
@@ -284,12 +304,12 @@ class OllamaClient:
                 "stream": True,
                 "temperature": temperature,
             }
-            
+
             # Only add num_predict if max_tokens is explicitly set and > 0
             if max_tokens is not None and max_tokens > 0:
                 payload["num_predict"] = max_tokens
                 logger.debug(f"Streaming with token limit: {max_tokens}")
-            
+
             response = self.session.post(
                 self.generate_endpoint,
                 json=payload,
@@ -297,16 +317,16 @@ class OllamaClient:
                 stream=True,
             )
             response.raise_for_status()
-            
+
             # Stream chunks as they arrive
             # Ollama returns newline-delimited JSON objects
             for line in response.iter_lines():
                 if line:
                     try:
                         # Decode bytes to string and parse JSON
-                        line_str = line.decode('utf-8') if isinstance(line, bytes) else line
+                        line_str = line.decode("utf-8") if isinstance(line, bytes) else line
                         chunk_data = json.loads(line_str)
-                        
+
                         # Extract the response chunk from the JSON
                         chunk = chunk_data.get("response", "")
                         if chunk:
@@ -318,12 +338,17 @@ class OllamaClient:
                         logger.debug(f"Failed to process chunk: {e}")
                         continue
         except requests.exceptions.ConnectionError as e:
-            logger.error(f"❌ Cannot connect to Ollama at {self.host}. Make sure Ollama is running: ollama serve")
-            raise RuntimeError(f"Ollama connection failed. Is Ollama running at {self.host}?") from e
+            logger.error(
+                f"❌ Cannot connect to Ollama at {self.host}. Make sure Ollama is running: ollama serve"
+            )
+            raise RuntimeError(
+                f"Ollama connection failed. Is Ollama running at {self.host}?"
+            ) from e
         except requests.exceptions.Timeout as e:
-            logger.error(f"❌ Ollama streaming timeout (120s). Model '{model}' may be slow or not loaded.")
+            logger.error(
+                f"❌ Ollama streaming timeout (120s). Model '{model}' may be slow or not loaded."
+            )
             raise RuntimeError(f"Ollama request timed out. Try: ollama pull {model}") from e
         except Exception as e:
             logger.error(f"Stream generation failed: {e}")
             raise
-

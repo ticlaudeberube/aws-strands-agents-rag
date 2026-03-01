@@ -8,11 +8,11 @@ logger = logging.getLogger(__name__)
 
 class KnowledgeBaseSkill:
     """Skill for managing the knowledge base.
-    
+
     This skill provides tools for adding, removing, and managing documents
     in the vector database.
     """
-    
+
     # Skill documentation
     SKILL_DESCRIPTION = """
     # Knowledge Base Skill
@@ -28,16 +28,16 @@ class KnowledgeBaseSkill:
     - Extend the knowledge base with new content
     - Update knowledge base as new information arrives
     """
-    
+
     @staticmethod
     def register_tools(registry: ToolRegistry, agent) -> None:
         """Register knowledge base management tools with the agent.
-        
+
         Args:
             registry: Tool registry to register with
             agent: StrandsRAGAgent instance
         """
-        
+
         # Tool 1: add_documents
         registry.register_tool(
             ToolDefinition(
@@ -57,5 +57,5 @@ class KnowledgeBaseSkill:
                 skill_category="knowledge_base",
             )
         )
-        
+
         logger.info("Knowledge base skill registered (1 tool)")

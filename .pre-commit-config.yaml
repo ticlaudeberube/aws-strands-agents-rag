@@ -1,0 +1,24 @@
+# Pre-commit hooks configuration for automated code formatting and linting
+# See https://pre-commit.com for more information
+# Note: Pre-commit runs only on staged files by default
+
+repos:
+  - repo: https://github.com/psf/black
+    rev: 24.1.1
+    hooks:
+      - id: black
+        language_version: python3.13
+        args: ["--line-length=100"]
+        stages: [pre-commit]
+        types: [python]
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.2.1
+    hooks:
+      - id: ruff
+        args: ["--fix"]
+        stages: [pre-commit]
+        types: [python]
+      - id: ruff-format
+        stages: [pre-commit]
+        types: [python]

@@ -37,9 +37,10 @@ dev = [
     "pytest-timeout>=2.1.0",
     "pytest-xdist>=3.3.1",
     "responses>=0.23.1",
-    "black>=23.0.0",
-    "ruff>=0.1.0",
+    "black>=26.1.0",
+    "ruff>=0.15.4",
     "mypy>=1.0.0",
+    "pre-commit>=3.0.0",
 ]
 
 [tool.setuptools]

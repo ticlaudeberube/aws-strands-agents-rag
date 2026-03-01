@@ -1384,18 +1384,18 @@ class StrandsRAGAgent:
                 is_multi_collection = True
                 logger.info(f"Multi-collection search enabled: {collections}")
             
-            # Check answer cache first (exact match)
+            # Check response cache first (exact match)
             cache_key = (question, tuple(collections), top_k)
             logger.debug(f"[CACHE_DEBUG] Cache key: question='{question[:40]}...', collections={collections}, top_k={top_k}")
             if cache_key in self.answer_cache:
-                logger.info(f"✓ Answer cache hit (exact match)")
+                logger.info(f"✓ response cache hit (exact match)")
                 cache_hits['answer_cache'] = True
                 cached_result = self.answer_cache[cache_key]
                 total_time = time.time() - start_time
                 logger.info(f"Total response time (cached): {total_time:.2f}s")
                 return cached_result
             else:
-                logger.debug(f"[CACHE_DEBUG] Answer cache miss: {len(self.answer_cache)} items in cache")
+                logger.debug(f"[CACHE_DEBUG] response cache miss: {len(self.answer_cache)} items in cache")
                 cache_hits['answer_cache'] = False
             
             # Generate embedding for semantic cache check
@@ -1418,7 +1418,7 @@ class StrandsRAGAgent:
                     sources = cached_response.get("sources", [])
                     result_tuple = (answer, sources)
                     
-                    # Also cache in answer cache for faster subsequent exact matches
+                    # Also cache in response cache for faster subsequent exact matches
                     self._add_to_cache(self.answer_cache, cache_key, result_tuple)
                     
                     total_time = time.time() - start_time
@@ -1479,7 +1479,7 @@ class StrandsRAGAgent:
             # Cache the result with sources
             result_tuple = (answer, sources)
             self._add_to_cache(self.answer_cache, cache_key, result_tuple)
-            logger.info(f"✓ Answer cached. Cache size now: {len(self.answer_cache)} items")
+            logger.info(f"✓ response cached. Cache size now: {len(self.answer_cache)} items")
             
             # Store in persistent response cache for future semantic matches
             if self.response_cache and question_embedding is not None:
@@ -1530,7 +1530,7 @@ class StrandsRAGAgent:
         """Answer a question bypassing all caches - queries LLM directly.
         
         This method skips:
-        - Answer cache (exact match)
+        - response cache (exact match)
         - Embedding cache
         - Search cache  
         - Response cache (semantic match)
@@ -1600,7 +1600,7 @@ class StrandsRAGAgent:
                 source_attribution=""
             )
             
-            # Generate answer (fresh LLM generation, don't use answer cache)
+            # Generate answer (fresh LLM generation, don't use response cache)
             generation_start = time.time()
             # Use provided parameters or defaults from settings
             use_temperature = temperature if temperature is not None else 0.1
@@ -1904,7 +1904,7 @@ class StrandsRAGAgent:
         Streams chunks of the answer in real-time with fresh knowledge base context (no web search).
         
         Skips:
-        - Answer cache (exact match)
+        - response cache (exact match)
         - Embedding cache
         - Search cache
         - Response cache (semantic match)

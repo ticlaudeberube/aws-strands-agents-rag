@@ -28,7 +28,7 @@ User Question
     ↓
 [3] Response Cache (8-15s → 33ms semantic hit)
     ↓
-[4] Answer Cache (LRU, session-level)
+[4] response cache (LRU, session-level)
     ↓
 Full RAG Pipeline (Generation: 8-15s)
 ```
@@ -137,7 +137,7 @@ Q3: "Tell me about Milvus"  (semantically similar to Q1, SAME product)
   → User gets answer instantly!
 ```
 
-### Layer 4: Answer Cache (Session-Level, Exact Match)
+### Layer 4: response cache (Session-Level, Exact Match)
 **Purpose**: Fast exact-match answer retrieval within same session/request
 
 ```python
@@ -322,7 +322,7 @@ Total:                   13.14s
 ```
 Q: "What is Milvus?" (asked before)
 
-Answer cache hit:         0.00s  (instant)
+response cache hit:         0.00s  (instant)
 ─────────────────────────────
 Total:                    0.03s  (✅ 400x faster!)
 ```

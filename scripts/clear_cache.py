@@ -7,7 +7,7 @@ Usage:
 This will clear:
 - Embedding cache (query embeddings)
 - Search cache (retrieval results)
-- Answer cache (generated answers)
+- response cache (generated answers)
 - Response cache (semantic matching cache)
 """
 
@@ -65,7 +65,7 @@ def main():
         logger.info(f"\nCache sizes before clearing:")
         logger.info(f"  Embedding cache: {len(agent.embedding_cache)} items")
         logger.info(f"  Search cache: {len(agent.search_cache)} items")
-        logger.info(f"  Answer cache: {len(agent.answer_cache)} items")
+        logger.info(f"  response cache: {len(agent.answer_cache)} items")
         
         if agent.response_cache:
             try:
@@ -84,7 +84,7 @@ def main():
         logger.info(f"\nCache sizes after clearing:")
         logger.info(f"  Embedding cache: {len(agent.embedding_cache)} items")
         logger.info(f"  Search cache: {len(agent.search_cache)} items")
-        logger.info(f"  Answer cache: {len(agent.answer_cache)} items")
+        logger.info(f"  response cache: {len(agent.answer_cache)} items")
         
         if agent.response_cache:
             try:

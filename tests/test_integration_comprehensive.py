@@ -6,7 +6,7 @@ Tests the complete end-to-end flow:
   - Cache validation with entity extraction
   - Force web search (globe icon) feature
   - Source deduplication and formatting
-  - Pre-loaded answers and answer cache
+  - Pre-loaded answers and response cache
   - Cross-product hallucination prevention
 
 Run: python test_integration_comprehensive.py

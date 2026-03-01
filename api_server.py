@@ -135,7 +135,7 @@ async def lifespan(app: FastAPI):
         logger.info("\nInitializing StrandsRAGAgent...")
         strands_agent = StrandsRAGAgent(settings)
         logger.info("✓ StrandsRAGAgent initialized")
-        logger.info(f"  - Multi-layer caching enabled (embedding, search, answer cache)")
+        logger.info(f"  - Multi-layer caching enabled (embedding, search, response cache)")
         logger.info(f"  - Security attack detection enabled")
         logger.info(f"  - Scope validation enabled")
         logger.info(f"  - Semantic response caching enabled")
@@ -1114,7 +1114,7 @@ async def clear_cache():
     Clears:
     - Embedding cache (query embeddings)
     - Search cache (retrieval results)
-    - Answer cache (generated answers)
+    - response cache (generated answers)
     - Response cache (semantic matching cache)
     
     Returns immediately without waiting for dependent operations.

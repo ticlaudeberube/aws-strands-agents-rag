@@ -23,7 +23,7 @@ SAMPLE_DOCS = [
     allows language models to provide more accurate and contextual answers.""",
     
     """Ollama is a local LLM runner that allows you to run large language models on your own hardware without 
-    cloud dependencies. Models like Mistral and Llama can be run locally with Ollama, making it privacy-friendly 
+    cloud dependencies. Models like Qwen2.5:0.5b and Llama can be run locally with Ollama, making it privacy-friendly 
     and cost-effective for local AI applications.""",
     
     """Embeddings are numerical representations of text. They capture semantic meaning in a high-dimensional space. 

@@ -51,7 +51,13 @@ This is an AWS Strands Agents RAG system that uses Milvus for vector database op
 - Consolidate related topics into single comprehensive guides
 - Use cross-references (links) to related documentation instead of copy-pasting content
 
+## Feature development guidelines
+- You should not implement new features without implicitly requesting  permission to do so. Always ask for clarification and approval before implementing new features or making significant changes to the codebase. This ensures that all changes align with project goals and maintain code quality.
+
+When developing new features or making changes to the codebase:
 ## Helpful Commands
 - Document loaders: `document-loaders/load_milvus_docs_ollama.py`
 - Interactive chat: `python chatbots/interactive_chat.py`
 - API server: `python api_server.py`
+- Run tests: `pytest`
+- Run with coverage: `pytest --cov`

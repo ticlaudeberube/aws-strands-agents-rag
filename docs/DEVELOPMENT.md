@@ -354,7 +354,7 @@ embeddings = client.embed_texts(["text1", "text2"])
 # Generate text
 response = client.generate(
     prompt="What is AI?",
-    model="Qwen2.5:0.5b"
+    model="qwen2.5:0.5b"
 )
 ```
 
@@ -539,19 +539,19 @@ class OllamaClient:
     
     def embed_text(
         text: str,
-        model: str = "all-minilm"
+        model: str = "nomic-embed-text:v1.5"
     ) -> List[float]
     
     def embed_texts(
         texts: List[str],
-        model: str = "all-minilm",
+        model: str = "nomic-embed-text:v1.5",
         batch_size: int = 32,
         max_workers: Optional[int] = None
     ) -> List[List[float]]
     
     def generate(
         prompt: str,
-        model: str = "Qwen2.5:0.5b",
+        model: str = "qwen2.5:0.5b",
         stream: bool = False,
         temperature: float = 0.1
     ) -> str

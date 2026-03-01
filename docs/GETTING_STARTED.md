@@ -413,7 +413,7 @@ docker-compose -f docker/docker-compose.yml up -d
 
 **Solutions:**
 1. Reduce batch size: Change `BATCH_SIZE=5` in .env
-2. Use smaller models: Switch to `all-minilm` for embeddings
+2. Use smaller models: Switch to `nomic-embed-text:v1.5` for embeddings
 3. Reduce chunk size: In loaders, use `chunk_size=200`
 4. Reduce top_k: Use `top_k=3` in queries
 
@@ -425,10 +425,10 @@ docker-compose -f docker/docker-compose.yml up -d
 ollama list
 
 # Pull missing model
-ollama pull all-minilm
+ollama pull nomic-embed-text:v1.5
 
 # Verify installation
-ollama run all-minilm "test"
+ollama run nomic-embed-text:v1.5 "test"
 ```
 
 ### Issue: Port already in use
@@ -490,7 +490,7 @@ For detailed performance tuning guide, see [LATENCY_OPTIMIZATION.md](LATENCY_OPT
 
 **Quick Performance Tips:**
 
-1. **Current Setup is Optimized**: Default neural-chat + top_k=3 achieves 3-5s / <100ms cached
+1. **Current Setup is Optimized**: Default Qwen + top_k=3 achieves 3-5s / <100ms cached
 2. **For Even Faster**: Try `orca-mini` model (1-2s, lower quality)
 3. **For Better Quality**: Use more context (`top_k=5`) and longer responses (`max_tokens=512`)
 4. **Cache Warm-up**: Run `python document-loaders/sync_responses_cache.py` for <100ms responses

@@ -16,8 +16,8 @@ class Settings(BaseSettings):
     
     # Ollama Configuration
     ollama_host: str = "http://localhost:11434"
-    ollama_model: str = "neural-chat"  # Faster than neural-chat (~2-3x speedup)
-    ollama_embed_model: str = "nomic-embed-text:v1.5"
+    ollama_model: str = os.getenv("OLLAMA_MODEL", "qwen2.5:0.5b")
+    ollama_embed_model: str = os.getenv("OLLAMA_EMBEDDING_MODEL", "nomic-embed-text:v1.5")
     ollama_timeout: int = 30  # Request timeout in seconds
     ollama_pool_size: int = 5  # Connection pool size
 

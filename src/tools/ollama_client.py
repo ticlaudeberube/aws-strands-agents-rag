@@ -7,6 +7,8 @@ import logging
 from typing import List, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+from src.config.settings import get_settings
+
 logger = logging.getLogger(__name__)
 
 
@@ -99,19 +101,21 @@ class OllamaClient:
     def embed_text(
         self,
         text: str,
-        model: str = "all-minilm",
+        model: Optional[str] = None,
         timeout: Optional[int] = None,
     ) -> List[float]:
         """Generate embedding for text using Ollama.
 
         Args:
             text: Text to embed
-            model: Ollama model name for embeddings
+            model: Ollama model name for embeddings (uses OLLAMA_EMBED_MODEL from config if None)
             timeout: Request timeout in seconds (uses default if None)
 
         Returns:
             Embedding vector
         """
+        if model is None:
+            model = get_settings().ollama_embed_model or os.getenv("OLLAMA_EMBEDDING_MODEL", "nomic-embed-text:v1.5")
         _timeout = timeout if timeout is not None else self.timeout
         try:
             response = self.session.post(
@@ -141,7 +145,7 @@ class OllamaClient:
     def embed_texts(
         self,
         texts: List[str],
-        model: str = "all-minilm",
+        model: Optional[str] = None,
         batch_size: int = 32,
         max_workers: Optional[int] = None,
     ) -> List[List[float]]:
@@ -149,13 +153,15 @@ class OllamaClient:
 
         Args:
             texts: List of texts to embed
-            model: Ollama model name for embeddings
+            model: Ollama model name for embeddings (uses OLLAMA_EMBED_MODEL from config if None)
             batch_size: Size of each batch for processing
             max_workers: Maximum number of concurrent workers (defaults to 4)
 
         Returns:
             List of embedding vectors in same order as input
         """
+        if model is None:
+            model = get_settings().ollama_embed_model or "nomic-embed-text:v1.5"
         if not texts:
             return []
         
@@ -192,7 +198,7 @@ class OllamaClient:
     def generate(
         self,
         prompt: str,
-        model: str = "neural-chat",
+        model: Optional[str] = None,
         stream: bool = False,
         temperature: float = 0.1,
         max_tokens: int = None,
@@ -201,7 +207,7 @@ class OllamaClient:
 
         Args:
             prompt: Input prompt
-            model: Ollama model name
+            model: Ollama model name (uses OLLAMA_MODEL from config if None)
             stream: Whether to stream response
             temperature: Temperature for generation (0-2, lower=more deterministic)
             max_tokens: Maximum number of tokens to generate (Ollama uses 'num_predict', None = no limit)
@@ -209,6 +215,8 @@ class OllamaClient:
         Returns:
             Generated text
         """
+        if model is None:
+            model = get_settings().ollama_model or "qwen2.5:0.5b"
         try:
             # Ollama uses 'num_predict' instead of 'max_tokens'
             # num_predict: number of tokens to predict (-1 = infinite, default behavior)
@@ -247,7 +255,7 @@ class OllamaClient:
     def generate_stream(
         self,
         prompt: str,
-        model: str = "neural-chat",
+        model: Optional[str] = None,
         temperature: float = 0.1,
         max_tokens: int = None,
     ):
@@ -258,13 +266,15 @@ class OllamaClient:
 
         Args:
             prompt: Input prompt
-            model: Ollama model name
+            model: Ollama model name (uses OLLAMA_MODEL from config if None)
             temperature: Temperature for generation (0-2, lower=more deterministic)
             max_tokens: Maximum number of tokens to generate (Ollama uses 'num_predict', None = no limit)
 
         Yields:
             Chunks of generated text
         """
+        if model is None:
+            model = get_settings().ollama_model or "qwen2.5:0.5b"
         import json
         
         try:

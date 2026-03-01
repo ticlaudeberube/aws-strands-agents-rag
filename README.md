@@ -335,8 +335,8 @@ cd ..
 # Download and install from https://ollama.ai
 
 # Pull required models
-ollama pull Qwen2.5:0.5b      # For text generation
-ollama pull all-minilm   # For embeddings (or nomic-embed-text)
+ollama pull qwen2.5:0.5b      # For text generation
+ollama pull nomic-embed-text:v1.5   # For embeddings (or nomic-embed-text)
 
 # Start Ollama server (usually runs on http://localhost:11434)
 ollama serve
@@ -394,7 +394,7 @@ uv run python examples/interactive_chat.py
 ```env
 # Ollama Configuration
 OLLAMA_HOST=http://localhost:11434
-OLLAMA_MODEL=Qwen2.5:0.5b
+OLLAMA_MODEL=qwen2.5:0.5b
 OLLAMA_EMBED_MODEL=nomic-embed-text:v1.5
 
 # Milvus Configuration
@@ -508,13 +508,13 @@ agent.agent.add_tool(custom_tool)
 ## Available Ollama Models
 
 ### For Text Generation
-- `Qwen2.5:0.5b` - Fast, high-quality reasoning
+- `qwen2.5:0.5b` - Fast, high-quality reasoning
 - `llama2` - Meta's LLama 2 model
 - `neural-chat` - Intel's Neural Chat
 - `dolphin-mixtral` - Enhanced Mixtral variant
 
 ### For Embeddings
-- `all-minilm` - Fast embedding model (384-dim)
+- `nomic-embed-text:v1.5` - Fast embedding model (384-dim)
 - `nomic-embed-text` - High-quality embeddings (768-dim)
 - `all-mpnet-base-v2` - MiniLM variant
 
@@ -975,7 +975,7 @@ See [Strands Agents Deployment Guide](https://strandsagents.com/latest/documenta
 4. **Filtering**: Use source filters to narrow search scope and improve performance
 5. **Docker Optimization**: Run `./docker/optimize.sh --all` for automatic system and Docker tuning
 6. **Index Type**: Use HNSW (default) for balanced speed/accuracy, IVF_FLAT for large datasets
-7. **Model Selection**: Use smaller embedding models (e.g., all-minilm) for faster inference
+7. **Model Selection**: Use smaller embedding models (e.g., nomic-embed-text:v1.5) for faster inference
 8. **Resource Allocation**: Docker setup allocates:
    - Milvus: 4 CPU, 8GB RAM, 2GB cache
    - MinIO: 2 CPU, 2GB RAM

@@ -397,7 +397,7 @@ OLLAMA_HOST=http://localhost:11434         # Local development
 # OR for Docker:
 OLLAMA_HOST=http://host.docker.internal:11434  # Docker Desktop
 
-OLLAMA_MODEL=Qwen2.5:0.5b                # LLM model
+OLLAMA_MODEL=qwen2.5:0.5b                # LLM model
 OLLAMA_EMBED_MODEL=nomic-embed-text:v1.5  # Embedding model
 
 # Milvus Configuration  

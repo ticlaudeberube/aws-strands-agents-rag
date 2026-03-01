@@ -23,7 +23,7 @@ class EmbeddingProvider:
             os.environ['OLLAMA_NUM_THREADS'] = '4'
         
         # Check for both environment variable names for compatibility
-        _model = model or os.getenv('OLLAMA_EMBEDDING_MODEL') or os.getenv('OLLAMA_EMBED_MODEL') or 'nomic-embed-text:v1.5'
+        _model = model or os.getenv('OLLAMA_EMBEDDING_MODEL', 'nomic-embed-text:v1.5')
         
         if isinstance(text, list):
             return [ollama.embeddings(model=_model, prompt=t)["embedding"] for t in text]

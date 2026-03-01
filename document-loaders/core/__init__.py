@@ -31,7 +31,7 @@ class MilvusUtils:
     
     # Deprecated methods for compatibility
     @staticmethod
-    def embed_text_ollama(text, model=None):
+    def embed_text_ollama(text, model=os.getenv("OLLAMA_MODEL", qwen2.5:0.5b)):
         """Deprecated: Use embed_text(provider='ollama') instead"""
         return EmbeddingProvider.embed_text(text, provider='ollama', model=model)
 

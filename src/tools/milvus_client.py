@@ -1,7 +1,7 @@
 """Milvus vector database utilities."""
 
-from pymilvus import MilvusClient, Collection
-from typing import List, Optional, Dict, Any, Tuple
+from pymilvus import MilvusClient
+from typing import List, Optional, Dict, Any
 import logging
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
@@ -50,7 +50,7 @@ class MilvusVectorDB:
             logger.info(f"Connected to Milvus at {uri}")
         except ConnectionError as e:
             logger.error(f"❌ Cannot connect to Milvus at {uri}")
-            logger.error(f"   Is Milvus running? Check: cd docker && docker-compose ps")
+            logger.error("   Is Milvus running? Check: cd docker && docker-compose ps")
             raise RuntimeError(f"Milvus connection failed at {host}:{port}. Make sure Milvus is running.") from e
         except Exception as auth_error:
             logger.warning(f"Auth failed, trying without credentials: {auth_error}")
@@ -60,7 +60,7 @@ class MilvusVectorDB:
                 logger.info(f"Connected to Milvus at {uri} (without auth)")
             except Exception as e:
                 logger.error(f"❌ Cannot connect to Milvus at {uri}")
-                logger.error(f"   Is Milvus running? Check: cd docker && docker-compose ps")
+                logger.error("   Is Milvus running? Check: cd docker && docker-compose ps")
                 raise RuntimeError(f"Milvus connection failed at {host}:{port}. Make sure Milvus is running.") from e
         
         self.db_name = db_name

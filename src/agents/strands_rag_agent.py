@@ -5,10 +5,9 @@ import time
 import asyncio
 import re
 import json
-from typing import Optional, List, Dict, Tuple, AsyncIterator
+from typing import Optional, List, Dict, Tuple
 from collections import OrderedDict
 from dataclasses import dataclass
-from concurrent.futures import ThreadPoolExecutor
 
 from src.config import Settings
 from src.tools import MilvusVectorDB, OllamaClient, MilvusResponseCache, WebSearchClient
@@ -41,7 +40,7 @@ def convert_markdown_links_to_html(text: str) -> str:
     converted = re.sub(pattern, replace_with_html, text)
     
     if converted != text:
-        logger.info(f"[MARKDOWN_CONVERSION] Converted markdown links to HTML in response")
+        logger.info("[MARKDOWN_CONVERSION] Converted markdown links to HTML in response")
     
     return converted
 
@@ -509,7 +508,7 @@ class StrandsRAGAgent:
         
         # If no comparison keywords, it's definitely not a comparison
         if not has_comparison_keyword:
-            logger.debug(f"Quick check: No comparison keywords found, skipping LLM classification")
+            logger.debug("Quick check: No comparison keywords found, skipping LLM classification")
             return False, None
         
         try:
@@ -683,7 +682,7 @@ class StrandsRAGAgent:
             if web_search_count > 0:
                 logger.info(f"✓ Added {web_search_count} web search results ({time.time() - web_search_time:.1f}s)")
             else:
-                logger.warning(f"⚠️  No web search results - will use Milvus documentation only")
+                logger.warning("⚠️  No web search results - will use Milvus documentation only")
             
             # Get context from Milvus documentation
             # OPTIMIZATION: Combined into single retrieval for both products
@@ -789,10 +788,10 @@ class StrandsRAGAgent:
             for chunk in product1_context[:2]:
                 output += f"- {chunk[:120]}\n"
         
-        output += f"\n### Key Considerations\n"
-        output += f"- Compare on vector indexing methods (HNSW, IVF, etc.)\n"
-        output += f"- Evaluate query performance and scalability\n"
-        output += f"- Check supported vector dimensions and data types\n"
+        output += "\n### Key Considerations\n"
+        output += "- Compare on vector indexing methods (HNSW, IVF, etc.)\n"
+        output += "- Evaluate query performance and scalability\n"
+        output += "- Check supported vector dimensions and data types\n"
         
         return output
 
@@ -835,9 +834,9 @@ class StrandsRAGAgent:
             embed_time = time.time() - embed_start
             
             if embedding_cached:
-                logger.info(f"✓ Embedding cache hit")
+                logger.info("✓ Embedding cache hit")
             else:
-                logger.info(f"✓ Embedding generated and cached")
+                logger.info("✓ Embedding generated and cached")
             logger.debug(f"Embedding generation took {embed_time:.2f}s")
 
             # Build filter if source specified
@@ -879,7 +878,7 @@ class StrandsRAGAgent:
                     try:
                         import json
                         metadata = json.loads(metadata)
-                    except:
+                    except (json.JSONDecodeError, ValueError):
                         metadata = {}
                 
                 doc_name = result.get("document_name") or metadata.get("document_name") or metadata.get("filename") or metadata.get("source")
@@ -905,7 +904,7 @@ class StrandsRAGAgent:
             self._add_to_cache(self.search_cache, cache_key, result_tuple)
             
             if not context:
-                logger.warning(f"⚠️  No context chunks retrieved! Collection may be empty or embedding mismatch.")
+                logger.warning("⚠️  No context chunks retrieved! Collection may be empty or embedding mismatch.")
             else:
                 logger.info(f"✓ Retrieved {len(context)} relevant documents")
             
@@ -1388,7 +1387,7 @@ class StrandsRAGAgent:
             cache_key = (question, tuple(collections), top_k)
             logger.debug(f"[CACHE_DEBUG] Cache key: question='{question[:40]}...', collections={collections}, top_k={top_k}")
             if cache_key in self.answer_cache:
-                logger.info(f"✓ response cache hit (exact match)")
+                logger.info("✓ response cache hit (exact match)")
                 cache_hits['answer_cache'] = True
                 cached_result = self.answer_cache[cache_key]
                 total_time = time.time() - start_time
@@ -1405,7 +1404,7 @@ class StrandsRAGAgent:
             
             embed_time = time.time() - embed_start
             embedding_time = embed_time
-            logger.debug(f"Embedding check took {embed_time:.2f}s" + (f" (cached)" if embedding_cached else ""))
+            logger.debug(f"Embedding check took {embed_time:.2f}s" + (" (cached)" if embedding_cached else ""))
 
             
             # Check persistent response cache (semantic similarity)
@@ -1423,12 +1422,12 @@ class StrandsRAGAgent:
                     
                     total_time = time.time() - start_time
                     logger.info(f"Total response time (semantic cache): {total_time:.2f}s")
-                    logger.info(f"✓ Used cached answer - NO web search needed (answer found from pre-generated Q&A)")
+                    logger.info("✓ Used cached answer - NO web search needed (answer found from pre-generated Q&A)")
                     return result_tuple
                 else:
-                    logger.info(f"Cache miss: No semantically similar cached answer found")
+                    logger.info("Cache miss: No semantically similar cached answer found")
             else:
-                logger.debug(f"Response cache not available or no embedding generated")
+                logger.debug("Response cache not available or no embedding generated")
             
             # Retrieve relevant context (from single or multiple collections)
             retrieval_start = time.time()
@@ -1499,7 +1498,7 @@ class StrandsRAGAgent:
                         )
                         logger.info(f"✓ Response cached (confidence: {confidence_score:.1%})")
                     else:
-                        logger.info(f"Skipping cache for rejection message")
+                        logger.info("Skipping cache for rejection message")
                 except Exception as e:
                     logger.warning(f"Failed to cache response: {e}")
             
@@ -1553,21 +1552,21 @@ class StrandsRAGAgent:
             
             # SECURITY CHECK: Detect obvious attack patterns first (no LLM overhead)
             if self._is_security_attack(question):
-                logger.info(f"Question rejected: security attack detected")
+                logger.info("Question rejected: security attack detected")
                 answer = "I can only help with questions about Milvus, vector databases, and RAG systems."
                 sources = []
                 return (answer, sources)
             
             # SCOPE CHECK: Use LLM to determine if question is about Milvus/vectors/RAG
             if not self._is_question_in_scope(question):
-                logger.info(f"Question is out-of-scope, skipping retrieval")
+                logger.info("Question is out-of-scope, skipping retrieval")
                 answer = "I can only help with questions about Milvus, vector databases, and RAG systems."
                 sources = []
                 return (answer, sources)
             
             # Generate fresh embedding (don't use cache)
             embed_start = time.time()
-            question_embedding = self.ollama_client.embed_text(
+            self.ollama_client.embed_text(
                 question,
                 model=self.settings.ollama_embed_model,
             )
@@ -1658,7 +1657,7 @@ class StrandsRAGAgent:
                 # Generate optimized search query for web search
                 web_search_query = self._generate_web_search_query(question)
                 logger.info(f"[WEB_SEARCH_ONLY] Web search query: '{web_search_query[:50]}'")
-                logger.info(f"[WEB_SEARCH_ONLY] About to call self.web_search.search() with max_results=5")
+                logger.info("[WEB_SEARCH_ONLY] About to call self.web_search.search() with max_results=5")
                 
                 web_results = self.web_search.search(
                     query=web_search_query,
@@ -1688,8 +1687,8 @@ class StrandsRAGAgent:
                     logger.info(f"✓ Web search completed in {web_search_time:.2f}s - {len(sources)} sources appended")
                 else:
                     logger.warning(f"[WEB_SEARCH_ONLY] ⚠️ Web search returned NO RESULTS for query: '{web_search_query[:60]}'")
-                    logger.warning(f"[WEB_SEARCH_ONLY] ⚠️ This usually means TAVILY_API_KEY is not set. Check your environment variables.")
-                    logger.warning(f"[WEB_SEARCH_ONLY] ⚠️ To enable web search: export TAVILY_API_KEY='your-key-here'")
+                    logger.warning("[WEB_SEARCH_ONLY] ⚠️ This usually means TAVILY_API_KEY is not set. Check your environment variables.")
+                    logger.warning("[WEB_SEARCH_ONLY] ⚠️ To enable web search: export TAVILY_API_KEY='your-key-here'")
                     
             except Exception as e:
                 logger.error(f"[WEB_SEARCH_ONLY] Exception during web search: {e}", exc_info=True)
@@ -1704,7 +1703,7 @@ class StrandsRAGAgent:
                 logger.info(f"[WEB_SEARCH_ONLY] ✓ Using {len(sources)} web search results as context")
             else:
                 web_context = "No web search results found."
-                logger.warning(f"[WEB_SEARCH_ONLY] ⚠️ No web search results available. Check that TAVILY_API_KEY is set.")
+                logger.warning("[WEB_SEARCH_ONLY] ⚠️ No web search results available. Check that TAVILY_API_KEY is set.")
             
             # Format the web search prompt with formatting rules
             rag_prompt = prompts.format_web_search_prompt(web_context, question)
@@ -1775,13 +1774,13 @@ class StrandsRAGAgent:
         try:
             # SECURITY CHECK: Detect obvious attack patterns first (no LLM overhead)
             if self._is_security_attack(question):
-                logger.info(f"Question rejected: security attack detected")
+                logger.info("Question rejected: security attack detected")
                 yield "I can only help with questions about Milvus, vector databases, and RAG systems."
                 return
             
             # SCOPE CHECK: Use LLM to determine if question is about Milvus/vectors/RAG
             if not self._is_question_in_scope(question):
-                logger.info(f"Question is out-of-scope, skipping retrieval")
+                logger.info("Question is out-of-scope, skipping retrieval")
                 yield "I can only help with questions about Milvus, vector databases, and RAG systems."
                 return
             

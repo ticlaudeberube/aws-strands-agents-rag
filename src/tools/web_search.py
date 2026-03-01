@@ -8,7 +8,6 @@ import requests
 import logging
 from typing import List, Dict, Optional
 import json
-from urllib.parse import quote
 import os
 
 logger = logging.getLogger(__name__)
@@ -124,8 +123,8 @@ class WebSearchClient:
             api_key_preview = f"{self.tavily.api_key[:10]}..." if len(self.tavily.api_key) > 10 else "***"
             logger.info(f"[WEB_SEARCH_INIT] ✓ Tavily API key loaded: {api_key_preview}")
         else:
-            logger.warning(f"[WEB_SEARCH_INIT] ⚠️ NO Tavily API key found!")
-            logger.warning(f"[WEB_SEARCH_INIT] ⚠️ Check that TAVILY_API_KEY is set in .env or environment")
+            logger.warning("[WEB_SEARCH_INIT] ⚠️ NO Tavily API key found!")
+            logger.warning("[WEB_SEARCH_INIT] ⚠️ Check that TAVILY_API_KEY is set in .env or environment")
 
     def search(
         self,

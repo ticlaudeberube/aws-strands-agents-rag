@@ -10,9 +10,8 @@ This module implements a semantic response cache that:
 
 import json
 import logging
-import time
 import re
-from typing import Optional, Dict, Tuple, List
+from typing import Optional, Dict, List
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -99,7 +98,7 @@ class MilvusResponseCache:
         # If we can't identify entities, assume it's OK (conservative approach)
         # This prevents rejecting valid cached answers just because no entity was extracted
         if not current_entity or not cached_entity:
-            logger.debug(f"[CACHE_VALIDATE] Could not extract entities - allowing cache hit (conservative)")
+            logger.debug("[CACHE_VALIDATE] Could not extract entities - allowing cache hit (conservative)")
             return True
         
         # If asking about the same entity, ALWAYS accept - no further validation needed
@@ -125,7 +124,7 @@ class MilvusResponseCache:
             logger.debug(f"[CACHE_VALIDATE] Different entity: Answer mentions '{current_entity}' but is cached for '{cached_entity}' - rejecting")
             return False
         
-        logger.debug(f"[CACHE_VALIDATE] Different entity but answer doesn't mention current entity - allowing cache")
+        logger.debug("[CACHE_VALIDATE] Different entity but answer doesn't mention current entity - allowing cache")
         return True
     
     def _ensure_collection(self):
@@ -191,8 +190,8 @@ class MilvusResponseCache:
             logger.debug(f"[CACHE_DEBUG] Search returned {len(results) if results else 0} results")
             
             if not results:
-                logger.debug(f"[CACHE_DEBUG] No results returned from Milvus search")
-                logger.info(f"Cache search: No cached responses found for query (empty results)")
+                logger.debug("[CACHE_DEBUG] No results returned from Milvus search")
+                logger.info("Cache search: No cached responses found for query (empty results)")
                 return None
             
             # Extract best match
@@ -226,7 +225,7 @@ class MilvusResponseCache:
                 # VALIDATE: Check if cached answer is relevant to current question
                 is_relevant = self._validate_cached_answer_relevance(question, cached_answer, cached_question)
                 if not is_relevant:
-                    logger.info(f"Cache semantically similar but entity mismatch - rejecting cache")
+                    logger.info("Cache semantically similar but entity mismatch - rejecting cache")
                     return None
                 
                 cache_entry = {
@@ -326,7 +325,7 @@ class MilvusResponseCache:
         """
         try:
             self.vector_db.delete_collection(self.CACHE_COLLECTION)
-            logger.info(f"✓ Cleared response cache")
+            logger.info("✓ Cleared response cache")
             self._ensure_collection()
             return True
         except Exception as e:

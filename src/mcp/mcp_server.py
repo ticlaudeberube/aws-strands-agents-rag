@@ -8,12 +8,11 @@ import logging
 import asyncio
 import json
 from typing import Any, Dict
-from pathlib import Path
 
 from src.config import Settings
 from src.agents.strands_rag_agent import StrandsRAGAgent
 from src.agents.skills import RetreivalSkill, AnswerGenerationSkill, KnowledgeBaseSkill
-from src.tools.tool_registry import get_registry, ToolDefinition
+from src.tools.tool_registry import get_registry
 
 logger = logging.getLogger(__name__)
 
@@ -281,7 +280,6 @@ class MCPServerInterface:
 
 
 if __name__ == "__main__":
-    import sys
     from src.config.settings import get_settings
     
     # Simple test server

@@ -11,14 +11,12 @@ import json
 import logging
 import sys
 from pathlib import Path
-
 from tqdm import tqdm
+from src.config.settings import get_settings  # noqa: E402
+from src.tools import MilvusVectorDB, OllamaClient  # noqa: E402
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from src.config.settings import get_settings  # noqa: E402
-from src.tools import MilvusVectorDB, OllamaClient  # noqa: E402
 
 # Setup logging
 logging.basicConfig(
@@ -78,9 +76,7 @@ def load_responses_cache():
             print("Creating response_cache collection...")
             vector_db.create_collection(
                 collection_name="response_cache",
-                embedding_dim=384,  # nomic-embed-text dimension
-                index_type="HNSW",
-                metric_type="COSINE",
+                embedding_dim=settings.response_cache_embedding_dim,
             )
     except Exception as e:
         print(f"Warning: Could not verify/create response_cache: {e}")
@@ -152,7 +148,7 @@ def load_responses_cache():
     print("\n" + "=" * 70)
     print("✓ Responses cache population complete!")
     print(f"  Questions cached: {len(embeddings)}")
-    print("  Similarity threshold: 92%")
+    print(f"  Similarity threshold: {settings.response_cache_threshold:.0%}")
 
     logger.info("=" * 70)
     logger.info("CACHE SYNC STATISTICS")
@@ -163,7 +159,7 @@ def load_responses_cache():
     logger.info(f"Successfully inserted: {len(embeddings)}")
     logger.info(f"Collection: {collection_name}")
     logger.info("Cache type: response_cache (semantic similarity)")
-    logger.info("Similarity threshold: 92%")
+    logger.info(f"Similarity threshold: {settings.response_cache_threshold:.2f}")
     logger.info("=" * 70)
 
     logger.info("✓ Cache sync complete - responses are now available for semantic matching!")

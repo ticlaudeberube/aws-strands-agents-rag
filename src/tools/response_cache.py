@@ -29,7 +29,8 @@ class MilvusResponseCache:
     # Use threshold of 0.92 to match same/very similar questions (accounts for embedding variance)
     # This ensures "What is Milvus?" and "What is Milvus?" match (distance 0.99+)
     # While still preventing "What is Pinecone?" from matching Milvus answers
-    DISTANCE_THRESHOLD = 0.92  # Match same question (distance >= 0.92 = 92% similar)
+    # Note: The default value is now configurable via settings.response_cache_threshold
+    DISTANCE_THRESHOLD = 0.92  # Default threshold (use settings parameter in __init__ for override)
     SIMILARITY_THRESHOLD = 0.92  # Kept for backward compatibility but not used
 
     # Common vector database products for entity validation
@@ -51,15 +52,28 @@ class MilvusResponseCache:
         "myscale",
     }
 
-    def __init__(self, vector_db, embedding_dim: int = 768):
+    def __init__(
+        self,
+        vector_db,
+        embedding_dim: Optional[int] = None,
+        distance_threshold: Optional[float] = None,
+    ):
         """Initialize response cache.
 
         Args:
             vector_db: MilvusVectorDB instance
             embedding_dim: Dimension of embeddings (must match other collections)
+                         Falls back to settings.response_cache_embedding_dim if None
+            distance_threshold: COSINE distance threshold for cache hits (0-1 scale)
+                              Falls back to settings.response_cache_threshold if None
         """
+        from src.config.settings import get_settings
+
+        settings = get_settings()
+
         self.vector_db = vector_db
-        self.embedding_dim = embedding_dim
+        self.embedding_dim = embedding_dim or settings.response_cache_embedding_dim
+        self.distance_threshold = distance_threshold or settings.response_cache_threshold
         self._ensure_collection()
 
     def _extract_main_entity(self, text: str) -> Optional[str]:
@@ -160,12 +174,10 @@ class MilvusResponseCache:
                 logger.info(f"✓ Response cache collection exists: {self.CACHE_COLLECTION}")
                 return
 
-            # Create cache collection
+            # Create cache collection - uses settings for index_type and metric_type
             self.vector_db.create_collection(
                 collection_name=self.CACHE_COLLECTION,
                 embedding_dim=self.embedding_dim,
-                index_type="HNSW",
-                metric_type="COSINE",
             )
             logger.info(f"✓ Created response cache collection: {self.CACHE_COLLECTION}")
 
@@ -227,19 +239,19 @@ class MilvusResponseCache:
             )
             logger.debug(f"[CACHE_DEBUG] Best match cached question: {cached_question[:60]}")
             logger.debug(
-                f"[CACHE_DEBUG] Threshold: {self.DISTANCE_THRESHOLD:.4f}, Match: {distance >= self.DISTANCE_THRESHOLD}"
+                f"[CACHE_DEBUG] Threshold: {self.distance_threshold:.4f}, Match: {distance >= self.distance_threshold}"
             )
             # For Milvus COSINE metric, distance IS the similarity (-1 to 1)
             # No conversion needed: distance = 1.0 means identical, distance = 0.0 means orthogonal
             similarity = distance
 
             logger.info(
-                f"Cache search: distance={distance:.4f}, similarity={similarity:.1%}, threshold={self.DISTANCE_THRESHOLD:.4f}"
+                f"Cache search: distance={distance:.4f}, similarity={similarity:.1%}, threshold={self.distance_threshold:.4f}"
             )
 
             # Use distance threshold for matching - HIGHER distances are better matches
             # In Milvus COSINE metric: distance ranges from -1 to 1, where 1.0 = identical
-            if distance >= self.DISTANCE_THRESHOLD:
+            if distance >= self.distance_threshold:
                 # Parse cached data
                 metadata = best_match.get("metadata", {})
                 if isinstance(metadata, str):
@@ -280,7 +292,7 @@ class MilvusResponseCache:
                 return cache_entry
             else:
                 logger.debug(
-                    f"Cache miss (distance {distance:.4f} < {self.DISTANCE_THRESHOLD}, too different)"
+                    f"Cache miss (distance {distance:.4f} < {self.distance_threshold}, too different)"
                 )
                 return None
 

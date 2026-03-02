@@ -464,12 +464,8 @@ src/
 │   ├── __init__.py
 │   └── mcp_server.py (MCP protocol implementation)
 │
-└── config/
-    └── settings.py (configuration management)
-
-examples/
-└── examples.py (usage examples)
-
+├── config/
+|    └── settings.py (configuration management)
 docs/
 ├── ARCHITECTURE.md (this file)
 ├── GETTING_STARTED.md (setup guide)

@@ -248,7 +248,6 @@ Contributions are welcome! Please:
 ## Resources
 
 - [Strands Agents Documentation](https://strandsagents.com/latest/documentation/)
-- [Strands Agents Examples](https://strandsagents.com/latest/documentation/docs/examples/)
 - [Ollama Documentation](https://github.com/ollama/ollama)
 - [Milvus Documentation](https://milvus.io/docs)
 - [Milvus Python SDK](https://milvus.io/docs/pymilvus-ref/)

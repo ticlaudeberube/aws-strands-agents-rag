@@ -44,7 +44,7 @@ npm start  # or: ./build.sh dev
 ## Interactive Python CLI Chatbot
 
 ```bash
-python examples/interactive_chat.py
+python chatbot/interactive_chat.py
 ```
 
 ### Requirements

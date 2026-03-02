@@ -55,5 +55,5 @@
   "generated_count": 10,
   "total_expected": 10,
   "version": "1.0",
-  "usage": "Run: python document-loaders/sync_responses_cache.py to load into response_cache",
+  "usage": "Run: python document-loaders/sync_responses_cache.py to load into response_cache"
 }

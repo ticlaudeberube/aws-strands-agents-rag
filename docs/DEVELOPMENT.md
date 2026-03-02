@@ -61,8 +61,6 @@ aws-stands-agents-rag/
 │   ├── verify_collection.py        # Collection verification
 │   ├── DOCKER_MIGRATION.md         # Migration from milvus-standalone
 │   └── setup.sh / setup.bat        # Project setup
-├── examples/                        # Example scripts
-│   └── phase_1_2_examples.py       # Strands agent architecture examples
 ├── tests/                           # Unit tests
 ├── api_server.py                   # FastAPI server - REST API endpoint
 ├── pyproject.toml                  # Project configuration
@@ -153,10 +151,10 @@ We use:
 
 ```bash
 # Format code
-black src/ examples/
+black src/ document_loaders/
 
 # Lint code
-ruff check src/ examples/
+ruff check src/ document_loaders/
 
 # Type checking
 mypy src/
@@ -196,20 +194,52 @@ def my_custom_tool(input: str) -> str:
 
 ### 2. Adding a New Document Loader
 
-```python
-# In src/loaders/document_loader.py
-class MyDocumentLoader(DocumentLoader):
-    def __init__(self, config):
-        self.config = config
-    
-    def load(self) -> List[str]:
-        """Load and return documents."""
-        documents = []
-        # Implementation
-        return documents
+Document loaders are standalone scripts in the `document-loaders/` directory. They load documents from various sources, embed them, and insert them into Milvus.
 
-# Update src/loaders/__init__.py to export
+```python
+# In document-loaders/load_my_source.py
+import sys
+from pathlib import Path
+
+# Add parent directory to path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from src.config.settings import Settings
+from src.tools import MilvusVectorDB, OllamaClient
+from document_loaders.core.embeddings import embed_documents
+
+settings = Settings()
+vector_db = MilvusVectorDB(
+    host=settings.milvus_host,
+    port=settings.milvus_port
+)
+ollama_client = OllamaClient(host=settings.ollama_host)
+
+def load_my_documents():
+    """Load documents from your source."""
+    documents = []
+    
+    # Load from your source (files, APIs, databases, etc.)
+    documents = [
+        {"content": "Document text", "source": "my_source", "metadata": {...}}
+    ]
+    
+    # Embed documents
+    embeddings = embed_documents(documents, ollama_client)
+    
+    # Insert into Milvus
+    vector_db.insert_embeddings(
+        collection_name="my_collection",
+        embeddings=embeddings,
+        text_field=[d["content"] for d in documents],
+        metadata_field=[d.get("metadata", {}) for d in documents]
+    )
+
+if __name__ == "__main__":
+    load_my_documents()
 ```
+
+See [load_milvus_docs_ollama.py](../document-loaders/load_milvus_docs_ollama.py) and [add_sample_docs.py](../document-loaders/add_sample_docs.py) for complete examples.
 
 ### 3. Adding New Agent Functionality
 
@@ -379,19 +409,6 @@ chunks = chunk_documents(
 ```
 
 ## Common Development Tasks
-
-### Running the Example Scripts
-
-```bash
-# Basic RAG example
-python examples/basic_rag.py
-
-# Interactive chat
-python examples/interactive_chat.py
-
-# File-based RAG
-python examples/file_based_rag.py
-```
 
 ### Debugging
 

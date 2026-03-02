@@ -46,8 +46,6 @@ def main():
         agent.vector_db.create_collection(
             collection_name=settings.ollama_collection_name,
             embedding_dim=settings.embedding_dim,
-            index_type="HNSW",
-            metric_type="COSINE",
         )
         print(f"✓ Created collection '{settings.ollama_collection_name}'")
     except Exception as e:

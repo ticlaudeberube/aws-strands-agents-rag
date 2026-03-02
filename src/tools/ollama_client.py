@@ -18,17 +18,23 @@ class OllamaClient:
 
     def __init__(
         self,
-        host: str = "http://localhost:11434",
-        timeout: int = 30,
-        pool_size: int = 5,
+        host: Optional[str] = None,
+        timeout: Optional[int] = None,
+        pool_size: Optional[int] = None,
     ):
         """Initialize Ollama client with connection pooling.
 
         Args:
-            host: Ollama server host (e.g., http://localhost:11434)
-            timeout: Default request timeout in seconds
-            pool_size: Connection pool size
+            host: Ollama server host (falls back to settings.ollama_host)
+            timeout: Default request timeout in seconds (falls back to settings.ollama_timeout)
+            pool_size: Connection pool size (falls back to settings.ollama_pool_size)
         """
+        # Load defaults from settings
+        settings = get_settings()
+        host = host or settings.ollama_host
+        timeout = timeout or settings.ollama_timeout
+        pool_size = pool_size or settings.ollama_pool_size
+
         self.host = host
         self.timeout = timeout
         self.pool_size = pool_size

@@ -31,13 +31,24 @@ class Settings(BaseSettings):
     milvus_password: str = "Milvus"
     milvus_timeout: int = 30  # Request timeout in seconds
     milvus_pool_size: int = 10  # Connection pool size
+    milvus_index_type: str = os.getenv(
+        "MILVUS_INDEX_TYPE", "HNSW"
+    )  # Index type (HNSW, IVF_FLAT, FLAT)
+    milvus_metric_type: str = os.getenv(
+        "MILVUS_METRIC_TYPE", "COSINE"
+    )  # Similarity metric (COSINE, L2, IP)
 
     # Collection Configuration
     ollama_collection_name: str = "milvus_rag_collection"
 
     # Embedding and chunk processing
     max_chunk_length: int = 250  # Reduced from 400 for faster context processing (30-40% speedup)
-    embedding_dim: int = 768
+    embedding_dim: int = int(
+        os.getenv("EMBEDDING_DIM", "768")
+    )  # Main knowledge base embedding dimension
+    response_cache_embedding_dim: int = int(
+        os.getenv("RESPONSE_CACHE_EMBEDDING_DIM", "384")
+    )  # nomic-embed-text for semantic cache
 
     # Performance Settings
     ollama_num_threads: int = 6
@@ -50,6 +61,9 @@ class Settings(BaseSettings):
     # Caching Configuration
     agent_cache_size: int = 500  # LRU cache size for embeddings, searches, and answers
     embedding_batch_size: int = 32  # Batch size for bulk embedding operations
+    response_cache_threshold: float = float(
+        os.getenv("RESPONSE_CACHE_THRESHOLD", "0.92")
+    )  # Semantic cache distance threshold
 
     # Application Configuration
     log_level: str = "INFO"
@@ -57,6 +71,7 @@ class Settings(BaseSettings):
     user_agent: str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
     api_port: int = 8000  # API server port (reads API_PORT from .env, defaults to 8000)
     enable_cache_warmup: bool = False  # Enable/disable response cache warmup on startup (reads ENABLE_CACHE_WARMUP from .env)
+    web_search_timeout: int = 10  # Web search request timeout in seconds
 
     # AWS Configuration (optional)
     aws_region: Optional[str] = "us-west-1"

@@ -138,7 +138,7 @@ class StrandsRAGAgent:
             timeout=settings.milvus_timeout,
             pool_size=settings.milvus_pool_size,
         )
-        self.web_search = WebSearchClient(timeout=10)
+        self.web_search = WebSearchClient(timeout=settings.web_search_timeout)
 
         # Initialize caching system (from RAGAgent)
         self.embedding_cache: OrderedDict = OrderedDict()  # query -> EmbeddingCacheEntry (with TTL)
@@ -152,7 +152,9 @@ class StrandsRAGAgent:
 
         # Initialize persistent response cache for semantic matching
         try:
-            self.response_cache: Optional[MilvusResponseCache] = MilvusResponseCache(self.vector_db)
+            self.response_cache: Optional[MilvusResponseCache] = MilvusResponseCache(
+                self.vector_db, embedding_dim=settings.response_cache_embedding_dim
+            )
             logger.info("Response cache initialized for persistent semantic caching")
         except Exception as e:
             logger.warning(

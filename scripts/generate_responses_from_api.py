@@ -8,12 +8,14 @@ This script:
 """
 
 import json
-import os
 import time
 import logging
 import requests
 from pathlib import Path
 from dotenv import load_dotenv
+
+# Load settings
+from src.config.settings import get_settings
 
 # Load environment variables from .env file
 load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
@@ -25,9 +27,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Configuration - read API_PORT from .env or default to 8000
-API_PORT = os.getenv("API_PORT", "8000")
-API_HOST = f"http://localhost:{API_PORT}"
+settings = get_settings()
+
+# Configuration from settings
+API_HOST = f"http://localhost:{settings.api_port}"
 API_ENDPOINT = (
     f"{API_HOST}/v1/chat/completions?bypass_cache=true"  # Bypass cache for fresh responses
 )

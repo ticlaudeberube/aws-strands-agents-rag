@@ -9,6 +9,7 @@ import logging
 from typing import List, Dict, Optional
 import json
 import os
+from src.config.settings import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -20,13 +21,17 @@ class TavilySearchClient:
     for technical products like Pinecone, Weaviate, etc.
     """
 
-    def __init__(self, api_key: Optional[str] = None, timeout: int = 10):
+    def __init__(self, api_key: Optional[str] = None, timeout: Optional[int] = None):
         """Initialize Tavily search client.
 
         Args:
             api_key: Tavily API key. If not provided, will try to use TAVILY_API_KEY env var
-            timeout: Request timeout in seconds
+            timeout: Request timeout in seconds (falls back to settings.web_search_timeout)
         """
+        # Load defaults from settings
+        if timeout is None:
+            timeout = get_settings().web_search_timeout
+
         self.api_key = api_key or os.environ.get("TAVILY_API_KEY")
         self.timeout = timeout
         self.tavily_url = "https://api.tavily.com/search"
@@ -115,13 +120,17 @@ class WebSearchClient:
     Uses Tavily API for comprehensive coverage of technical products and databases.
     """
 
-    def __init__(self, tavily_api_key: Optional[str] = None, timeout: int = 10):
+    def __init__(self, tavily_api_key: Optional[str] = None, timeout: Optional[int] = None):
         """Initialize the web search client.
 
         Args:
             tavily_api_key: Tavily API key (optional, will check TAVILY_API_KEY env var)
-            timeout: Request timeout in seconds
+            timeout: Request timeout in seconds (falls back to settings.web_search_timeout)
         """
+        # Load defaults from settings
+        if timeout is None:
+            timeout = get_settings().web_search_timeout
+
         self.tavily = TavilySearchClient(api_key=tavily_api_key, timeout=timeout)
 
         # Diagnostic logging

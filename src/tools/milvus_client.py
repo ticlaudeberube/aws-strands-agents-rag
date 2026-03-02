@@ -5,6 +5,7 @@ from typing import List, Optional, Dict, Any
 import logging
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
+from src.config.settings import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -14,25 +15,35 @@ class MilvusVectorDB:
 
     def __init__(
         self,
-        host: str = "localhost",
-        port: int = 19530,
-        db_name: str = "default",
-        user: str = "root",
-        password: str = "Milvus",
-        timeout: int = 30,
-        pool_size: int = 10,
+        host: Optional[str] = None,
+        port: Optional[int] = None,
+        db_name: Optional[str] = None,
+        user: Optional[str] = None,
+        password: Optional[str] = None,
+        timeout: Optional[int] = None,
+        pool_size: Optional[int] = None,
     ):
         """Initialize Milvus client with connection pooling.
 
         Args:
-            host: Milvus server host
-            port: Milvus server port
-            db_name: Database name to use
-            user: Milvus username (default: root)
-            password: Milvus password (default: Milvus)
-            timeout: Request timeout in seconds
-            pool_size: Connection pool size (not directly supported by MilvusClient, for future use)
+            host: Milvus server host (falls back to settings.milvus_host)
+            port: Milvus server port (falls back to settings.milvus_port)
+            db_name: Database name to use (falls back to settings.milvus_db_name)
+            user: Milvus username (falls back to settings.milvus_user)
+            password: Milvus password (falls back to settings.milvus_password)
+            timeout: Request timeout in seconds (falls back to settings.milvus_timeout)
+            pool_size: Connection pool size (falls back to settings.milvus_pool_size)
         """
+        # Load defaults from settings
+        settings = get_settings()
+        host = host or settings.milvus_host
+        port = port or settings.milvus_port
+        db_name = db_name or settings.milvus_db_name
+        user = user or settings.milvus_user
+        password = password or settings.milvus_password
+        timeout = timeout or settings.milvus_timeout
+        pool_size = pool_size or settings.milvus_pool_size
+
         uri = f"http://{host}:{port}"
         self.host = host
         self.port = port
@@ -86,21 +97,30 @@ class MilvusVectorDB:
     def create_collection(
         self,
         collection_name: str,
-        embedding_dim: int = 384,
-        index_type: str = "HNSW",
-        metric_type: str = "COSINE",
+        embedding_dim: Optional[int] = None,
+        index_type: Optional[str] = None,
+        metric_type: Optional[str] = None,
     ) -> bool:
         """Create a collection for storing embeddings with optimal indexing.
 
         Args:
             collection_name: Name of the collection to create
-            embedding_dim: Dimension of embeddings
-            index_type: Type of index (HNSW, IVF_FLAT, FLAT)
-            metric_type: Similarity metric (COSINE, L2, IP)
+            embedding_dim: Dimension of embeddings. If None, falls back to settings.embedding_dim (default: 768)
+            index_type: Type of index (HNSW, IVF_FLAT, FLAT). Falls back to settings.milvus_index_type (default: HNSW)
+            metric_type: Similarity metric (COSINE, L2, IP). Falls back to settings.milvus_metric_type (default: COSINE)
 
         Returns:
             True if collection was created, False if already exists
         """
+        # Fallback to settings if parameters not provided
+        settings = get_settings()
+        if embedding_dim is None:
+            embedding_dim = settings.embedding_dim
+        if index_type is None:
+            index_type = settings.milvus_index_type
+        if metric_type is None:
+            metric_type = settings.milvus_metric_type
+
         try:
             if collection_name in self.client.list_collections(db_name=self.db_name):
                 logger.info(f"Collection {collection_name} already exists")

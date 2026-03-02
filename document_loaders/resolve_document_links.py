@@ -14,7 +14,7 @@ import re
 import sys
 import logging
 from pathlib import Path
-from typing import Dict, Tuple
+from typing import Dict, Tuple, Any, List, Optional
 from dataclasses import dataclass
 
 logging.basicConfig(
@@ -57,7 +57,7 @@ class DocumentLinkResolver:
             base_url: Base URL for resolving relative links
         """
         self.base_url = base_url
-        self.resolutions = []
+        self.resolutions: List[LinkResolution] = []
 
     def resolve_markdown_link(
         self, text: str, url: str, question: str = ""
@@ -130,7 +130,9 @@ class DocumentLinkResolver:
 
         return resolved_text
 
-    def process_responses_file(self, input_path: str, output_path: str = None) -> Dict:
+    def process_responses_file(
+        self, input_path: str, output_path: Optional[str] = None
+    ) -> Dict[str, Any]:
         """Process responses.json file to resolve all relative links.
 
         Args:
@@ -140,17 +142,18 @@ class DocumentLinkResolver:
         Returns:
             Processed data structure
         """
-        if output_path is None:
-            output_path = input_path
+        output_path_str = output_path
+        if output_path_str is None:
+            output_path_str = input_path
 
         # Load input file
-        input_path = Path(input_path)
-        if not input_path.exists():
-            raise FileNotFoundError(f"Input file not found: {input_path}")
+        input_path_obj = Path(input_path)
+        if not input_path_obj.exists():
+            raise FileNotFoundError(f"Input file not found: {input_path_obj}")
 
-        logger.info(f"Loading responses from: {input_path}")
-        with open(input_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
+        logger.info(f"Loading responses from: {input_path_obj}")
+        with open(input_path_obj, "r", encoding="utf-8") as f:
+            data: Dict[str, Any] = json.load(f)
 
         # Process each Q&A pair
         qa_pairs = data.get("qa_pairs", [])
@@ -174,7 +177,7 @@ class DocumentLinkResolver:
         # Print resolution summary
         if self.resolutions:
             logger.info("\nLink Resolution Summary:")
-            resolution_types = {}
+            resolution_types: Dict[str, int] = {}
             for res in self.resolutions:
                 resolution_types[res.type] = resolution_types.get(res.type, 0) + 1
                 logger.debug(f"  {res.type}: {res.original} → {res.resolved}")
@@ -183,13 +186,13 @@ class DocumentLinkResolver:
                 logger.info(f"  • {res_type}: {count}")
 
         # Save output
-        output_path = Path(output_path)
-        logger.info(f"Saving resolved answers to: {output_path}")
-        with open(output_path, "w", encoding="utf-8") as f:
+        output_path_obj = Path(output_path_str)
+        logger.info(f"Saving resolved answers to: {output_path_obj}")
+        with open(output_path_obj, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
 
         logger.info("✓ Processing complete")
-        return data
+        return data  # type: ignore[return-value]
 
     def get_resolution_report(self) -> str:
         """Get a detailed report of all resolutions made.
@@ -202,7 +205,7 @@ class DocumentLinkResolver:
 
         report = ["Link Resolution Report", "=" * 60]
 
-        by_type = {}
+        by_type: Dict[str, List[LinkResolution]] = {}
         for res in self.resolutions:
             if res.type not in by_type:
                 by_type[res.type] = []

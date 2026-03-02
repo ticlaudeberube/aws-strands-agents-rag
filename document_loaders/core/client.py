@@ -1,7 +1,7 @@
 """Milvus client connection management."""
 
 from typing import Optional
-from pymilvus import MilvusClient
+from pymilvus import MilvusClient  # type: ignore[import-untyped]
 from .config import get_milvus_config
 from .exceptions import MilvusConnectionError
 

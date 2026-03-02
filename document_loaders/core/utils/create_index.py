@@ -1,7 +1,7 @@
 import sys
-from pymilvus import MilvusClient, DataType
+from pymilvus import MilvusClient, DataType  # type: ignore[import-untyped]
 from dotenv import load_dotenv
-from core import get_client
+from .. import get_client
 
 load_dotenv()
 

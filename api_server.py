@@ -20,11 +20,10 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from src.config.settings import get_settings
+from src.config.settings import get_settings, Settings
 from src.agents.strands_rag_agent import StrandsRAGAgent
 from src.mcp.mcp_server import RAGAgentMCPServer
 from src.tools.tool_registry import get_registry
-
 
 # Load environment variables from .env file (required for TAVILY_API_KEY and other secrets)
 from dotenv import load_dotenv
@@ -111,7 +110,7 @@ class ChatCompletionResponse(BaseModel):
 # Global state
 strands_agent: Optional[StrandsRAGAgent] = None
 mcp_server: Optional[RAGAgentMCPServer] = None
-settings: Optional[object] = None
+settings: Optional[Settings] = None
 initialization_error: Optional[str] = None
 common_questions: List[str] = []
 
@@ -266,7 +265,7 @@ def load_common_questions() -> List[str]:
             data = json.load(f)
             questions = data.get("common_questions", [])
             logger.info(f"✓ Loaded {len(questions)} common questions from config")
-            return questions
+            return list(questions) if questions else []  # type: ignore[return-value]
     except FileNotFoundError:
         logger.warning(
             "config/common_questions.json not found - cache endpoints will have empty questions list"

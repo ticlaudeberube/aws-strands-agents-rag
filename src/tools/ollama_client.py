@@ -68,7 +68,7 @@ class OllamaClient:
         _timeout = timeout if timeout is not None else self.timeout
         try:
             response = self.session.get(self.tags_endpoint, timeout=_timeout)
-            return response.status_code == 200
+            return response.status_code == 200  # type: ignore[no-any-return]
         except Exception as e:
             logger.warning(f"Ollama server not available: {e}")
             return False
@@ -128,7 +128,7 @@ class OllamaClient:
             )
             response.raise_for_status()
             result = response.json()
-            return result.get("embedding", [])
+            return result.get("embedding", [])  # type: ignore[no-any-return]
         except requests.exceptions.ConnectionError as e:
             logger.error(
                 f"❌ Cannot connect to Ollama at {self.host}. Make sure Ollama is running: ollama serve"
@@ -159,7 +159,7 @@ class OllamaClient:
         model: Optional[str] = None,
         batch_size: int = 32,
         max_workers: Optional[int] = None,
-    ) -> List[List[float]]:
+    ) -> List[Optional[List[float]]]:
         """Generate embeddings for multiple texts with batch processing.
 
         Args:
@@ -180,7 +180,9 @@ class OllamaClient:
         if max_workers is None:
             max_workers = 4
 
-        embeddings = [None] * len(texts)  # Pre-allocate to maintain order
+        embeddings: List[Optional[List[float]]] = [None] * len(
+            texts
+        )  # Pre-allocate to maintain order
 
         # Use ThreadPoolExecutor for parallel embedding requests
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -194,7 +196,7 @@ class OllamaClient:
             for future in as_completed(future_to_index):
                 idx = future_to_index[future]
                 try:
-                    embeddings[idx] = future.result()
+                    embeddings[idx] = future.result()  # type: ignore[assignment]
                     completed += 1
                     if completed % max(1, len(texts) // 10) == 0:
                         logger.debug(f"Embedded {completed}/{len(texts)} texts")
@@ -203,7 +205,7 @@ class OllamaClient:
                     raise
 
         logger.info(f"Batch embedded {len(texts)} texts using {max_workers} workers")
-        return embeddings
+        return embeddings  # type: ignore[return-value]
 
     def generate(
         self,
@@ -211,7 +213,7 @@ class OllamaClient:
         model: Optional[str] = None,
         stream: bool = False,
         temperature: float = 0.1,
-        max_tokens: int = None,
+        max_tokens: Optional[int] = None,
     ) -> str:
         """Generate text using Ollama LLM.
 
@@ -253,7 +255,7 @@ class OllamaClient:
             )
             response.raise_for_status()
             result = response.json()
-            return result.get("response", "")
+            return result.get("response", "")  # type: ignore[no-any-return]
         except requests.exceptions.ConnectionError as e:
             logger.error(
                 f"❌ Cannot connect to Ollama at {self.host}. Make sure Ollama is running: ollama serve"
@@ -277,7 +279,7 @@ class OllamaClient:
         prompt: str,
         model: Optional[str] = None,
         temperature: float = 0.1,
-        max_tokens: int = None,
+        max_tokens: Optional[int] = None,
     ):
         """Stream text generation using Ollama LLM.
 

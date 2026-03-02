@@ -220,13 +220,13 @@ class WebSearchClient:
             f"product2: {sum(len(r) for r in product2_results.values())}"
         )
 
-        return {
+        return {  # type: ignore[return-value]
             "comparison": combined_results,
-            "product1": {
+            "product1": {  # type: ignore[dict-item]
                 "name": product1,
                 "results": product1_results,
             },
-            "product2": {
+            "product2": {  # type: ignore[dict-item]
                 "name": product2,
                 "results": product2_results,
             },

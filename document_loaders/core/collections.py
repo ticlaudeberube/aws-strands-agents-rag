@@ -2,7 +2,7 @@
 
 from typing import Any, Dict, List, Tuple
 import os
-from pymilvus import MilvusException
+from pymilvus import MilvusException  # type: ignore[import-untyped]
 from .client import get_client
 from .exceptions import CollectionError
 from .embeddings import EmbeddingProvider
@@ -72,13 +72,14 @@ def drop_collection(collection_name: str | None) -> None:
 def has_collection(collection_name: str) -> bool:
     """Check if collection exists."""
     client = get_client()
-    return client.has_collection(collection_name=collection_name)
+    return bool(client.has_collection(collection_name=collection_name))  # type: ignore[no-any-return]
 
 
 def insert_data(collection_name: str, data: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Insert data into collection."""
     client = get_client()
-    return client.insert(collection_name=collection_name, data=data)
+    result = client.insert(collection_name=collection_name, data=data)
+    return result if isinstance(result, dict) else {}  # type: ignore[no-any-return]
 
 
 def vectorize_documents(collection_name: str, docs: List[str]) -> Tuple[Dict[str, Any], int]:

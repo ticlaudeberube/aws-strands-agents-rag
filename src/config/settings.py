@@ -1,15 +1,14 @@
 """Configuration settings for the application."""
 
 import os
-from pydantic_settings import BaseSettings
-from pydantic import ConfigDict
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
 
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables and .env file."""
 
-    model_config = ConfigDict(
+    model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
@@ -57,9 +56,7 @@ class Settings(BaseSettings):
     batch_size: int = 10
     user_agent: str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
     api_port: int = 8000  # API server port (reads API_PORT from .env, defaults to 8000)
-    enable_cache_warmup: bool = (
-        False  # Enable/disable response cache warmup on startup (reads ENABLE_CACHE_WARMUP from .env)
-    )
+    enable_cache_warmup: bool = False  # Enable/disable response cache warmup on startup (reads ENABLE_CACHE_WARMUP from .env)
 
     # AWS Configuration (optional)
     aws_region: Optional[str] = "us-west-1"

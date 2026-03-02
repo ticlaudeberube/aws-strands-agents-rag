@@ -109,7 +109,9 @@ class StrandsRAGAgent:
     # Centralized formatting rules for all LLM responses
     FORMATTING_RULES = prompts.FORMATTING_RULES
 
-    def __init__(self, settings: Settings, cache_size: int = None, embedding_cache_ttl: int = 3600):
+    def __init__(
+        self, settings: Settings, cache_size: Optional[int] = None, embedding_cache_ttl: int = 3600
+    ):
         """Initialize Strands RAG Agent.
 
         Args:
@@ -139,16 +141,18 @@ class StrandsRAGAgent:
         self.web_search = WebSearchClient(timeout=10)
 
         # Initialize caching system (from RAGAgent)
-        self.embedding_cache = OrderedDict()  # query -> EmbeddingCacheEntry (with TTL)
-        self.search_cache = OrderedDict()  # (collection, query, top_k) -> context chunks
-        self.answer_cache = OrderedDict()  # (question, collection, top_k) -> answer
+        self.embedding_cache: OrderedDict = OrderedDict()  # query -> EmbeddingCacheEntry (with TTL)
+        self.search_cache: OrderedDict = (
+            OrderedDict()
+        )  # (collection, query, top_k) -> context chunks
+        self.answer_cache: OrderedDict = OrderedDict()  # (question, collection, top_k) -> answer
 
         # Track sources from last streaming call (for API to retrieve)
-        self._last_stream_sources = []
+        self._last_stream_sources: List[Dict] = []
 
         # Initialize persistent response cache for semantic matching
         try:
-            self.response_cache = MilvusResponseCache(self.vector_db)
+            self.response_cache: Optional[MilvusResponseCache] = MilvusResponseCache(self.vector_db)
             logger.info("Response cache initialized for persistent semantic caching")
         except Exception as e:
             logger.warning(
@@ -721,9 +725,9 @@ class StrandsRAGAgent:
                 )
 
                 # Extract product1 results
-                p1_data = comparison_data.get("product1", {})
-                p1_name = p1_data.get("name", product1)
-                p1_features = p1_data.get("results", {})
+                p1_data: Dict = comparison_data.get("product1", {})  # type: ignore[assignment,union-attr]
+                p1_name = p1_data.get("name", product1)  # type: ignore[union-attr]
+                p1_features = p1_data.get("results", {})  # type: ignore[union-attr]
 
                 # OPTIMIZATION: Only process top 2 features (instead of 3)
                 for feature, results in list(p1_features.items())[:2]:
@@ -753,9 +757,9 @@ class StrandsRAGAgent:
                         break
 
                 # Extract product2 results (for comparison)
-                p2_data = comparison_data.get("product2", {})
-                p2_name = p2_data.get("name", product2)
-                p2_features = p2_data.get("results", {})
+                p2_data: Dict = comparison_data.get("product2", {})  # type: ignore[assignment,union-attr]
+                p2_name = p2_data.get("name", product2)  # type: ignore[union-attr]
+                p2_features = p2_data.get("results", {})  # type: ignore[union-attr]
 
                 # OPTIMIZATION: Only process top 2 features
                 for feature, results in list(p2_features.items())[:2]:
@@ -792,8 +796,8 @@ class StrandsRAGAgent:
 
             # Get context from Milvus documentation
             # OPTIMIZATION: Combined into single retrieval for both products
-            product1_context = []
-            product1_sources = []
+            product1_context: List[str] = []
+            product1_sources: List[Dict] = []
             retrieval_start = time.time()
             try:
                 # Search for comparison context in one query
@@ -942,7 +946,7 @@ class StrandsRAGAgent:
             cache_key = (collection_name, query, top_k, offset)
             if cache_key in self.search_cache:
                 logger.info(f"✓ Search cache hit for query (offset={offset})")
-                return self.search_cache[cache_key]
+                return self.search_cache[cache_key]  # type: ignore[no-any-return]
 
             # Generate embedding for query (with caching)
             embed_start = time.time()
@@ -1270,21 +1274,21 @@ class StrandsRAGAgent:
             # Extract texts and embed all at once
             texts = [doc["text"] for doc in normalized_docs]
             embeddings = self.ollama_client.embed_texts(
-                texts,
+                texts,  # type: ignore[arg-type]
                 model=self.settings.ollama_embed_model,
             )
 
             # Prepare metadata for insertion
-            metadata_list = [doc.get("metadata", {}) for doc in normalized_docs]
+            metadata_list: List[Dict] = [doc.get("metadata", {}) for doc in normalized_docs]  # type: ignore[assignment,misc]
             for i, doc in enumerate(normalized_docs):
                 if "source" in doc:
-                    metadata_list[i]["source"] = doc["source"]
+                    metadata_list[i]["source"] = doc["source"]  # type: ignore[index]
 
             # Insert embeddings into vector database
             self.vector_db.insert_embeddings(
                 collection_name=collection_name,
-                embeddings=embeddings,
-                texts=texts,
+                embeddings=embeddings,  # type: ignore[arg-type]
+                texts=texts,  # type: ignore[arg-type]
                 metadata=metadata_list,
             )
 
@@ -1467,9 +1471,9 @@ class StrandsRAGAgent:
         start_time = time.time()
         sources = []
         cache_hits = {}
-        embedding_time = 0
-        retrieval_time = 0
-        generation_time = 0
+        embedding_time = 0.0
+        retrieval_time = 0.0
+        generation_time = 0.0
 
         try:
             logger.info(f"Answering question: {question[:50]}...")
@@ -1521,7 +1525,7 @@ class StrandsRAGAgent:
                 cached_result = self.answer_cache[cache_key]
                 total_time = time.time() - start_time
                 logger.info(f"Total response time (cached): {total_time:.2f}s")
-                return cached_result
+                return cached_result  # type: ignore[no-any-return]
             else:
                 logger.debug(
                     f"[CACHE_DEBUG] response cache miss: {len(self.answer_cache)} items in cache"
@@ -1605,9 +1609,7 @@ class StrandsRAGAgent:
                 logger.warning(
                     f"   Retrieved {len(context_chunks)} documents, but LLM failed to generate response"
                 )
-                logger.warning(
-                    f"   Check Ollama connectivity: {self.settings.ollama_host}:{self.settings.ollama_port}"
-                )
+                logger.warning(f"   Check Ollama connectivity: {self.settings.ollama_host}")
                 # Don't return empty - return at least a summary of retrieved documents
                 answer = f"I found {len(context_chunks)} relevant documents for your question but failed to generate a summary. Please check logs or try again."
 
@@ -1696,7 +1698,7 @@ class StrandsRAGAgent:
             if self._is_security_attack(question):
                 logger.info("Question rejected: security attack detected")
                 answer = "I can only help with questions about Milvus, vector databases, and RAG systems."
-                sources = []
+                sources: List[Dict] = []
                 return (answer, sources)
 
             # SCOPE CHECK: Use LLM to determine if question is about Milvus/vectors/RAG
@@ -1830,7 +1832,7 @@ class StrandsRAGAgent:
                             "distance": relevance,
                         }
                         logger.info(
-                            f"[WEB_SEARCH_ONLY] Appending source {idx}: {web_source['title'][:40]}..."
+                            f"[WEB_SEARCH_ONLY] Appending source {idx}: {web_source['title'][:40]}..."  # type: ignore[index]
                         )
                         sources.append(web_source)
 
@@ -1949,7 +1951,7 @@ class StrandsRAGAgent:
                 return
 
             # COMPARATIVE CHECK: Handle product comparisons first (before RAG)
-            comparison_sources = []
+            comparison_sources: List[Dict] = []
             is_comparative, products = self._detect_comparative_question(question)
             if is_comparative and products:
                 logger.info(
@@ -2092,7 +2094,7 @@ class StrandsRAGAgent:
         """
         # Initialize sources at the start so it's always available
         self._last_stream_sources = []
-        sources = []
+        sources: List[Dict] = []
 
         try:
             logger.info(f"[STREAM_NO_CACHE] Answering: {question[:60]}")
@@ -2332,7 +2334,10 @@ class StrandsRAGAgent:
         """Close connections and clean up resources."""
         try:
             self.ollama_client.close()
-            self.vector_db.close()
+            # MilvusVectorDB doesn't have explicit close, but we can clear caches
+            self.embedding_cache.clear()
+            self.search_cache.clear()
+            self.answer_cache.clear()
             logger.info("StrandsRAGAgent closed")
         except Exception as e:
             logger.warning(f"Error during cleanup: {e}")

@@ -1,7 +1,7 @@
 import json
 import sys
 from pathlib import Path
-from tqdm import tqdm
+from tqdm import tqdm  # type: ignore[import-untyped]
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))

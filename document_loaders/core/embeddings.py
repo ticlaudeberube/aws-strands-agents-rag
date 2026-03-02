@@ -28,6 +28,8 @@ class EmbeddingProvider:
 
         # Check for both environment variable names for compatibility
         _model = model or os.getenv("OLLAMA_EMBEDDING_MODEL", "nomic-embed-text:v1.5")
+        if not _model:
+            _model = "nomic-embed-text:v1.5"
 
         if isinstance(text, list):
             return [ollama.embeddings(model=_model, prompt=t)["embedding"] for t in text]

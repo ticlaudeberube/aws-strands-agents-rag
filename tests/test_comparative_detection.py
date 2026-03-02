@@ -11,7 +11,6 @@ import json
 from unittest.mock import MagicMock, patch
 from src.config.settings import Settings
 
-
 # Add workspace to path
 sys.path.insert(0, "/Users/claude/Documents/workspace/aws-strands-agents-rag")
 

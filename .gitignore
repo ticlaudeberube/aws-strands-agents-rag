@@ -148,4 +148,4 @@ data/*
 temp/
 tmp/
 data/embeddings.json
-document-loaders/milvus_docs/**
+document_loaders/milvus_docs/**

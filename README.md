@@ -12,6 +12,7 @@ A high-performance Retrieval-Augmented Generation (RAG) system using AWS Strands
 | **Architecture** | [System Design](docs/ARCHITECTURE.md) • [Data Flow](docs/ARCHITECTURE.md#data-flow) • [Caching](docs/CACHING_STRATEGY.md) |
 | **Development** | [Code Examples](docs/DEVELOPMENT.md) • [API Reference](docs/API_SERVER.md) • [Strands Reference](docs/STRANDS_QUICK_REFERENCE.md) |
 | **Operations** | [React Deployment](docs/REACT_DEPLOYMENT.md) • [Docker Setup](docker/README.md) • [Troubleshooting](docs/GETTING_STARTED.md#troubleshooting) |
+| **CI/CD** | [GitHub Actions Setup](docs/GITHUB_ACTIONS_SETUP.md) |
 | **Performance** | [Model Comparison](docs/MODEL_PERFORMANCE_COMPARISON.md) • [Optimization](docs/LATENCY_OPTIMIZATION.md) • [Tips](docs/LATENCY_OPTIMIZATION.md#performance-tips) |
 
 ## Architecture Overview
@@ -231,6 +232,7 @@ See [DEVELOPMENT.md](docs/DEVELOPMENT.md) for:
 ## Roadmap
 
 **Todos:**
+- [ ] Integrate pre-commit into GitHub pipeline
 - [ ] Serverless deployment with AgentCore (Lambda, SAM, CloudFront)
 - [ ] AgentCore SessionManager for conversation history caching
 

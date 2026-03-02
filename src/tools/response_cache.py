@@ -11,7 +11,7 @@ This module implements a semantic response cache that:
 import json
 import logging
 import re
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Any
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -293,7 +293,7 @@ class MilvusResponseCache:
         question: str,
         question_embedding: List[float],
         response: str,
-        metadata: Dict = None,
+        metadata: Optional[Dict[Any, Any]] = None,
     ) -> bool:
         """Store question + response in cache.
 

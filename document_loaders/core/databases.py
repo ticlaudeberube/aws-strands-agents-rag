@@ -1,7 +1,7 @@
 """Database operations for Milvus."""
 
 from typing import List
-from pymilvus import MilvusException, utility, Collection
+from pymilvus import MilvusException, utility, Collection  # type: ignore[import-untyped]
 from .client import get_client
 from .exceptions import DatabaseError
 
@@ -58,6 +58,7 @@ def list_databases() -> List[str]:
     """List all databases."""
     try:
         client = get_client()
-        return client.list_databases()
+        result = client.list_databases()
+        return list(result) if result else []  # type: ignore[no-any-return]
     except MilvusException as e:
         raise DatabaseError(f"Failed to list databases: {e}")

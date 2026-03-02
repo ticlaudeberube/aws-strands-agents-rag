@@ -1,6 +1,6 @@
 """Milvus vector database utilities."""
 
-from pymilvus import MilvusClient
+from pymilvus import MilvusClient  # type: ignore[import-untyped]
 from typing import List, Optional, Dict, Any
 import logging
 import asyncio
@@ -107,7 +107,7 @@ class MilvusVectorDB:
                 return False
 
             # Create collection with explicit index parameters (optimized for performance)
-            index_params = {
+            index_params: Dict[str, Any] = {
                 "metric_type": metric_type,
                 "index_type": index_type,
             }
@@ -145,7 +145,7 @@ class MilvusVectorDB:
         collection_name: str,
         embeddings: List[List[float]],
         texts: List[str],
-        metadata: List[Dict[str, Any]] = None,
+        metadata: Optional[List[Dict[str, Any]]] = None,
     ) -> List[int]:
         """Insert embeddings and their associated text with enhanced metadata support.
 
@@ -218,7 +218,7 @@ class MilvusVectorDB:
             except Exception as flush_error:
                 logger.warning(f"  Could not flush collection: {flush_error}")
 
-            return result.get("insert_count", [])
+            return result.get("insert_count", [])  # type: ignore[no-any-return]
 
         except Exception as e:
             logger.error(f"Failed to insert embeddings: {e}")
@@ -263,7 +263,7 @@ class MilvusVectorDB:
             )
 
             # Process results with pagination
-            processed_results = []
+            processed_results: List[Dict[str, Any]] = []
             for result_group in results:
                 for idx, result in enumerate(result_group):
                     # Skip results before offset
@@ -353,7 +353,7 @@ class MilvusVectorDB:
             List of collection names
         """
         try:
-            return self.client.list_collections(db_name=self.db_name)
+            return self.client.list_collections(db_name=self.db_name)  # type: ignore[no-any-return]
         except Exception as e:
             logger.error(f"Failed to list collections: {e}")
             return []

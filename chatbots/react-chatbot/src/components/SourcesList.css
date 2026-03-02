@@ -1,61 +1,62 @@
 .sources-container {
-  margin-top: 12px;
-  padding: 12px 16px;
-  background: #f0f4ff;
-  border-left: 4px solid #667eea;
-  border-radius: 8px;
-  font-size: 13px;
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: #f5f5f5;
+  border-left: 2px solid #d0d0d0;
+  border-radius: 4px;
+  font-size: 12px;
 }
 
 .sources-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 10px;
-  font-weight: 600;
-  color: #667eea;
+  gap: 6px;
+  margin-bottom: 6px;
+  font-weight: 500;
+  color: #666;
 }
 
 .sources-icon {
-  font-size: 16px;
+  font-size: 14px;
 }
 
 .sources-title {
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .sources-count {
-  font-size: 12px;
-  color: #9ca3af;
+  font-size: 11px;
+  color: #aaa;
 }
 
 .sources-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
 }
 
 .source-item {
   display: flex;
-  gap: 10px;
-  padding: 8px;
+  align-content: center;
+  gap: 8px;
+  padding: 2px;
   background: white;
-  border-radius: 6px;
-  border: 1px solid #e0e7ff;
+  border-radius: 3px;
+  border: 1px solid #eee;
 }
 
 .source-number {
-  min-width: 24px;
-  height: 24px;
-  width: 24px;
+  min-width: 20px;
+  height: 20px;
+  width: 20px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #667eea;
-  color: white;
+  background: #ddd;
+  color: #666;
   border-radius: 50%;
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 10px;
+  font-weight: 500;
   flex-shrink: 0;
 }
 
@@ -71,9 +72,9 @@
   display: flex;
   gap: 0.5rem;
   margin: 0;
-  color: #667eea;
-  font-weight: 600;
-  font-size: 12px;
+  color: #666;
+  font-weight: 500;
+  font-size: 11px;
   white-space: nowrap;
   flex-shrink: 0;
 }
@@ -87,80 +88,84 @@
 }
 
 .relevance-badge {
-  display: inline-block;
-  padding: 2px 8px;
-  background: #d1fae5;
-  color: #065f46;
-  border-radius: 4px;
-  font-size: 11px;
-  font-weight: 500;
+  display: inline;
+  padding: 0;
+  background: transparent;
+  color: #666;
+  border-radius: 0;
+  font-size: 10px;
+  font-weight: 400;
 }
 
 .metadata-info {
   display: inline-block;
-  padding: 2px 8px;
-  background: #fef3c7;
-  color: #92400e;
-  border-radius: 4px;
-  font-size: 11px;
-  font-weight: 500;
+  padding: 1px 6px;
+  background: #f0f0f0;
+  color: #666;
+  border-radius: 2px;
+  font-size: 10px;
+  font-weight: 400;
 }
 .query-timing {
   margin-left: auto;
-  padding: 2px 8px;
-  background: #dbeafe;
-  color: #1e40af;
-  border-radius: 4px;
-  font-size: 12px;
-  font-weight: 600;
+  padding: 1px 6px;
+  background: transparent;
+  color: #999;
+  border-radius: 2px;
+  font-size: 11px;
+  font-weight: 400;
   white-space: nowrap;
 }
 
 /* Web Search Source Styling */
 .source-item.web-source {
-  border-color: #e0f2fe;
-  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  border-color: #eee;
+  background: white;
 }
 
 .source-item.web-source:hover {
-  border-color: #06b6d4;
-  box-shadow: 0 2px 8px rgba(6, 182, 212, 0.2);
+  border-color: #ddd;
+  box-shadow: none;
 }
 
 .source-number.web-badge {
-  background: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%);
-  font-size: 14px;
+  min-width: auto;
+  width: auto;
+  height: auto;
+  background: transparent;
+  color: #666;
+  font-size: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .web-title {
-  color: #0369a1;
+  color: #666;
   margin: 0;
 }
 
 .web-link {
-  color: #0369a1;
+  color: mediumblue;
   text-decoration: none;
   font-weight: 600;
-  border-bottom: 1px solid transparent;
+  border-bottom: none;
   transition: all 0.2s;
 }
 
 .web-link:hover {
-  border-bottom-color: #0369a1;
-  color: #0284c7;
+  border-bottom-color: transparent;
+  color: #333;
 }
 
 .web-source-badge {
-  display: inline-block;
-  padding: 2px 8px;
-  background: #cffafe;
-  color: #0c4a6e;
-  border-radius: 4px;
-  font-size: 11px;
-  font-weight: 500;
+  display: inline;
+  padding: 0;
+  background: transparent;
+  color: #666;
+  border-radius: 0;
+  font-size: 10px;
+  font-weight: 400;
   white-space: nowrap;
 }
 
@@ -168,8 +173,7 @@
 .web-sources-section {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-bottom: 8px;
+  gap: 1px;
 }
 
 .local-sources-section {

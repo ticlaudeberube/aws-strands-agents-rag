@@ -232,6 +232,7 @@ See [DEVELOPMENT.md](docs/DEVELOPMENT.md) for:
 ## Roadmap
 
 **Todos:**
+- [ ] Show a responses cache list to the web app users 
 - [ ] Integrate pre-commit into GitHub pipeline
 - [ ] Serverless deployment with AgentCore (Lambda, SAM, CloudFront)
 - [ ] AgentCore SessionManager for conversation history caching

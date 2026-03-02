@@ -73,15 +73,7 @@ function SourcesPanel({ sources, isLoading, timing }) {
                       {source.title || 'Web Result'}
                     </a>
                   </p>
-                  <div className="sources-panel-meta">
-                    <span className="web-source-badge">🔗 Web Search</span>
-                    <span className="web-domain">{new URL(source.url).hostname}</span>
-                    {source.distance && (
-                      <span className="relevance-badge" style={{marginLeft: '8px'}}>
-                        ✓ {Math.round(source.distance * 100)}% relevant
-                      </span>
-                    )}
-                  </div>
+
                 </div>
               </div>
             );

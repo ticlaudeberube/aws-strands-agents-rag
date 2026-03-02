@@ -1,6 +1,7 @@
 """Configuration settings for the application."""
 
 import os
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
 
@@ -53,21 +54,21 @@ class Settings(BaseSettings):
 
     # Collection Configuration
     ollama_collection_name: str = "milvus_rag_collection"
-    milvus_docs_collection_name: str = os.getenv(
-        "MILVUS_DOCS_COLLECTION_NAME", "milvus_docs"
-    )  # Default collection for context retrieval
-    response_cache_collection_name: str = os.getenv(
-        "RESPONSE_CACHE_COLLECTION_NAME", "response_cache"
-    )  # Collection for persistent response caching
+    response_cache_collection_name: str = Field(
+        default="response_cache",
+        validation_alias="RESPONSE_CACHE_COLLECTION_NAME",
+    )
 
     # Embedding and chunk processing
     max_chunk_length: int = 250  # Reduced from 400 for faster context processing (30-40% speedup)
-    embedding_dim: int = int(
-        os.getenv("EMBEDDING_DIM", "768")
-    )  # Main knowledge base embedding dimension
-    response_cache_embedding_dim: int = int(
-        os.getenv("RESPONSE_CACHE_EMBEDDING_DIM", "384")
-    )  # nomic-embed-text for semantic cache
+    embedding_dim: int = Field(
+        default=768,
+        validation_alias="EMBEDDING_DIM",
+    )
+    response_cache_embedding_dim: int = Field(
+        default=768,
+        validation_alias="RESPONSE_CACHE_EMBEDDING_DIM",
+    )
 
     # Performance Settings
     ollama_num_threads: int = 6
@@ -80,9 +81,10 @@ class Settings(BaseSettings):
     # Caching Configuration
     agent_cache_size: int = 500  # LRU cache size for embeddings, searches, and answers
     embedding_batch_size: int = 32  # Batch size for bulk embedding operations
-    response_cache_threshold: float = float(
-        os.getenv("RESPONSE_CACHE_THRESHOLD", "0.92")
-    )  # Semantic cache distance threshold
+    response_cache_threshold: float = Field(
+        default=0.99,
+        validation_alias="RESPONSE_CACHE_THRESHOLD",
+    )
 
     # Retrieval Tuning (Phase 3B)
     default_top_k: int = int(

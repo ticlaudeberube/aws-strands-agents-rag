@@ -76,9 +76,7 @@ function SourcesList({ sources, timing }) {
                       {source.title || 'Web Result'}
                     </a>
                   </p>
-                  <div className="source-meta">
-                    <span className="web-source-badge">🔗 Web Search</span>
-                  </div>
+
                 </div>
               </div>
             ))}
@@ -90,7 +88,7 @@ function SourcesList({ sources, timing }) {
           <div className="local-sources-section">
             {localSources.map((source, index) => (
               <div key={`local-${index}`} className="source-item">
-                <div className="source-number">{webSources.length + index + 1}</div>
+                <div className="source-number web-badge">📄</div>
                 <div className="source-content">
                   <p className="source-filename">
                     {source.distance && (

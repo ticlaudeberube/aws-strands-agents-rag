@@ -352,6 +352,14 @@ def warm_response_cache(agent: "StrandsRAGAgent", settings) -> None:
                     model=settings.ollama_embed_model,
                 )
 
+                # Extract sources from qa pair if available
+                sources = qa.get("sources", [])
+                if not sources:
+                    # Fallback: if no explicit sources, use collection info
+                    sources = [
+                        {"content": answer[:200], "document": "prewarmed_qa_pair", "relevance": 1.0}
+                    ]
+
                 # Store in response cache
                 agent.response_cache.store_response(
                     question=question,
@@ -360,6 +368,7 @@ def warm_response_cache(agent: "StrandsRAGAgent", settings) -> None:
                     metadata={
                         "collection": settings.ollama_collection_name,
                         "source": "prewarmed",
+                        "sources": sources,
                     },
                 )
             except Exception as e:

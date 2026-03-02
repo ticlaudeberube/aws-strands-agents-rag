@@ -11,12 +11,13 @@ import json
 import logging
 import sys
 from pathlib import Path
-from tqdm import tqdm
-from src.config.settings import get_settings  # noqa: E402
-from src.tools import MilvusVectorDB, OllamaClient  # noqa: E402
 
-# Add parent directory to path
+# Add parent directory to path BEFORE imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from tqdm import tqdm
+from src.config.settings import get_settings
+from src.tools import MilvusVectorDB, OllamaClient
 
 # Setup logging
 logging.basicConfig(
@@ -70,18 +71,19 @@ def load_responses_cache():
     print(f"Using collection: {collection_name}")
 
     # Check if response_cache collection exists
+    cache_collection = settings.response_cache_collection_name
     try:
         collections = vector_db.list_collections()
-        if "response_cache" not in collections:
-            print("Creating response_cache collection...")
+        if cache_collection not in collections:
+            print(f"Creating {cache_collection} collection...")
             vector_db.create_collection(
-                collection_name="response_cache",
+                collection_name=cache_collection,
                 embedding_dim=settings.response_cache_embedding_dim,
             )
     except Exception as e:
-        print(f"Warning: Could not verify/create response_cache: {e}")
+        print(f"Warning: Could not verify/create {cache_collection}: {e}")
 
-    print(f"\nLoading {len(qa_pairs)} Q&A pairs into response_cache...")
+    print(f"\nLoading {len(qa_pairs)} Q&A pairs into {cache_collection}...")
     print("=" * 70)
     logger.info(f"Processing {len(qa_pairs)} Q&A pairs from responses.json")
 
@@ -121,25 +123,25 @@ def load_responses_cache():
         return
 
     # Insert into response_cache
-    print(f"\nInserting {len(embeddings)} Q&A pairs into response_cache...")
+    print(f"\nInserting {len(embeddings)} Q&A pairs into {cache_collection}...")
     logger.info(f"Collection: {collection_name}")
     logger.info(f"Embeddings generated: {len(embeddings)}")
     logger.info(f"Skipped pairs: {skipped_count}")
 
     try:
         vector_db.insert_embeddings(
-            collection_name="response_cache",
+            collection_name=cache_collection,
             embeddings=embeddings,
             texts=texts,
             metadata=metadata_list,
         )
         inserted_count = len(embeddings)
-        logger.info(f"✓ Successfully inserted {inserted_count} Q&A pairs into response_cache")
+        logger.info(f"✓ Successfully inserted {inserted_count} Q&A pairs into {cache_collection}")
         logger.info(
             f"  Success rate: {inserted_count}/{len(qa_pairs)} ({(inserted_count / len(qa_pairs) * 100):.1f}%)"
         )
         print(f"✓ Successfully inserted {inserted_count} Q&A pairs")
-        print("  Response cache is now ready for semantic matching")
+        print(f"  {cache_collection} is now ready for semantic matching")
     except Exception as e:
         logger.error(f"Failed to insert Q&A pairs: {e}")
         print(f"❌ Failed to insert Q&A pairs: {e}")
@@ -158,7 +160,7 @@ def load_responses_cache():
     logger.info(f"Invalid/skipped pairs: {skipped_count}")
     logger.info(f"Successfully inserted: {len(embeddings)}")
     logger.info(f"Collection: {collection_name}")
-    logger.info("Cache type: response_cache (semantic similarity)")
+    logger.info(f"Cache type: {cache_collection} (semantic similarity)")
     logger.info(f"Similarity threshold: {settings.response_cache_threshold:.2f}")
     logger.info("=" * 70)
 

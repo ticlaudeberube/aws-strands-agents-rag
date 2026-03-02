@@ -23,6 +23,9 @@
 
 .chat-container {
   display: flex;
+  max-width: 1200px;
+  margin: 0 auto;
+  border: 2px solid;
   flex-direction: column;
   width: 100%;
   height: 100vh;
@@ -30,6 +33,7 @@
   border-radius: 0;
   box-shadow: none;
   overflow: hidden;
+  background: #f9fafb;
 }
 
 .chat-header {
@@ -96,11 +100,10 @@
 .messages-container {
   flex: 1;
   overflow-y: auto;
-  padding: 20px;
+  padding: 10px;
   display: flex;
   flex-direction: column;
   gap: 16px;
-  background: #f9fafb;
 }
 
 .messages-container::-webkit-scrollbar {

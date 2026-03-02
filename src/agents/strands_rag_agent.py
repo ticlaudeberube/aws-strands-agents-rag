@@ -158,7 +158,9 @@ class StrandsRAGAgent:
         # Initialize persistent response cache for semantic matching
         try:
             self.response_cache: Optional[MilvusResponseCache] = MilvusResponseCache(
-                self.vector_db, embedding_dim=settings.response_cache_embedding_dim
+                self.vector_db,
+                embedding_dim=settings.response_cache_embedding_dim,
+                distance_threshold=settings.response_cache_threshold,
             )
             logger.info("Response cache initialized for persistent semantic caching")
         except Exception as e:
@@ -712,7 +714,7 @@ class StrandsRAGAgent:
         try:
             # Use setting defaults if not provided
             if collection_name is None:
-                collection_name = self.settings.milvus_docs_collection_name
+                collection_name = self.settings.ollama_collection_name
             if top_k is None:
                 top_k = self.settings.search_comparison_top_k
 
@@ -1511,8 +1513,7 @@ class StrandsRAGAgent:
                     comparison_result, comparison_sources = self.search_comparison(
                         products[0],
                         products[1],
-                        collection_name=collection_name
-                        or self.settings.milvus_docs_collection_name,
+                        collection_name=collection_name or self.settings.ollama_collection_name,
                         top_k=top_k,
                     )
                     logger.info(f"Comparison returned {len(comparison_sources)} sources")
@@ -1522,7 +1523,7 @@ class StrandsRAGAgent:
 
             # Determine which collection(s) to search
             if collections is None:
-                collections = [collection_name or "default"]
+                collections = [collection_name or self.settings.ollama_collection_name]
                 is_multi_collection = False
             else:
                 is_multi_collection = True
@@ -2012,6 +2013,40 @@ class StrandsRAGAgent:
                     return
                 except Exception as e:
                     logger.warning(f"Comparison search failed: {e}. Falling back to standard RAG.")
+
+            # RESPONSE CACHE CHECK: Check persistent response cache for semantic match
+            # Generate embedding for cache lookup (same as answer_question)
+            question_embedding, embedding_cached = self._generate_embedding(question)
+            if self.response_cache and question_embedding is not None:
+                cached_response = self.response_cache.search_cache(question, question_embedding)
+                if cached_response:
+                    similarity = cached_response.get("similarity", 0)
+                    logger.info(f"✓ Response cache hit (semantic match, {similarity:.1%} similar)")
+                    answer = cached_response.get("response", "")
+                    sources = cached_response.get("sources", [])
+
+                    # Store sources for API to retrieve
+                    self._last_stream_sources = sources
+
+                    # Stream the cached answer in meaningful chunks
+                    paragraphs = answer.split("\n\n")
+                    for para in paragraphs:
+                        if not para.strip():
+                            continue
+                        sentences = [s.strip() for s in para.split(". ")]
+                        for sentence in sentences:
+                            if sentence:
+                                if not sentence.endswith((".", "!", "?", "\n")):
+                                    sentence += ". "
+                                yield sentence + " "
+                        yield "\n\n"
+
+                    logger.info("✓ Used cached answer - NO web search needed")
+                    return
+                else:
+                    logger.debug("Cache miss: No semantically similar cached answer found")
+            else:
+                logger.debug("Response cache not available or no embedding generated")
 
             # Retrieve context
             context_chunks, sources = self.retrieve_context(

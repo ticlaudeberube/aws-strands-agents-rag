@@ -11,6 +11,18 @@ function ChatMessage({ message }) {
         {isUser ? '👤' : '🤖'}
       </div>
       <div className="message-content">
+        {message.timing && message.timing.total_time_ms && (
+          <div className="timing-info">
+            {message.timing.is_cached ? (
+              <span className="cached-badge">⚡ CACHED</span>
+            ) : (
+              <span className="generated-badge">🔍 KB</span>
+            )}
+            <span className="response-time">
+              ⏱️ {(message.timing.total_time_ms / 1000).toFixed(2)}s
+            </span>
+          </div>
+        )}
         <p className="message-text">
           {message.text && typeof message.text === 'string' && message.text.includes('<a') ? (
             // Render HTML links safely
@@ -29,11 +41,6 @@ function ChatMessage({ message }) {
         </p>
         {!isUser && message.sources && message.sources.length > 0 && (
           <SourcesList sources={message.sources} timing={message.timing} />
-        )}
-        {!isUser && message.timing && message.timing.total_time_ms && (
-          <div className="timing-info">
-            ⏱️ Response time: {(message.timing.total_time_ms / 1000).toFixed(2)}s
-          </div>
         )}
       </div>
     </div>

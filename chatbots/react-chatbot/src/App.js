@@ -53,7 +53,7 @@ function App() {
     // Add user message with timestamp (AgentCore compatibility)
     const userMessage = {
       id: nextIdRef.current++,
-      text: forceWebSearch ? `🌐 ${text}` : text,
+      text: text,
       role: 'user',
       isStreaming: false,
       timestamp: new Date().toISOString(),
@@ -185,6 +185,7 @@ function App() {
 
       const endTime = Date.now();
       const totalTime = (endTime - startTime) / 1000;
+      const isCached = totalTime < 0.2; // Cache hits typically <200ms
 
       // Finalize message when streaming completes
       setMessages((prev) => {
@@ -193,7 +194,10 @@ function App() {
         if (messageIndex !== -1) {
           newMessages[messageIndex].text = fullText || 'No response received';
           newMessages[messageIndex].sources = sourcesRef.current;
-          newMessages[messageIndex].timing = { total_time_ms: Math.round(totalTime * 1000) };
+          newMessages[messageIndex].timing = { 
+            total_time_ms: Math.round(totalTime * 1000),
+            is_cached: isCached
+          };
           newMessages[messageIndex].isStreaming = false;
         }
         return newMessages;

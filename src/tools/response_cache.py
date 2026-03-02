@@ -20,7 +20,6 @@ logger = logging.getLogger(__name__)
 class MilvusResponseCache:
     """Persistent response cache using Milvus vector database."""
 
-    CACHE_COLLECTION = "response_cache"
     # COSINE distance in Milvus: ranges from -1.0 to 1.0 (not 0 to 2)
     # - Distance = 1.0: identical vectors (100% similar)
     # - Distance = 0.0: orthogonal vectors (0% similar)
@@ -74,6 +73,7 @@ class MilvusResponseCache:
         self.vector_db = vector_db
         self.embedding_dim = embedding_dim or settings.response_cache_embedding_dim
         self.distance_threshold = distance_threshold or settings.response_cache_threshold
+        self.cache_collection_name = settings.response_cache_collection_name
         self._ensure_collection()
 
     def _extract_main_entity(self, text: str) -> Optional[str]:
@@ -170,16 +170,16 @@ class MilvusResponseCache:
         try:
             collections = self.vector_db.client.list_collections(db_name=self.vector_db.db_name)
 
-            if self.CACHE_COLLECTION in collections:
-                logger.info(f"✓ Response cache collection exists: {self.CACHE_COLLECTION}")
+            if self.cache_collection_name in collections:
+                logger.info(f"✓ Response cache collection exists: {self.cache_collection_name}")
                 return
 
             # Create cache collection - uses settings for index_type and metric_type
             self.vector_db.create_collection(
-                collection_name=self.CACHE_COLLECTION,
+                collection_name=self.cache_collection_name,
                 embedding_dim=self.embedding_dim,
             )
-            logger.info(f"✓ Created response cache collection: {self.CACHE_COLLECTION}")
+            logger.info(f"✓ Created response cache collection: {self.cache_collection_name}")
 
         except Exception as e:
             logger.error(f"Failed to create/verify response cache: {e}")
@@ -207,14 +207,14 @@ class MilvusResponseCache:
             # Ensure collection is loaded before searching
             try:
                 self.vector_db.client.load_collection(
-                    collection_name=self.CACHE_COLLECTION, db_name=self.vector_db.db_name
+                    collection_name=self.cache_collection_name, db_name=self.vector_db.db_name
                 )
             except Exception as load_error:
                 # Collection might already be loaded, that's OK
                 logger.debug(f"Note during load: {load_error}")
 
             results = self.vector_db.search(
-                collection_name=self.CACHE_COLLECTION,
+                collection_name=self.cache_collection_name,
                 query_embedding=question_embedding,
                 limit=limit,
             )
@@ -335,13 +335,13 @@ class MilvusResponseCache:
             }
 
             # Store in Milvus
-            logger.debug(f"[STORE_DEBUG] Attempting to insert into {self.CACHE_COLLECTION}")
+            logger.debug(f"[STORE_DEBUG] Attempting to insert into {self.cache_collection_name}")
             logger.debug(
                 f"[STORE_DEBUG] Question: {question}, Response length: {len(response)}, Embedding length: {len(question_embedding)}"
             )
 
             result = self.vector_db.insert_embeddings(
-                collection_name=self.CACHE_COLLECTION,
+                collection_name=self.cache_collection_name,
                 embeddings=[question_embedding],
                 texts=[response],
                 metadata=[metadata_dict],
@@ -368,7 +368,7 @@ class MilvusResponseCache:
             True if successful
         """
         try:
-            self.vector_db.delete_collection(self.CACHE_COLLECTION)
+            self.vector_db.delete_collection(self.cache_collection_name)
             logger.info("✓ Cleared response cache")
             self._ensure_collection()
             return True
@@ -384,17 +384,17 @@ class MilvusResponseCache:
         """
         try:
             results = self.vector_db.client.query(
-                collection_name=self.CACHE_COLLECTION,
+                collection_name=self.cache_collection_name,
                 db_name=self.vector_db.db_name,
             )
 
             return {
-                "collection": self.CACHE_COLLECTION,
+                "collection": self.cache_collection_name,
                 "cached_responses": len(results) if results else 0,
                 "similarity_threshold": self.SIMILARITY_THRESHOLD,
             }
         except Exception as e:
             return {
                 "error": str(e),
-                "collection": self.CACHE_COLLECTION,
+                "collection": self.cache_collection_name,
             }

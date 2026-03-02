@@ -110,18 +110,23 @@ class StrandsRAGAgent:
     FORMATTING_RULES = prompts.FORMATTING_RULES
 
     def __init__(
-        self, settings: Settings, cache_size: Optional[int] = None, embedding_cache_ttl: int = 3600
+        self,
+        settings: Settings,
+        cache_size: Optional[int] = None,
+        embedding_cache_ttl: Optional[int] = None,
     ):
         """Initialize Strands RAG Agent.
 
         Args:
             settings: Application settings from config
             cache_size: Maximum number of cached items per cache type (uses settings.agent_cache_size if None)
-            embedding_cache_ttl: Time-to-live for cached embeddings in seconds (default: 3600 = 1 hour)
+            embedding_cache_ttl: Time-to-live for cached embeddings in seconds (falls back to settings.embedding_cache_ttl = 3600)
         """
         self.settings = settings
         self.cache_size = cache_size if cache_size is not None else settings.agent_cache_size
-        self.embedding_cache_ttl = embedding_cache_ttl  # TTL for embeddings in seconds
+        self.embedding_cache_ttl = (
+            embedding_cache_ttl if embedding_cache_ttl is not None else settings.embedding_cache_ttl
+        )
 
         # Initialize backend systems
         self.ollama_client = OllamaClient(
@@ -679,8 +684,8 @@ class StrandsRAGAgent:
         self,
         product1: str,
         product2: str,
-        collection_name: str = "milvus_docs",
-        top_k: int = 2,  # OPTIMIZATION: Reduced from 3 to 2 results per search
+        collection_name: Optional[str] = None,
+        top_k: Optional[int] = None,
     ) -> Tuple[str, List[Dict]]:
         """Search for comparison between two products using web search and local context.
 
@@ -705,6 +710,12 @@ class StrandsRAGAgent:
         sources = []
 
         try:
+            # Use setting defaults if not provided
+            if collection_name is None:
+                collection_name = self.settings.milvus_docs_collection_name
+            if top_k is None:
+                top_k = self.settings.search_comparison_top_k
+
             logger.info(f"Generating comparison: {product1} vs {product2} (optimized)")
             perf_start = time.time()
 
@@ -1500,7 +1511,8 @@ class StrandsRAGAgent:
                     comparison_result, comparison_sources = self.search_comparison(
                         products[0],
                         products[1],
-                        collection_name=collection_name or "milvus_docs",
+                        collection_name=collection_name
+                        or self.settings.milvus_docs_collection_name,
                         top_k=top_k,
                     )
                     logger.info(f"Comparison returned {len(comparison_sources)} sources")
@@ -1668,7 +1680,7 @@ class StrandsRAGAgent:
         self,
         collection_name: str,
         question: str,
-        top_k: int = 10,
+        top_k: Optional[int] = None,
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
     ) -> Tuple[str, List[Dict]]:
@@ -1685,7 +1697,7 @@ class StrandsRAGAgent:
         Args:
             collection_name: Name of the collection to search
             question: User question
-            top_k: Number of context chunks to retrieve
+            top_k: Number of context chunks to retrieve (falls back to settings.default_top_k if None)
             temperature: LLM temperature (0.0-2.0, lower=more deterministic). Defaults to settings.
             max_tokens: Maximum tokens to generate. Defaults to settings.
 
@@ -1693,6 +1705,10 @@ class StrandsRAGAgent:
             Tuple of (answer, sources)
         """
         try:
+            # Use setting defaults if not provided
+            if top_k is None:
+                top_k = self.settings.default_top_k
+
             start_time = time.time()
             logger.info(f"[NO CACHE] Answering: {question[:60]}")
 
@@ -1907,7 +1923,7 @@ class StrandsRAGAgent:
         self,
         collection_name: str,
         question: str,
-        top_k: int = 10,
+        top_k: Optional[int] = None,
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
     ):
@@ -1940,6 +1956,10 @@ class StrandsRAGAgent:
         self._last_stream_sources = []
 
         try:
+            # Use setting defaults if not provided
+            if top_k is None:
+                top_k = self.settings.default_top_k
+
             # SECURITY CHECK: Detect obvious attack patterns first (no LLM overhead)
             if self._is_security_attack(question):
                 logger.info("Question rejected: security attack detected")
@@ -2070,7 +2090,7 @@ class StrandsRAGAgent:
         self,
         collection_name: str,
         question: str,
-        top_k: int = 10,
+        top_k: Optional[int] = None,
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
     ):
@@ -2099,6 +2119,10 @@ class StrandsRAGAgent:
         sources: List[Dict] = []
 
         try:
+            # Use setting default if not provided
+            if top_k is None:
+                top_k = self.settings.default_top_k
+
             logger.info(f"[STREAM_NO_CACHE] Answering: {question[:60]}")
 
             # SECURITY CHECK

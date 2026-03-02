@@ -22,7 +22,7 @@ TIMEOUT = 30
 
 
 @dataclass
-class TestResult:
+class Result:
     """Result of a test case."""
 
     name: str
@@ -62,7 +62,7 @@ class IntegrationTestSuite:
             "full_response": data,
         }
 
-    def test_1_cache_hit_fast_response(self) -> TestResult:
+    def test_1_cache_hit_fast_response(self) -> Result:
         """Test that cached queries respond quickly (<1 second)."""
         self.total_tests += 1
         try:
@@ -75,7 +75,7 @@ class IntegrationTestSuite:
                 result2 = self.api_call("What is Milvus?")
                 if result2["elapsed"] < 1.0:
                     self.passed_tests += 1
-                    return TestResult(
+                    return Result(
                         name="Cache Hit - Fast Response",
                         passed=True,
                         message=f"✅ Cached query responded in {result2['elapsed']:.3f}s (expected <1s)",
@@ -83,18 +83,18 @@ class IntegrationTestSuite:
                         details={"first_call": elapsed, "cached_call": result2["elapsed"]},
                     )
 
-            return TestResult(
+            return Result(
                 name="Cache Hit - Fast Response",
                 passed=False,
                 message=f"❌ Response time {result['elapsed']:.3f}s (expected <1s for cached)",
                 elapsed_time=result["elapsed"],
             )
         except Exception as e:
-            return TestResult(
+            return Result(
                 name="Cache Hit - Fast Response", passed=False, message=f"❌ Error: {str(e)}"
             )
 
-    def test_2_entity_validation_prevents_hallucination(self) -> TestResult:
+    def test_2_entity_validation_prevents_hallucination(self) -> Result:
         """Test that cache entity validation prevents returning wrong product answers."""
         self.total_tests += 1
         try:
@@ -111,7 +111,7 @@ class IntegrationTestSuite:
 
             if milvus_any and pinecone_any and not milvus_in_pinecone:
                 self.passed_tests += 1
-                return TestResult(
+                return Result(
                     name="Entity Validation - Prevents Hallucination",
                     passed=True,
                     message="✅ Pinecone query returned Pinecone answer (not cached Milvus)",
@@ -119,20 +119,20 @@ class IntegrationTestSuite:
                     details={"has_pinecone": pinecone_any, "has_milvus": milvus_in_pinecone},
                 )
 
-            return TestResult(
+            return Result(
                 name="Entity Validation - Prevents Hallucination",
                 passed=False,
                 message=f"❌ Validation failed: pinecone={pinecone_any}, milvus_in_pinecone={milvus_in_pinecone}",
                 details={"answer": r2["answer"][:200]},
             )
         except Exception as e:
-            return TestResult(
+            return Result(
                 name="Entity Validation - Prevents Hallucination",
                 passed=False,
                 message=f"❌ Error: {str(e)}",
             )
 
-    def test_3_force_web_search_returns_sources(self) -> TestResult:
+    def test_3_force_web_search_returns_sources(self) -> Result:
         """Test that force_web_search=true returns web sources."""
         self.total_tests += 1
         try:
@@ -146,7 +146,7 @@ class IntegrationTestSuite:
 
             if len(sources) >= 3 and has_urls and has_titles and web_sources:
                 self.passed_tests += 1
-                return TestResult(
+                return Result(
                     name="Force Web Search - Returns Sources",
                     passed=True,
                     message=f"✅ Got {len(sources)} web sources with URLs and titles",
@@ -159,7 +159,7 @@ class IntegrationTestSuite:
                     },
                 )
 
-            return TestResult(
+            return Result(
                 name="Force Web Search - Returns Sources",
                 passed=False,
                 message=f"❌ Expected ≥3 web sources, got {len(sources)}. has_urls={has_urls}, has_titles={has_titles}, web_sources={web_sources}",
@@ -167,13 +167,13 @@ class IntegrationTestSuite:
                 details={"sources": sources},
             )
         except Exception as e:
-            return TestResult(
+            return Result(
                 name="Force Web Search - Returns Sources",
                 passed=False,
                 message=f"❌ Error: {str(e)}",
             )
 
-    def test_4_force_web_search_is_slower(self) -> TestResult:
+    def test_4_force_web_search_is_slower(self) -> Result:
         """Test that force_web_search is slower than cached responses."""
         self.total_tests += 1
         try:
@@ -190,7 +190,7 @@ class IntegrationTestSuite:
             # Web search should be slower (unless first call wasn't cached)
             if web_time > cached_time:
                 self.passed_tests += 1
-                return TestResult(
+                return Result(
                     name="Force Web Search - Slower than Cache",
                     passed=True,
                     message=f"✅ Web search {web_time:.2f}s > cached {cached_time:.2f}s",
@@ -198,7 +198,7 @@ class IntegrationTestSuite:
                     details={"cached": cached_time, "web_search": web_time},
                 )
 
-            return TestResult(
+            return Result(
                 name="Force Web Search - Slower than Cache",
                 passed=False,
                 message=f"⚠️ Web search {web_time:.2f}s not slower than cached {cached_time:.2f}s (might be first call)",
@@ -206,13 +206,13 @@ class IntegrationTestSuite:
                 details={"cached": cached_time, "web_search": web_time},
             )
         except Exception as e:
-            return TestResult(
+            return Result(
                 name="Force Web Search - Slower than Cache",
                 passed=False,
                 message=f"❌ Error: {str(e)}",
             )
 
-    def test_5_sources_format_correct(self) -> TestResult:
+    def test_5_sources_format_correct(self) -> Result:
         """Test that sources have correct format (title, url, snippet, distance)."""
         self.total_tests += 1
         try:
@@ -220,7 +220,7 @@ class IntegrationTestSuite:
             sources = result["sources"]
 
             if not sources:
-                return TestResult(
+                return Result(
                     name="Sources Format",
                     passed=False,
                     message="❌ No sources returned",
@@ -234,7 +234,7 @@ class IntegrationTestSuite:
 
             if has_all_fields:
                 self.passed_tests += 1
-                return TestResult(
+                return Result(
                     name="Sources Format",
                     passed=True,
                     message="✅ Sources have correct format (title, url, source_type, etc)",
@@ -242,16 +242,16 @@ class IntegrationTestSuite:
                     details={"fields": list(first_source.keys())},
                 )
 
-            return TestResult(
+            return Result(
                 name="Sources Format",
                 passed=False,
                 message=f"❌ Missing required fields. Has: {list(first_source.keys())}",
                 details={"first_source": first_source},
             )
         except Exception as e:
-            return TestResult(name="Sources Format", passed=False, message=f"❌ Error: {str(e)}")
+            return Result(name="Sources Format", passed=False, message=f"❌ Error: {str(e)}")
 
-    def test_6_no_snippet_in_response(self) -> TestResult:
+    def test_6_no_snippet_in_response(self) -> Result:
         """Test that snippet/text is not shown in GUI (removed in recent update)."""
         self.total_tests += 1
         try:
@@ -259,7 +259,7 @@ class IntegrationTestSuite:
             sources = result["sources"]
 
             if not sources:
-                return TestResult(
+                return Result(
                     name="No Snippet in Sources",
                     passed=False,
                     message="❌ No sources to check",
@@ -277,7 +277,7 @@ class IntegrationTestSuite:
 
             if not has_snippet and not has_text and has_required:
                 self.passed_tests += 1
-                return TestResult(
+                return Result(
                     name="No Snippet in Sources",
                     passed=True,
                     message="✅ Snippet/text removed from sources (URL, title only)",
@@ -285,18 +285,16 @@ class IntegrationTestSuite:
                     details={"fields": list(first_source.keys())},
                 )
 
-            return TestResult(
+            return Result(
                 name="No Snippet in Sources",
                 passed=False,
                 message=f"❌ Snippet still present: has_snippet={has_snippet}, has_text={has_text}",
                 details={"first_source": first_source},
             )
         except Exception as e:
-            return TestResult(
-                name="No Snippet in Sources", passed=False, message=f"❌ Error: {str(e)}"
-            )
+            return Result(name="No Snippet in Sources", passed=False, message=f"❌ Error: {str(e)}")
 
-    def test_7_api_response_structure(self) -> TestResult:
+    def test_7_api_response_structure(self) -> Result:
         """Test that API response has correct structure."""
         self.total_tests += 1
         try:
@@ -313,7 +311,7 @@ class IntegrationTestSuite:
 
             if has_required and has_message and len(has_content) > 10:
                 self.passed_tests += 1
-                return TestResult(
+                return Result(
                     name="API Response Structure",
                     passed=True,
                     message="✅ Response has correct structure (choices, sources, timing)",
@@ -321,14 +319,14 @@ class IntegrationTestSuite:
                     details={"top_level_keys": list(response.keys())},
                 )
 
-            return TestResult(
+            return Result(
                 name="API Response Structure",
                 passed=False,
                 message=f"❌ Missing required fields: {[k for k in required_top_level if k not in response]}",
                 details={"keys": list(response.keys())},
             )
         except Exception as e:
-            return TestResult(
+            return Result(
                 name="API Response Structure", passed=False, message=f"❌ Error: {str(e)}"
             )
 

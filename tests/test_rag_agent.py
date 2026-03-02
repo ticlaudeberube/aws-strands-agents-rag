@@ -765,9 +765,15 @@ class TestComparativeAnalysis:
     ):
         """Test that comparative questions trigger comparison functionality."""
         mock_db = MagicMock()
+        # Mock database search to return results
+        mock_db.search.return_value = [
+            {"text": "Milvus is a vector DB", "distance": 0.1, "metadata": {"source": "test"}}
+        ]
         mock_milvus.return_value = mock_db
 
         mock_client = MagicMock()
+        # Mock embedding generation
+        mock_client.embed_text.return_value = [0.1] * 384
         # Mock both the classification and synthesis responses using side_effect
         mock_client.generate.side_effect = [
             # First call: classification response

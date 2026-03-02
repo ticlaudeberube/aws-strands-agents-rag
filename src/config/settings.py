@@ -53,6 +53,12 @@ class Settings(BaseSettings):
 
     # Collection Configuration
     ollama_collection_name: str = "milvus_rag_collection"
+    milvus_docs_collection_name: str = os.getenv(
+        "MILVUS_DOCS_COLLECTION_NAME", "milvus_docs"
+    )  # Default collection for context retrieval
+    response_cache_collection_name: str = os.getenv(
+        "RESPONSE_CACHE_COLLECTION_NAME", "response_cache"
+    )  # Collection for persistent response caching
 
     # Embedding and chunk processing
     max_chunk_length: int = 250  # Reduced from 400 for faster context processing (30-40% speedup)
@@ -77,6 +83,17 @@ class Settings(BaseSettings):
     response_cache_threshold: float = float(
         os.getenv("RESPONSE_CACHE_THRESHOLD", "0.92")
     )  # Semantic cache distance threshold
+
+    # Retrieval Tuning (Phase 3B)
+    default_top_k: int = int(
+        os.getenv("DEFAULT_TOP_K", "10")
+    )  # Default number of context chunks for retrieval
+    search_comparison_top_k: int = int(
+        os.getenv("SEARCH_COMPARISON_TOP_K", "2")
+    )  # Top-k for product comparison searches (optimized for speed)
+    embedding_cache_ttl: int = int(
+        os.getenv("EMBEDDING_CACHE_TTL", "3600")
+    )  # Time-to-live for cached embeddings in seconds (3600 = 1 hour)
 
     # Application Configuration
     log_level: str = "INFO"

@@ -1,22 +1,21 @@
 import sys
 from pymilvus import MilvusClient, DataType
 from dotenv import load_dotenv
-load_dotenv()
-
 from core import get_client
 
-def create_index(_collection_name = "hello_world_collection"):
+load_dotenv()
+
+
+def create_index(_collection_name="hello_world_collection"):
     # Constants
     COLLECTION_NAME: str = _collection_name
     VECTOR_DIM: int = 5
     MAX_TEXT_LENGTH: int = 65535
-    INDEX_NAME="vector"
+    INDEX_NAME = "vector"
 
     # Optimized parameters for Docker Desktop
-    NLIST_PARAM: int = 64  # Reduced for smaller datasets
-    M_PARAM: int = 16      # HNSW connectivity
+    M_PARAM: int = 16  # HNSW connectivity
     EF_CONSTRUCTION: int = 200  # Build quality
-    EF_SEARCH: int = 64    # Search quality vs speed
 
     client: MilvusClient = get_client()
 
@@ -38,10 +37,7 @@ def create_index(_collection_name = "hello_world_collection"):
         metric_type="COSINE",
         index_type="HNSW",
         index_name=INDEX_NAME,
-        params={
-            "M": M_PARAM,
-            "efConstruction": EF_CONSTRUCTION
-        }
+        params={"M": M_PARAM, "efConstruction": EF_CONSTRUCTION},
     )
 
     # Option 2: IVF_FLAT (Uncomment to use instead)
@@ -66,8 +62,12 @@ def create_index(_collection_name = "hello_world_collection"):
         indexes = client.list_indexes(collection_name=COLLECTION_NAME)
         if INDEX_NAME in indexes:
             print(f"Index '{INDEX_NAME}' already exists on collection: {COLLECTION_NAME}")
-            response = input("Do you want to remove the existing index and create a new one? (y/n): ").lower().strip()
-            if response not in ['y', 'yes']:
+            response = (
+                input("Do you want to remove the existing index and create a new one? (y/n): ")
+                .lower()
+                .strip()
+            )
+            if response not in ["y", "yes"]:
                 print("Index creation cancelled.")
                 return
     except Exception:
@@ -88,21 +88,18 @@ def create_index(_collection_name = "hello_world_collection"):
         pass  # Index might not exist
 
     try:
-        client.create_index(
-            collection_name=COLLECTION_NAME,
-            index_params=index_params,
-            sync=False
-        )
+        client.create_index(collection_name=COLLECTION_NAME, index_params=index_params, sync=False)
         print(f"Index created for collection: {COLLECTION_NAME}")
-        
+
         # Reload collection after creating index
         client.load_collection(collection_name=COLLECTION_NAME)
         print(f"Reloaded collection: {COLLECTION_NAME}")
-        
+
     except Exception as e:
         print(f"Error creating index: {e}")
         exit(1)
 
+
 if __name__ == "__main__":
-    name: str = sys.argv[1] if len(sys.argv) > 1 else None # type: ignore
+    name: str = sys.argv[1] if len(sys.argv) > 1 else None  # type: ignore
     create_index(name)

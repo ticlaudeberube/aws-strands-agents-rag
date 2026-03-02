@@ -19,6 +19,7 @@ vector_db = MilvusVectorDB(
     db_name=db_name,
 )
 
+
 def sync_embeddings():
     """Sync embeddings from JSON file into Milvus collection"""
     try:
@@ -28,40 +29,40 @@ def sync_embeddings():
         print("❌ Error: ./data/embeddings.json not found")
         print("   Please run: python document-loaders/load_milvus_docs_ollama.py")
         return
-    
+
     if not data:
         print("❌ No data to sync")
         return
-    
+
     # Check if collection exists
     existing_collections = vector_db.list_collections()
-    
+
     if collection_name in existing_collections:
         print(f"Collection '{collection_name}' already exists.")
         choice = input("Do you want to (o)verwrite or (a)bort? [o/a]: ").lower().strip()
-        
-        if choice == 'a':
+
+        if choice == "a":
             print("Sync aborted by user.")
             return
-        elif choice == 'o':
+        elif choice == "o":
             print(f"Dropping collection '{collection_name}'...")
             vector_db.delete_collection(collection_name)
-    
+
     # Extract embeddings, texts, and metadata from JSON
     embeddings = [item["vector"] for item in data]
     texts = [item["text"] for item in data]
     metadata = [item.get("metadata", {}) for item in data]
-    
+
     # Determine embedding dimension
     embedding_dim = len(embeddings[0]) if embeddings else 384
-    
+
     # Create collection
     print(f"Creating collection '{collection_name}' with dimension {embedding_dim}...")
     vector_db.create_collection(
         collection_name=collection_name,
         embedding_dim=embedding_dim,
     )
-    
+
     # Insert embeddings
     print(f"Inserting {len(embeddings)} embeddings...")
     try:
@@ -73,10 +74,13 @@ def sync_embeddings():
                 metadata=metadata,
             )
             pbar.update(len(embeddings))
-        print(f"✅ Successfully synced {len(embeddings)} embeddings into collection '{collection_name}'")
+        print(
+            f"✅ Successfully synced {len(embeddings)} embeddings into collection '{collection_name}'"
+        )
     except Exception as e:
         print(f"❌ Error inserting embeddings: {e}")
         raise
+
 
 if __name__ == "__main__":
     try:

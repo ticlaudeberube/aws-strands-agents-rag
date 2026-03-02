@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path.cwd()))
 
 from src.config.settings import get_settings
@@ -28,12 +29,16 @@ Question: {question}
 
 Respond with only "YES" or "NO":"""
 
-response = ollama.generate(
-    prompt=scope_check_prompt.format(question=question),
-    model=settings.ollama_model,
-    temperature=0.0,
-    max_tokens=5,
-).strip().upper()
+response = (
+    ollama.generate(
+        prompt=scope_check_prompt.format(question=question),
+        model=settings.ollama_model,
+        temperature=0.0,
+        max_tokens=5,
+    )
+    .strip()
+    .upper()
+)
 
 print(f"Question: {question}")
 print(f"Scope check response: {response}")

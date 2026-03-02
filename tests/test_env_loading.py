@@ -4,6 +4,8 @@
 import os
 import sys
 from pathlib import Path
+from dotenv import load_dotenv
+from src.tools.web_search import WebSearchClient
 
 # Test 1: Check without loading .env
 print("=" * 60)
@@ -16,7 +18,8 @@ print()
 print("=" * 60)
 print("TEST 2: Loading .env file with python-dotenv")
 print("=" * 60)
-from dotenv import load_dotenv
+
+
 env_file = Path(__file__).parent.parent / ".env"
 print(f"Loading from: {env_file}")
 print(f"File exists: {env_file.exists()}")
@@ -25,16 +28,16 @@ loaded = load_dotenv(env_file)
 print(f"Load result: {loaded}")
 print()
 
-# Test 3: Check after loading .env  
+# Test 3: Check after loading .env
 print("=" * 60)
 print("TEST 3: Environment variables AFTER loading .env")
 print("=" * 60)
-tavily_key = os.environ.get('TAVILY_API_KEY', 'NOT SET')
-if tavily_key and tavily_key != 'NOT SET':
+tavily_key = os.environ.get("TAVILY_API_KEY", "NOT SET")
+if tavily_key and tavily_key != "NOT SET":
     preview = f"{tavily_key[:10]}..." if len(tavily_key) > 10 else "***"
     print(f"✓ TAVILY_API_KEY is SET: {preview}")
 else:
-    print(f"✗ TAVILY_API_KEY is NOT SET")
+    print("✗ TAVILY_API_KEY is NOT SET")
 print()
 
 # Test 4: Check WebSearchClient
@@ -42,14 +45,16 @@ print("=" * 60)
 print("TEST 4: WebSearchClient initialization")
 print("=" * 60)
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from src.tools.web_search import WebSearchClient
+
 
 web_search = WebSearchClient()
 if web_search.tavily.api_key:
-    preview = f"{web_search.tavily.api_key[:10]}..." if len(web_search.tavily.api_key) > 10 else "***"
+    preview = (
+        f"{web_search.tavily.api_key[:10]}..." if len(web_search.tavily.api_key) > 10 else "***"
+    )
     print(f"✓ WebSearchClient has API key: {preview}")
 else:
-    print(f"✗ WebSearchClient has NO API key")
+    print("✗ WebSearchClient has NO API key")
 print()
 
 # Test 5: Try a search

@@ -2,34 +2,26 @@
 """Test the URL-to-HTML conversion function."""
 
 import re
-import json
+
 
 def convert_urls_to_html_links(text: str) -> str:
     """Convert markdown links and plain URLs to HTML clickable links."""
     if not text:
         return text
-    
+
     # 1. Convert markdown links: [text](url) → <a href="url" target="_blank">text</a>
-    text = re.sub(
-        r'\[([^\]]+)\]\(([^)]+)\)',
-        r'<a href="\2" target="_blank">\1</a>',
-        text
-    )
-    
+    text = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r'<a href="\2" target="_blank">\1</a>', text)
+
     # 2. Convert plain URLs wrapped in angle brackets: <url> → <a href="url" target="_blank">url</a>
-    text = re.sub(
-        r'<(https?://[^\s>]+)>',
-        r'<a href="\1" target="_blank">\1</a>',
-        text
-    )
-    
+    text = re.sub(r"<(https?://[^\s>]+)>", r'<a href="\1" target="_blank">\1</a>', text)
+
     # 3. Convert plain HTTPS/HTTP URLs not already converted
     text = re.sub(
         r'(?<!href=")(?<!href=\')(?<!>)(https?://[^\s<)]+?)(?=[\s<\)\.\,\;:]|$)',
         r'<a href="\1" target="_blank">\1</a>',
-        text
+        text,
     )
-    
+
     return text
 
 
@@ -59,9 +51,9 @@ print("=" * 60)
 for test in test_cases:
     print(f"\nTest: {test['name']}")
     print(f"Input:  {test['input'][:80]}")
-    result = convert_urls_to_html_links(test['input'])
+    result = convert_urls_to_html_links(test["input"])
     print(f"Output: {result[:100]}")
-    has_html = test['should_have'] in result
+    has_html = test["should_have"] in result
     print(f"Result: {'✓ PASS' if has_html else '✗ FAIL'}")
     if not has_html:
         print("  FULL OUTPUT:", result)
@@ -86,13 +78,13 @@ print("\n" + "=" * 60)
 print("Test: Full Cached Answer Format")
 print("=" * 60)
 result = convert_urls_to_html_links(cached_answer)
-html_links = result.count('<a href')
+html_links = result.count("<a href")
 print(f"Number of <a href tags: {html_links}")
 print(f"Result: {'✓ PASS' if html_links >= 3 else '✗ FAIL'}")
 if html_links >= 3:
     print("\nFirst converted link:")
-    idx = result.find('<a href')
-    print(result[idx:idx+120])
+    idx = result.find("<a href")
+    print(result[idx : idx + 120])
 else:
     print("\nNo HTML links found!")
     print("First markdown link still present:", "[Using strings to filter]" in result)

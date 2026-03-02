@@ -4,16 +4,15 @@
 import logging
 import sys
 from pathlib import Path
-
-# Add parent directory to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+from src.config.settings import get_settings
+from src.agents.strands_rag_agent import StrandsRAGAgent
 
 # Load environment variables from .env file (required for TAVILY_API_KEY and other secrets)
 from dotenv import load_dotenv
-load_dotenv()
 
-from src.config.settings import get_settings
-from src.agents.strands_rag_agent import StrandsRAGAgent
+# Add parent directory to path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+load_dotenv()
 
 logging.basicConfig(
     level=logging.INFO,
@@ -61,7 +60,7 @@ def main():
     collection_name = settings.ollama_collection_name
 
     print_header()
-    
+
     # Chat loop
     try:
         while True:
@@ -106,7 +105,7 @@ def main():
             except Exception as e:
                 logger.error(f"Unexpected error: {e}")
                 print(f"❌ Error: {e}\n")
-    
+
     finally:
         # Clean up resources
         agent.close()

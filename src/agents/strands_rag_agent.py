@@ -801,11 +801,13 @@ class StrandsRAGAgent:
                     f"{product1} vs {product2} features advantages comparison vector database"
                 )
                 product1_context, product1_sources = self.retrieve_context(
-                    collection_name, combined_query, top_k=top_k  # Reduced from duplicate queries
+                    collection_name,
+                    combined_query,
+                    top_k=top_k,  # Reduced from duplicate queries
                 )
                 sources.extend(product1_sources)
                 logger.info(
-                    f"Retrieved {len(product1_context)} context chunks in {time.time()-retrieval_start:.1f}s"
+                    f"Retrieved {len(product1_context)} context chunks in {time.time() - retrieval_start:.1f}s"
                 )
             except Exception as e:
                 logger.warning(f"Failed to retrieve context: {e}")
@@ -825,7 +827,7 @@ class StrandsRAGAgent:
                     max_tokens=500,  # OPTIMIZATION: Reduced from 1000 to 500
                 )
                 logger.info(
-                    f"✓ LLM synthesis ({time.time()-llm_start:.1f}s): {len(comparison_summary)} chars"
+                    f"✓ LLM synthesis ({time.time() - llm_start:.1f}s): {len(comparison_summary)} chars"
                 )
             except Exception as e:
                 logger.warning(f"Failed to synthesize comparison via LLM: {e}")

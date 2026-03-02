@@ -8,9 +8,10 @@ from .exceptions import MilvusConnectionError
 # Global client instance - initialized lazily
 _client: Optional[MilvusClient] = None
 
+
 def get_client(db_name: Optional[str] = None) -> MilvusClient:
     """Get Milvus client with lazy initialization and connection validation.
-    
+
     Args:
         db_name: Optional database name to use. If not provided, uses config default.
     """
@@ -31,6 +32,7 @@ def get_client(db_name: Optional[str] = None) -> MilvusClient:
         except Exception as e:
             raise MilvusConnectionError(f"Failed to connect to Milvus: {e}")
     return _client
+
 
 def reset_client() -> None:
     """Reset client connection (useful for testing)."""

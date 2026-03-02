@@ -37,6 +37,19 @@ class Settings(BaseSettings):
     milvus_metric_type: str = os.getenv(
         "MILVUS_METRIC_TYPE", "COSINE"
     )  # Similarity metric (COSINE, L2, IP)
+    # HNSW Index Parameters
+    milvus_hnsw_m: int = int(
+        os.getenv("MILVUS_HNSW_M", "30")
+    )  # Maximum connections for each element in HNSW
+    milvus_hnsw_ef_construction: int = int(
+        os.getenv("MILVUS_HNSW_EF_CONSTRUCTION", "200")
+    )  # Dynamic list size for HNSW construction
+    milvus_ivf_nlist: int = int(
+        os.getenv("MILVUS_IVF_NLIST", "128")
+    )  # Number of clusters for IVF_FLAT index
+    milvus_search_ef: int = int(
+        os.getenv("MILVUS_SEARCH_EF", "64")
+    )  # HNSW search parameter (speed/accuracy tradeoff)
 
     # Collection Configuration
     ollama_collection_name: str = "milvus_rag_collection"

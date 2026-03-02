@@ -132,15 +132,15 @@ class MilvusVectorDB:
                 "index_type": index_type,
             }
 
-            # Set index-specific parameters
+            # Set index-specific parameters from settings
             if index_type == "HNSW":
                 index_params["params"] = {
-                    "M": 30,  # Maximum number of connections for each element
-                    "efConstruction": 200,  # Size of dynamic list for construction
+                    "M": settings.milvus_hnsw_m,
+                    "efConstruction": settings.milvus_hnsw_ef_construction,
                 }
             elif index_type == "IVF_FLAT":
                 index_params["params"] = {
-                    "nlist": 128,  # Number of clusters
+                    "nlist": settings.milvus_ivf_nlist,
                 }
 
             self.client.create_collection(
@@ -267,9 +267,11 @@ class MilvusVectorDB:
             List of search results with text and scores
         """
         try:
-            # Default search parameters optimized for HNSW
+            # Load settings for default search parameters
+            settings = get_settings()
+            # Default search parameters optimized for HNSW (from settings)
             if search_params is None:
-                search_params = {"ef": 64}  # Trade-off between speed and accuracy
+                search_params = {"ef": settings.milvus_search_ef}
 
             results = self.client.search(
                 collection_name=collection_name,

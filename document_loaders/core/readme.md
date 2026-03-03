@@ -34,6 +34,30 @@ create_collection("my_collection")
 embeddings = EmbeddingProvider.embed_text("Hello world", provider="ollama")
 ```
 
+## Standalone Loader Usage
+
+For document loader scripts, use the direct tools module:
+
+```python
+from document_loaders.core.tools import MilvusVectorDB, OllamaClient
+
+vector_db = MilvusVectorDB(
+    host="localhost",
+    port=19530,
+    db_name="knowledge_base",
+)
+
+ollama_client = OllamaClient(host="http://localhost:11434")
+embedding = ollama_client.embed_text("What is Milvus?")
+```
+
+The module `document_loaders.core.tools` is the canonical standalone path used by:
+- `document_loaders/load_milvus_docs_ollama.py`
+- `document_loaders/sync_responses_cache.py`
+- `document_loaders/load_embeddings_from_json.py`
+
+These scripts read configuration from `.env` through `document_loaders/local_settings.py`.
+
 ## Modules
 
 ### client.py

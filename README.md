@@ -213,7 +213,7 @@ aws-strands-agents-rag/
 ├── src/agents/              # StrandsRAGAgent implementation
 ├── src/tools/               # Ollama & Milvus clients
 ├── src/config/              # Configuration management
-├── src/document_loaders/    # Document loading utilities
+├── document-loaders/        # Document loading utilities
 ├── docker/                  # Docker Compose setup
 ├── tests/                   # Test suite
 ├── docs/                    # Detailed documentation

@@ -15,8 +15,8 @@ def download_milvus_docs():
     zip_file = "milvus_docs_2.4.x_en.zip"
     extract_dir = "milvus_docs"
 
-    # Create document-loaders directory if it doesn't exist
-    docs_dir = Path("document-loaders")
+    # Use this script's directory to avoid cwd-dependent path issues
+    docs_dir = Path(__file__).resolve().parent
     docs_dir.mkdir(exist_ok=True)
 
     zip_path = docs_dir / zip_file

@@ -4,7 +4,7 @@
 This script loads question-answer pairs with their embeddings into Milvus
 response_cache collection, enabling instant semantic cache hits for common questions.
 
-Usage: python document-loaders/sync_responses_cache.py
+Usage: python document_loaders/sync_responses_cache.py
 """
 
 import json
@@ -16,8 +16,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from tqdm import tqdm
-from src.config.settings import get_settings
-from src.tools import MilvusVectorDB, OllamaClient
+from document_loaders.core.tools import MilvusVectorDB, OllamaClient
+from document_loaders.local_settings import get_loader_settings
 
 # Setup logging
 logging.basicConfig(
@@ -27,7 +27,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-settings = get_settings()
+settings = get_loader_settings()
 vector_db = MilvusVectorDB(
     host=settings.milvus_host,
     port=settings.milvus_port,

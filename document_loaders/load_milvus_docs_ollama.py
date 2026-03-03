@@ -9,8 +9,11 @@ from pathlib import Path
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.config.settings import Settings
-from src.tools import MilvusVectorDB, OllamaClient
+from document_loaders.core.tools import MilvusVectorDB, OllamaClient
+from document_loaders.local_settings import get_loader_settings
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = SCRIPT_DIR.parent
 
 # Load settings from .env file
 env_file_path = Path(".env")
@@ -18,7 +21,7 @@ if not env_file_path.exists():
     print(f"⚠️  Warning: .env file not found at {env_file_path.absolute()}")
     print("   Using default configuration values")
 
-settings = Settings()
+settings = get_loader_settings()
 collection_name = settings.ollama_collection_name
 db_name = settings.loader_milvus_db_name
 
@@ -37,13 +40,15 @@ ollama_client = None
 
 def ensure_milvus_docs():
     """Check if milvus_docs exist, download if needed"""
-    docs_path = Path("./document-loaders/milvus_docs")
+    docs_path = SCRIPT_DIR / "milvus_docs"
 
     # Check if directory is empty or doesn't exist
     if not docs_path.exists() or not any(docs_path.glob("**/*.md")):
         print("Milvus documentation not found. Downloading...")
         try:
-            subprocess.run(["python", "./document-loaders/download_milvus_docs.py"], check=True)
+            subprocess.run(
+                [sys.executable, str(SCRIPT_DIR / "download_milvus_docs.py")], check=True
+            )
             print("Documentation downloaded successfully.")
         except subprocess.CalledProcessError as e:
             print(f"Failed to download documentation: {e}")
@@ -171,7 +176,7 @@ def process(insertCollection=True):
         print("   2. If not running, start it:")
         print("      cd docker && docker-compose up -d")
         print("   3. Wait 30 seconds for Milvus to be ready")
-        print("   4. Try again: python document-loaders/load_milvus_docs_ollama.py")
+        print("   4. Try again: python document_loaders/load_milvus_docs_ollama.py")
         sys.exit(1)
     except Exception as e:
         print(f"\n❌ Unexpected error connecting to Milvus: {e}")
@@ -194,7 +199,7 @@ def process(insertCollection=True):
     print("Reading documentation files...")
 
     # Prioritize conceptual/overview files first
-    all_files = glob("./document-loaders/milvus_docs/en/**/*.md", recursive=True)
+    all_files = glob(str(SCRIPT_DIR / "milvus_docs" / "en" / "**" / "*.md"), recursive=True)
 
     # Sort: overview/about files first, then others
     def sort_key(path):
@@ -306,15 +311,16 @@ def process(insertCollection=True):
     print(f"Created {len(embeddings_list)} embeddings")
 
     # Save to JSON file
-    Path("./data").mkdir(exist_ok=True)
+    data_dir = PROJECT_ROOT / "data"
+    data_dir.mkdir(exist_ok=True)
     data_to_save = [
         {"id": idx, "vector": emb, "text": text, "metadata": meta}
         for idx, (emb, text, meta) in enumerate(zip(embeddings_list, texts_list, metadata_list))
     ]
 
-    with open("./data/embeddings.json", "w", encoding="utf-8") as f:
+    with open(data_dir / "embeddings.json", "w", encoding="utf-8") as f:
         json.dump(data_to_save, f, indent=2, ensure_ascii=False)
-    print(f"Saved {len(data_to_save)} embeddings to ./data/embeddings.json")
+    print(f"Saved {len(data_to_save)} embeddings to {data_dir / 'embeddings.json'}")
 
     if insertCollection:
         embedding_dim = len(embeddings_list[0])

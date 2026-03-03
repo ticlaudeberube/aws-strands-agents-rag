@@ -6,10 +6,10 @@ from tqdm import tqdm  # type: ignore[import-untyped]
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.config.settings import get_settings
-from src.tools import MilvusVectorDB
+from document_loaders.core.tools import MilvusVectorDB
+from document_loaders.local_settings import get_loader_settings
 
-settings = get_settings()
+settings = get_loader_settings()
 collection_name = settings.ollama_collection_name
 db_name = settings.loader_milvus_db_name
 
@@ -27,7 +27,7 @@ def sync_embeddings():
             data = json.load(f)
     except FileNotFoundError:
         print("❌ Error: ./data/embeddings.json not found")
-        print("   Please run: python document-loaders/load_milvus_docs_ollama.py")
+        print("   Please run: python document_loaders/load_milvus_docs_ollama.py")
         return
 
     if not data:

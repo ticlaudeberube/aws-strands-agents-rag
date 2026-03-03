@@ -382,10 +382,14 @@ class MilvusResponseCache:
         Returns:
             Dict with cache statistics
         """
+        from src.config.settings import get_settings
+
+        settings = get_settings()
         try:
             results = self.vector_db.client.query(
                 collection_name=self.cache_collection_name,
                 db_name=self.vector_db.db_name,
+                limit=settings.response_cache_stats_limit,
             )
 
             return {

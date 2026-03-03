@@ -9,7 +9,7 @@ A high-performance Retrieval-Augmented Generation (RAG) system using AWS Strands
 | Category | Documents |
 |----------|-----------|
 | **Getting Started** | [Setup Guide](docs/GETTING_STARTED.md) • [Configuration](docs/GETTING_STARTED.md#configuration) |
-| **Architecture** | [System Design](docs/ARCHITECTURE.md) • [Data Flow](docs/ARCHITECTURE.md#data-flow) • [Caching](docs/CACHING_STRATEGY.md) • [AWS Deployment](docs/AWS_ARCHITECTURE.md) |
+| **Architecture** | [System Design](docs/ARCHITECTURE.md) • [Data Flow](docs/ARCHITECTURE.md#data-flow) • [Caching](docs/CACHING_STRATEGY.md) • [AWS Deployment](docs/AWS_ARCHITECTURE.md) • [Chat + Skills Flow](docs/CHAT_REQUEST_SKILLS_FLOW.md) |
 | **Development** | [Code Examples](docs/DEVELOPMENT.md) • [API Reference](docs/API_SERVER.md) • [Strands Reference](docs/STRANDS_QUICK_REFERENCE.md) |
 | **Operations** | [React Deployment](docs/REACT_DEPLOYMENT.md) • [Docker Setup](docker/README.md) • [Troubleshooting](docs/GETTING_STARTED.md#troubleshooting) |
 | **CI/CD** | [GitHub Actions Setup](docs/GITHUB_ACTIONS_SETUP.md) |
@@ -213,7 +213,7 @@ aws-strands-agents-rag/
 ├── src/agents/              # StrandsRAGAgent implementation
 ├── src/tools/               # Ollama & Milvus clients
 ├── src/config/              # Configuration management
-├── document-loaders/        # Document loading utilities
+├── src/document_loaders/    # Document loading utilities
 ├── docker/                  # Docker Compose setup
 ├── tests/                   # Test suite
 ├── docs/                    # Detailed documentation

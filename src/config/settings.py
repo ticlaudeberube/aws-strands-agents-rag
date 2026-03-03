@@ -85,6 +85,10 @@ class Settings(BaseSettings):
         default=0.99,
         validation_alias="RESPONSE_CACHE_THRESHOLD",
     )
+    response_cache_stats_limit: int = Field(
+        default=10000,
+        validation_alias="RESPONSE_CACHE_STATS_LIMIT",
+    )
 
     # Retrieval Tuning (Phase 3B)
     default_top_k: int = int(

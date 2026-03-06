@@ -6,7 +6,7 @@ The system uses a Strands-compliant architecture with proper tool organization a
 
 | Component | Details |
 |-----------|---------|
-| **Agent Base** | Strands-compliant `StrandsRAGAgent` with tool methods |
+| **Agent Base** | Graph-based `StrandsGraphRAGAgent` (3-node: Topic Check → Security Check → RAG Worker) |
 | **Tool Definition** | Methods with full docstrings and type hints |
 | **Tool Management** | Centralized ToolRegistry with skill-based organization |
 | **Protocol** | Model Context Protocol (MCP) for standard tool communication |
@@ -18,13 +18,13 @@ The system uses a Strands-compliant architecture with proper tool organization a
 
 ## For Developers: Quick Start
 
-### 1. Using StrandsRAGAgent
+### 1. Using StrandsGraphRAGAgent
 
 **Standard usage:**
 ```python
-from src.agents.strands_rag_agent import StrandsRAGAgent
+from src.agents.strands_graph_agent import StrandsGraphRAGAgent
 
-agent = StrandsRAGAgent(settings)
+agent = StrandsGraphRAGAgent(settings)
 
 # Full RAG pipeline
 answer = agent.answer_question(
@@ -208,12 +208,12 @@ for step in trace.steps:
 
 This project uses Strands for modularity and AgentCore for scale.
 
-### Q: How do I use StrandsRAGAgent?
+### Q: How do I use StrandsGraphRAGAgent?
 **A:** Import and instantiate:
 ```python
-from src.agents.strands_rag_agent import StrandsRAGAgent
+from src.agents.strands_graph_agent import StrandsGraphRAGAgent
 
-agent = StrandsRAGAgent(settings)
+agent = StrandsGraphRAGAgent(settings)
 answer = agent.answer_question(
     question="What is Milvus?",
     collection="milvus_docs"

@@ -1,7 +1,7 @@
 """Tool registry and management for MCP integration."""
 
 import logging
-from typing import Dict, Callable, Any
+from typing import Dict, Callable, Any, List
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
@@ -22,15 +22,15 @@ class ToolDefinition:
 class ToolRegistry:
     """Registry for tools available to agents."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize tool registry."""
         self._tools: Dict[str, ToolDefinition] = {}
-        self._skills: Dict[str, list] = {}
+        self._skills: Dict[str, List[str]] = {}
 
     def register_tool(
         self,
         tool_def: ToolDefinition,
-    ) -> None:
+    ) -> None:  # type: ignore[annotation-unchecked]
         """Register a tool in the registry.
 
         Args:
@@ -57,7 +57,7 @@ class ToolRegistry:
         """
         return self._tools.get(name)
 
-    def get_tools_by_skill(self, skill_category: str) -> list:
+    def get_tools_by_skill(self, skill_category: str) -> list[ToolDefinition]:
         """Get all tool definitions in a skill category.
 
         Args:
@@ -85,7 +85,7 @@ class ToolRegistry:
         """
         return {name: tool.description for name, tool in self._tools.items()}
 
-    def get_tool_names(self) -> list:
+    def get_tool_names(self) -> list[str]:
         """Get list of all registered tool names.
 
         Returns:

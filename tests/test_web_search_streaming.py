@@ -8,7 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.agents.strands_rag_agent import StrandsRAGAgent
+from src.agents.strands_graph_agent import StrandsGraphRAGAgent
 from src.config.settings import get_settings
 from dotenv import load_dotenv
 
@@ -22,7 +22,7 @@ async def test_web_search_streaming():
     settings = get_settings()
 
     # Initialize the agent
-    agent = StrandsRAGAgent(settings=settings)
+    agent = StrandsGraphRAGAgent(settings=settings)
 
     print("Testing stream_answer_web_search_only()...")
     print("=" * 70)

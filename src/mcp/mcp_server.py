@@ -10,7 +10,7 @@ import json
 from typing import Any, Dict
 
 from src.config import Settings
-from src.agents.strands_rag_agent import StrandsRAGAgent
+from src.agents.strands_graph_agent import StrandsGraphRAGAgent
 from src.agents.skills import RetreivalSkill, AnswerGenerationSkill, KnowledgeBaseSkill
 from src.tools.tool_registry import get_registry
 
@@ -27,7 +27,7 @@ class RAGAgentMCPServer:
             settings: Application settings
         """
         self.settings = settings
-        self.agent = StrandsRAGAgent(settings)
+        self.agent = StrandsGraphRAGAgent(settings)
         self.registry = get_registry()
 
         # Register all skills on initialization
@@ -196,7 +196,9 @@ class RAGAgentMCPServer:
     def close(self) -> None:
         """Close server and clean up resources."""
         try:
-            self.agent.close()
+            # StrandsGraphRAGAgent doesn't have a close method, but keep for future compatibility
+            if hasattr(self.agent, "close"):
+                self.agent.close()
             logger.info("MCP Server closed")
         except Exception as e:
             logger.warning(f"Error during server shutdown: {e}")

@@ -12,9 +12,11 @@ Quick navigation for committed documentation in this project.
 
 ## 🚀 Recent Updates
 
-**Three-Tier Architecture (Mar 1, 2026)**: Response caching, knowledge base retrieval, and opt-in web search. See [ARCHITECTURE.md](#system-architecture--development) for details.
+**Graph Agent Architecture (Mar 5, 2026)**: Migrated to 3-node graph-based `StrandsGraphRAGAgent` with pattern-matching security detection. All 77 tests passing. See [ARCHITECTURE.md](ARCHITECTURE.md) and [tests/README.md](../tests/README.md) for details.
 
-**Cache Warmup Enabled (Mar 1, 2026)**: API server now automatically pre-loads Q&A pairs on startup for sub-50ms responses. See [CACHING_STRATEGY.md](#system-architecture--development) for implementation details.
+**Test Suite Migration (Mar 5, 2026)**: Updated test suite to use new graph agent. 48% code coverage across 619/1303 statements. See [tests/README.md](../tests/README.md) for test statistics.
+
+**Cache System Optimized (Mar 1, 2026)**: Response caching provides 1200x+ speedup for semantic matches. See [CACHING_STRATEGY.md](CACHING_STRATEGY.md).
 
 ---
 

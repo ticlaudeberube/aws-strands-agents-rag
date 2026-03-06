@@ -77,6 +77,8 @@ class Settings(BaseSettings):
 
     # LLM Generation Optimization
     max_tokens: int = 256  # Limit output length for faster generation (256 tokens ≈ 1-2s vs 3-4s)
+    ollama_temperature: float = 0.7  # Temperature for response generation
+    ollama_max_tokens: int = 256  # Max tokens for response generation
 
     # Caching Configuration
     agent_cache_size: int = 500  # LRU cache size for embeddings, searches, and answers

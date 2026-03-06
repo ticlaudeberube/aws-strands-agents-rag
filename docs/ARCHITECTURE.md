@@ -133,7 +133,14 @@ graph TB
 
 ## Core Components
 
-### 1. StrandsRAGAgent (`src/agents/strands_rag_agent.py`)
+### 1. StrandsGraphRAGAgent (`src/agents/strands_graph_agent.py`)
+
+**Graph-based 3-node architecture**:
+- **Node 1: Topic Check** - Validates if question is within Milvus product scope
+- **Node 2: Security Check** - Detects jailbreak attempts, prompt injection, illegal activities
+- **Node 3: RAG Worker** - Retrieves context from Milvus and generates answer
+
+**Features**:
 
 The primary agent class implementing Strands framework patterns with RAG capabilities.
 
@@ -361,8 +368,10 @@ async def lifespan(app: FastAPI):
     yield
     
     # SHUTDOWN
-    mcp_server.close()
-    agent.close()
+    if hasattr(mcp_server, 'close'):
+        mcp_server.close()
+    if hasattr(agent, 'close'):
+        agent.close()
 ```
 
 **API Endpoints:**
@@ -447,7 +456,7 @@ Start API Server
 src/
 ├── agents/
 │   ├── __init__.py (exports StrandsRAGAgent)
-│   ├── strands_rag_agent.py (Strands-compliant agent)
+│   ├── strands_graph_agent.py (Graph-based 3-node agent)
 │   └── skills/
 │       ├── __init__.py
 │       ├── retrieval_skill.py
@@ -508,7 +517,7 @@ docs/
 ### Example 1: Direct Agent Usage (Recommended for Simple Apps)
 
 ```python
-from src.agents.strands_rag_agent import StrandsRAGAgent
+from src.agents.strands_graph_agent import StrandsGraphRAGAgent
 from src.config.settings import get_settings
 
 settings = get_settings()
@@ -521,7 +530,9 @@ answer = agent.answer_question(
     top_k=5
 )
 
-agent.close()
+# StrandsGraphRAGAgent doesn't require explicit close
+if hasattr(agent, 'close'):
+    agent.close()
 ```
 
 ### Example 2: MCP Server (Recommended for APIs / Integrations)
@@ -543,7 +554,8 @@ result = mcp.call_tool(
     }
 )
 
-mcp.close()
+if hasattr(mcp, 'close'):
+    mcp.close()
 ```
 
 ### Example 3: MCP via HTTP (Recommended for Web Clients)

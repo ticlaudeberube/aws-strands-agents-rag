@@ -154,10 +154,10 @@ class TestHardcodedDefaults:
 
     def test_no_hardcoded_embedding_model_in_functions(self):
         """Verify no hardcoded embedding models in agent functions."""
-        from src.agents.strands_rag_agent import StrandsRAGAgent
+        from src.agents.strands_graph_agent import StrandsGraphRAGAgent
 
         settings = Settings()
-        agent = StrandsRAGAgent(settings)
+        agent = StrandsGraphRAGAgent(settings)
 
         # Agent should have access to settings
         assert agent.settings is not None

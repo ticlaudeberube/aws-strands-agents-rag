@@ -8,7 +8,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.config.settings import Settings
-from src.agents.strands_rag_agent import StrandsRAGAgent
+from src.agents.strands_graph_agent import StrandsGraphRAGAgent
 from src.mcp.mcp_server import RAGAgentMCPServer
 
 
@@ -32,14 +32,15 @@ def test_settings():
 
 @pytest.fixture
 def strands_agent(test_settings):
-    """Create a StrandsRAGAgent for testing."""
+    """Create a StrandsGraphRAGAgent for testing."""
     try:
-        agent = StrandsRAGAgent(test_settings)
+        agent = StrandsGraphRAGAgent(test_settings)
         yield agent
     finally:
         # Cleanup
         try:
-            agent.close()
+            if hasattr(agent, "close"):
+                agent.close()
         except Exception as e:
             print(f"Cleanup error: {e}")
 
@@ -53,7 +54,8 @@ def mcp_server(test_settings):
     finally:
         # Cleanup
         try:
-            server.close()
+            if hasattr(server, "close"):
+                server.close()
         except Exception as e:
             print(f"Cleanup error: {e}")
 

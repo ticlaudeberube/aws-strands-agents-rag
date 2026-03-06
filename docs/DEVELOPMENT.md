@@ -2,18 +2,21 @@
 
 This guide provides information for developers working on this project.
 
-## 🔧 Recent Improvements (Feb 28, 2026)
+## 🔧 Recent Improvements (Mar 5, 2026)
 
-**Critical Caching System Fixes**: The response caching system was debugged and completely fixed:
-- Fixed COSINE distance threshold calculation (was using wrong metric interpretation)
-- Corrected similarity score calculation for Milvus embeddings (distance IS similarity in COSINE metric)
-- Added collection flushing after data insertion to ensure persistence
-- Added collection loading before vector searches
-- Fixed ID generation to use safe 31-bit unsigned integers
+**Graph-Based Agent Architecture**: Migrated from monolithic `StrandsRAGAgent` to new `StrandsGraphRAGAgent`:
+- 3-node graph: Topic Check → Security Check → RAG Worker
+- Pattern-matching security detection (28+ jailbreak, 9 command, 8 injection patterns)
+- Real Ollama streaming with 5-byte buffer (not simulated)
+- Web search optimization with relevance scoring
+- Multi-layer caching: embedding, search, answer, response (1200x+ speedup)
 
-**Performance Impact**: Semantic response caching now works perfectly, providing **1200x+ speedup** for identical or semantically similar queries (first query ~400ms, second query <1ms).
+**Test Suite Migration**: Updated all tests to work with new graph agent:
+- 77 tests passing (100% pass rate)
+- Test coverage: 48% overall (619/1303 statements)
+- Removed obsolete test files for old monolithic agent
 
-For details, see [CACHING_STRATEGY.md](CACHING_STRATEGY.md) and [RESPONSE_CACHE.md](RESPONSE_CACHE.md).
+For details, see [ARCHITECTURE.md](ARCHITECTURE.md) and [CACHING_STRATEGY.md](CACHING_STRATEGY.md).
 
 ## Project Structure
 
@@ -23,7 +26,7 @@ aws-stands-agents-rag/
 │   ├── __init__.py                  # Package initialization
 │   ├── agents/                      # Agent implementations
 │   │   ├── __init__.py
-│   │   ├── strands_rag_agent.py    # Strands-compliant RAG agent
+│   │   ├── strands_graph_agent.py   # Graph-based RAG agent (3-node)
 │   │   └── skills/                 # Tool skills (organized by category)
 │   │       ├── __init__.py
 │   │       ├── retrieval_skill.py      # Retrieval tools
@@ -160,7 +163,252 @@ ruff check src/ document_loaders/
 mypy src/
 ```
 
-### 4. Testing
+### 4. Pre-commit Setup & Troubleshooting
+
+#### Installation
+
+```bash
+# Install pre-commit
+pip install pre-commit
+
+# Install git hooks (runs checks before each commit)
+pre-commit install
+```
+
+Once installed, pre-commit runs automatically on `git commit`. To run manually:
+
+```bash
+# Run all checks on all files
+pre-commit run --all-files
+
+# Run only before committing
+pre-commit run
+```
+
+#### Fixing Pre-commit Issues
+
+When pre-commit checks fail, use these commands and strategies to fix common issues.
+
+### Override pre-commit
+git commit --no-verify -m "Your commit message"
+
+##### Ruff Linting Errors
+
+**Auto-fix most violations:**
+```bash
+ruff check --fix
+```
+
+**Common issues and fixes:**
+
+- **Unused imports** (F401): `from x import y  # unused`
+  - Fix: `ruff check --fix` auto-removes unused imports
+  
+- **Unused variables** (F841): `x = value  # assigned but never used`
+  - Fix: Remove the assignment or use `_ = value` for intentional discards
+  ```python
+  # Before
+  unused_var = some_function()
+  
+  # After
+  _ = some_function()  # Intentionally discarding return value
+  ```
+
+- **Line too long** (E501): Lines > 88 characters
+  - Fix: Break long lines using backslash or implicit continuation
+  ```python
+  # Before
+  result = some_function(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9)
+  
+  # After
+  result = some_function(
+      arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9
+  )
+  ```
+
+- **Undefined name** (F405): `x is not defined`
+  - Fix: Import the missing module or define the variable
+  ```python
+  # Before
+  print(datetime.now())
+  
+  # After
+  from datetime import datetime
+  print(datetime.now())
+  ```
+
+- **Bare except** (E722): `except:`
+  - Fix: Specify exception type
+  ```python
+  # Before
+  try:
+      something()
+  except:
+      pass
+  
+  # After
+  try:
+      something()
+  except Exception as e:
+      logger.error("Error", exc_info=e)
+  ```
+
+**View violations without fixing:**
+```bash
+ruff check  # Show all violations
+ruff check --select=F401  # Show specific error code (F401 = unused imports)
+```
+
+##### Code Formatting (ruff-format / Black)
+
+**Auto-format all files:**
+```bash
+ruff format
+```
+
+**Common issues:**
+- **Inconsistent line length**: Automatically reformatted
+- **Inconsistent quotes**: Converted to double quotes (Black style)
+- **Indentation**: Auto-corrected to 4 spaces
+
+**View formatting changes without applying:**
+```bash
+ruff format --diff  # Show what would change
+```
+
+**Examples of what ruff-format fixes:**
+```python
+# Before
+x=1+2
+y={  'a':1,'b':2  }
+z="single quoted string"
+
+# After
+x = 1 + 2
+y = {"a": 1, "b": 2}
+z = "double quoted string"
+```
+
+##### Type Checking (mypy)
+
+**Check types without fixing:**
+```bash
+mypy src  # Type check the src folder
+```
+
+**Common issues and fixes:**
+
+- **Missing type annotation** (error: Function is missing a type annotation):
+  ```python
+  # Before
+  def get_value(key):
+      return config[key]
+  
+  # After
+  def get_value(key: str) -> Any:
+      return config[key]
+  ```
+
+- **Type mismatch** (error: Incompatible types):
+  ```python
+  # Before
+  x: int = "hello"  # error: str incompatible with int
+  
+  # After
+  x: str = "hello"
+  ```
+
+- **None type expected**:
+  ```python
+  # Before
+  value: str = None  # error: Optional expected
+  
+  # After
+  value: Optional[str] = None
+  # or with Python 3.10+
+  value: str | None = None
+  ```
+
+- **Undefined attribute**:
+  ```python
+  # Before
+  obj.nonexistent_attr  # error: has no attribute
+  
+  # After: Check if attribute exists or add type hints
+  if hasattr(obj, 'attr'):
+      obj.attr
+  ```
+
+**Ignore specific errors (last resort):**
+```python
+# For single line
+x = None  # type: ignore
+
+# For entire function
+@typing.no_type_check
+def untyped_function():
+    pass
+```
+
+**Check specific file:**
+```bash
+mypy src/agents/strands_graph_agent.py
+```
+
+##### Run All Checks
+
+**Run pre-commit on all files locally:**
+```bash
+pre-commit run --all-files
+```
+
+**Output will show:**
+- ✓ Passed hooks (green)
+- ✗ Failed hooks (red) with error details
+- Auto-fixed issues
+
+**After fixes, re-run:**
+```bash
+pre-commit run --all-files  # Run again to verify all fixed
+pre-commit run --all-files --show-diff  # Show what changed
+```
+
+##### Quick Reference
+
+**All three commands are needed to fully fix pre-commit issues:**
+
+| Task | Command | What It Fixes |
+|------|---------|---------------|
+| Fix linting errors | `ruff check --fix` | Unused imports, undefined names, bare excepts, etc. |
+| Fix formatting issues | `ruff format` | Spacing, indentation, line length, quotes |
+| Check type errors | `mypy src` | Type mismatches, missing annotations (manual fix required) |
+| Run all checks | `pre-commit run --all-files` | Runs ruff, format, mypy, pytest together |
+| View linting issues | `ruff check` | Show violations without fixing |
+| Preview formatting changes | `ruff format --diff` | Show what would be changed |
+| Ignore single type error | `x = y  # type: ignore` | Last resort for specific lines |
+| Clear caches | `pre-commit clean` | Remove cached hook files |
+
+##### Prevention Tips
+
+**Best practice workflow:**
+```bash
+# 1. Make code changes
+git add .
+
+# 2. Run pre-commit checks
+pre-commit run --all-files
+
+# 3. Fix any issues (repeat until all pass)
+# Auto-fixes happen automatically, fix type errors manually
+
+# 4. Commit when clean
+git commit -m "Add feature"
+
+# 5. Push to branch
+git push origin your-branch
+```
+
+### 5. Testing
 
 Tests are located in `tests/` directory:
 

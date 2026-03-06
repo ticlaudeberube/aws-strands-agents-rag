@@ -33,7 +33,7 @@ A high-performance Retrieval-Augmented Generation (RAG) system using AWS Strands
 ```
 
 **Components**:
-- **StrandsRAGAgent**: Strands Agents SDK-compliant RAG agent with multi-layer caching
+- **StrandsGraphRAGAgent**: Graph-based 3-node RAG agent (Topic Check → Security Check → RAG Worker) with multi-layer caching
 - **Ollama** (qwen2.5:0.5b): Local LLM for generation and embeddings
 - **Milvus**: Vector database for semantic search
 - **MCP Server**: Model Context Protocol server for tool management
@@ -232,7 +232,8 @@ See [DEVELOPMENT.md](docs/DEVELOPMENT.md) for:
 ## Roadmap
 
 **Todos:**
-- [ ] Show a responses cache list to the web app users 
+- [ ] Show a responses cache list to the web app users
+- [ ] Red Teaming (Giskard / PromptFoo) 
 - [ ] Integrate pre-commit into GitHub pipeline
 - [ ] Serverless deployment with AgentCore (Lambda, SAM, CloudFront)
 - [ ] AgentCore SessionManager for conversation history caching

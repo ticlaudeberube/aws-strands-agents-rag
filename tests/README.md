@@ -2,6 +2,20 @@
 
 This directory contains the test suite for the AWS Strands Agents RAG system.
 
+**Status**: ✅ All 77 tests passing (100% pass rate)  
+**Coverage**: 48% (619/1303 statements)  
+**Last Updated**: March 5, 2026
+
+## Test Suite Overview
+
+| File | Tests | Purpose |
+|------|-------|---------|
+| **test_strands_graph_agent.py** | 41 | Core graph agent (security, scope, RAG) |
+| **test_api_server.py** | 11 | FastAPI server endpoints |
+| **test_configuration_consistency.py** | 14 | Configuration and settings validation |
+| **test_ollama_client.py** | 10 | Ollama LLM client operations |
+| **test_web_search_streaming.py** | 1 | Web search integration |
+
 ## Setup
 
 ### Install Test Dependencies
@@ -81,15 +95,49 @@ pytest -m async
 
 ```
 tests/
-├── __init__.py              # Package marker
-├── conftest.py              # Shared fixtures and configuration
-├── test_rag_agent.py        # RAGAgent tests
-├── test_ollama_client.py    # OllamaClient tests
-├── test_api_server.py       # API server endpoint tests
-└── test_milvus_client.py    # MilvusVectorDB tests (to be added)
+├── __init__.py                           # Package marker
+├── conftest.py                           # Shared fixtures and configuration
+├── README.md                             # This file
+├── test_strands_graph_agent.py          # Graph agent core tests (41 tests)
+├── test_api_server.py                   # API server endpoint tests (11 tests)
+├── test_configuration_consistency.py    # Configuration validation tests (14 tests)
+├── test_ollama_client.py               # OllamaClient tests (10 tests)
+└── test_web_search_streaming.py        # Web search integration test (1 test)
 ```
 
+**Removed Files (Deprecated)**:
+- `test_security.py` - Old monolithic agent tests (merged into test_strands_graph_agent.py)
+- `test_rag_agent.py` - Old monolithic agent tests (replaced by graph agent tests)
+- `test_comparative_detection.py` - Tested method not in new architecture
+
 ## Test Categories
+
+### Graph Agent Tests (41 tests)
+Core functionality tests for the 3-node graph architecture:
+- **Security Detection** (10 tests): Jailbreak, injection, command detection
+- **Scope Detection** (8 tests): Keyword matching, LLM fallback, product handling
+- **Rejection Paths** (3 tests): Out-of-scope and security rejection flows
+- **Response Validation** (4 tests): Format and structure verification
+- **Performance** (1 test): Latency validation
+- **Graph Configuration** (3 tests): Node setup and structure
+- **Edge Cases** (6 tests): Special characters, unicode, long text
+- **Full Pipeline** (2 tests): End-to-end integration
+
+### API Server Tests (11 tests)
+- Health check endpoints
+- Chat completion requests
+- Request/response validation
+- Error handling
+
+### Configuration Tests (14 tests)
+- Settings loading from environment
+- Pydantic model validation
+- Configuration consistency
+
+### Ollama Client Tests (10 tests)
+- Text embedding
+- Text generation
+- Streaming operations
 
 ### Unit Tests (`test_*_unit.py`)
 - Test individual components in isolation
@@ -190,9 +238,41 @@ For GitHub Actions or other CI systems:
   run: pytest --cov=src --cov-report=xml --cov-report=term
 ```
 
+## Coverage Report
+
+Current coverage breakdown (48% overall - 619/1303 statements):
+
+### High Coverage (70%+)
+- ✅ src/config/settings.py - **100%**
+- ✅ src/agents/__init__.py - **100%**
+- ✅ src/agents/skills/answer_generation_skill.py - **78%**
+- ✅ src/agents/skills/knowledge_base_skill.py - **78%**
+- ✅ src/agents/prompts.py - **74%**
+- ✅ src/tools/ollama_client.py - **68%**
+
+### Moderate Coverage (50-69%)
+- ⚠️ src/agents/strands_graph_agent.py - **52%** (main agent)
+- ⚠️ src/agents/skills/retrieval_skill.py - **64%**
+- ⚠️ src/tools/tool_registry.py - **63%**
+
+### Low Coverage (<50%)
+- ❌ src/tools/web_search.py - **47%**
+- ❌ src/tools/milvus_client.py - **27%**
+- ❌ src/mcp/mcp_server.py - **18%**
+- ❌ src/tools/response_cache.py - **13%**
+
+Generate coverage report:
+
+```bash
+pytest --cov=src --cov-report=html --cov-report=term-missing
+```
+
 ## Coverage Goals
 
 Target coverage metrics:
+- Overall: > 80%
+- Core modules (RAGAgent, Clients): > 90%
+- API endpoints: > 85%
 - Overall: > 80%
 - Core modules (RAGAgent, Clients): > 90%
 - API endpoints: > 85%

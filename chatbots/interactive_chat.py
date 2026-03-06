@@ -5,7 +5,7 @@ import logging
 import sys
 from pathlib import Path
 from src.config.settings import get_settings
-from src.agents.strands_rag_agent import StrandsRAGAgent
+from src.agents.strands_graph_agent import StrandsGraphRAGAgent
 
 # Load environment variables from .env file (required for TAVILY_API_KEY and other secrets)
 from dotenv import load_dotenv
@@ -40,9 +40,9 @@ def main():
     settings = get_settings()
 
     # Check Ollama availability
-    logger.info("Initializing StrandsRAGAgent...")
+    logger.info("Initializing StrandsGraphRAGAgent...")
     try:
-        agent = StrandsRAGAgent(settings=settings)
+        agent = StrandsGraphRAGAgent(settings=settings)
     except Exception as e:
         logger.error(f"Failed to initialize agent: {e}")
         sys.exit(1)
@@ -108,8 +108,14 @@ def main():
 
     finally:
         # Clean up resources
-        agent.close()
-        logger.info("Agent closed")
+        if hasattr(agent, "close"):
+            try:
+                agent.close()
+                logger.info("Agent closed")
+            except Exception as e:
+                logger.warning(f"Error closing agent: {e}")
+        else:
+            logger.info("Agent cleanup (no close method)")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,40 @@
+# Project Structure Guide
+
+## Directory Organization
+- src/ - Main application code
+  - agents/ - AI agent implementations (skills, graph agent)
+  - tools/ - Reusable utilities (Milvus, Ollama, web search, cache)
+  - config/ - Configuration (settings.py, environment variables)
+  - mcp/ - Model Context Protocol server implementation
+
+- tests/ - Test suite (mirrors src structure)
+  - conftest.py - Shared fixtures and configuration
+  - test_*.py - Unit and integration tests
+
+- document_loaders/ - Document loading and embedding utilities
+  - core/ - Shared tools (MilvusVectorDB, OllamaClient)
+  - local_settings.py - Loader-specific configuration
+
+- chatbots/ - Chat interfaces
+  - interactive_chat.py - CLI chatbot
+  - react-chatbot/ - Web UI (React)
+
+- docker/ - Docker configuration
+  - Dockerfile - Application container
+  - docker-compose.yml - Full stack setup
+
+- docs/ - Developer documentation
+  - GETTING_STARTED.md - Setup and configuration
+  - DEVELOPMENT.md - Code examples and patterns
+  - ARCHITECTURE.md - System design
+  - API_SERVER.md - REST API documentation
+
+- scripts/ - Utility scripts (moving from root)
+  - cache/ - Cache management utilities
+  - data/ - Data loading and processing
+
+## File Naming Conventions
+- snake_case for Python files and directories
+- kebab-case only for Docker/configuration files (.github/actions/)
+- UPPERCASE for config files (.env, .gitignore)
+- UPPERCASE_WITH_UNDERSCORES for important markdown docs

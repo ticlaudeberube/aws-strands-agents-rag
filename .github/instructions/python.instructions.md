@@ -8,7 +8,7 @@
 - Use type hints for function parameters and return values
 - Follow PEP 8 style guidelines for code formatting
 - Use f-strings for string formatting instead of .format() or %
-- Only use f-string when they're is some values to concatenate 
+- Only use f-string when they're is some values to concatenate
 - Handle exceptions explicitly with try/except blocks
 - Use list/dict comprehensions when appropriate for readability
 - Import modules at the top of files, grouped: standard library, third-party, local
@@ -19,3 +19,9 @@
 - Use pathlib for file path operations instead of os.path
 - Prefer context managers (with statements) for resource handling
 - Use unicode for icons
+## Type Hints (Missing)
+- Function return types: Always required
+- Type aliases for complex types:
+  ```python
+  EmbeddingVector = List[float]
+  SearchResults = Dict[str, Any]

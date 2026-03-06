@@ -44,7 +44,9 @@ answer = agent.generate_answer(
     context=docs[0]
 )
 
-agent.close()
+# StrandsGraphRAGAgent doesn't require explicit close
+if hasattr(agent, 'close'):
+    agent.close()
 ```
 
 ### 2. Adding a New Tool
@@ -85,10 +87,10 @@ class MySkill:
 @tool
 def my_new_tool(self, param1: str) -> str:
     """Tool description shown to agent and users.
-    
+
     Args:
         param1: Parameter description
-        
+
     Returns:
         Result description
     """
@@ -128,13 +130,13 @@ from src.agents import StrandsRAGAgent
 async def test_tool():
     settings = Settings()
     agent = StrandsRAGAgent(settings)
-    
+
     # Call tool directly
     result = await agent.retrieve_documents(
         collection_name="test_collection",
         query="test query"
     )
-    
+
     print(result)
 
 asyncio.run(test_tool())
@@ -352,7 +354,7 @@ User: "What is Milvus?"
 | 5 | Multi-agent (A2A), optimization | 2-3 weeks | Medium |
 | **Total** | | 8-10 weeks | |
 
-**Recommendation**: 
+**Recommendation**:
 - Start Phase 1 immediately (foundational)
 - Run Phase 1-2 in parallel with production (backward compatible)
 - Deploy Phase 3+ after Phase 1-2 are stable

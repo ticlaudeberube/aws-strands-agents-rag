@@ -1,25 +1,87 @@
+---
+# Pre-commit hooks configuration
+# Run before each commit to enforce code quality and consistency
+
+# Default hooks from pre-commit framework
 repos:
+  # File fixers and validators (run first)
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      # Fix trailing whitespace
+      - id: trailing-whitespace
+        name: Trim trailing whitespace
+        description: Removes trailing whitespace from files
+
+      # Ensure files end with newline
+      - id: end-of-file-fixer
+        name: Fix end of file
+        description: Adds missing newlines at end of files
+
+      # Prevent large files from being committed
+      - id: check-added-large-files
+        name: Check for large files
+        description: Prevents large files (>500KB) from being committed
+        args: ['--maxkb=500']
+
+      # Prevent merge conflict markers
+      - id: check-merge-conflict
+        name: Check for merge conflicts
+        description: Prevents files with merge conflict markers from being committed
+
+      # YAML validation
+      - id: check-yaml
+        name: Check YAML syntax
+        description: Validates YAML file syntax
+
+  # YAML linting
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.34.0
+    hooks:
+      - id: yamllint
+        name: yamllint - YAML style check
+        description: Lints YAML files for style and syntax issues
+        args:
+          - '--strict'
+          - >-
+            --config-data={extends: default,
+            rules: {line-length: {max: 120},
+            comments: {min-spaces-from-content: 1}}}
+        types: [yaml]
+
+  # Python code quality (local hooks using uvenv)
   - repo: local
     hooks:
+      # Ruff linting and import sorting
       - id: ruff
-        name: ruff
+        name: ruff - Python linter
+        description: Lints Python code and fixes import ordering
         entry: uv run ruff check --fix
         language: system
         types: [python]
+
+      # Ruff formatting
       - id: ruff-format
-        name: ruff-format
+        name: ruff format - Python formatter
+        description: Formats Python code to 100-char lines
         entry: uv run ruff format
         language: system
         types: [python]
+
+      # Type checking (must run before tests to catch type errors early)
       - id: mypy
-        name: mypy
+        name: mypy - Static type checker
+        description: Type checks Python code for type safety
         entry: uv run mypy .
         language: system
         types: [python]
         pass_filenames: false
+
+      # Unit and integration tests (runs last, after type checking)
       - id: pytest
-        name: pytest
-        entry: uv run pytest
+        name: pytest - Test suite
+        description: Runs unit and integration tests (excludes slow tests)
+        entry: uv run pytest -m "not slow" --tb=short
         language: system
         types: [python]
         pass_filenames: false

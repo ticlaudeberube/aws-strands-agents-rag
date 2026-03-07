@@ -24,20 +24,20 @@ graph TB
         WEB["React Chatbot<br/>Frontend"]
         API_CLIENT["API Client<br/>OpenAI Compatible"]
     end
-    
+
     subgraph AWS_COMPUTE["☁️ AWS COMPUTE LAYER"]
         ECS["Amazon ECS<br/>Fargate / EC2"]
         ALB["Application Load<br/>Balancer"]
         Client -->|HTTP/HTTPS| ALB
         ALB -->|Routes| ECS
     end
-    
+
     subgraph AGENT_FRAMEWORK["🤖 AGENT FRAMEWORK LAYER"]
         STRANDS["Strands Agents SDK<br/>Agent Framework"]
         AGENTCORE["AgentCore<br/>Orchestration"]
         STRANDS -->|managed by| AGENTCORE
     end
-    
+
     subgraph AGENT_COMPONENTS["🧠 RAG AGENT COMPONENTS"]
         TOOLS["Tool Registry<br/>• Retrieval<br/>• Generation<br/>• Web Search"]
         SKILLS["Skill System<br/>• Knowledge Base<br/>• Answer Gen<br/>• Cache Mgmt"]
@@ -45,7 +45,7 @@ graph TB
         TOOLS -->|implements| SKILLS
         SKILLS -->|manages| MCP
     end
-    
+
     subgraph CACHE_LAYER["⚡ MULTI-LAYER CACHE"]
         RESP_CACHE["Response Cache<br/>Layer 1<br/>&lt;50ms"]
         EMB_CACHE["Embedding Cache<br/>Layer 2"]
@@ -55,33 +55,33 @@ graph TB
         EMB_CACHE --> SEARCH_CACHE
         SEARCH_CACHE --> SEM_CACHE
     end
-    
+
     subgraph VECTOR_DB["🗄️ VECTOR DATABASE LAYER"]
         MILVUS["Amazon Managed<br/>Milvus / Dedicated EC2<br/>• Collections<br/>• HNSW Indexes<br/>• Response Cache"]
     end
-    
+
     subgraph LLM_LAYER["🧠 LLM & EMBEDDING LAYER"]
         OLLAMA["Ollama Service<br/>qwen2.5:0.5b<br/>• Embeddings<br/>• Answer Generation"]
         BED["AWS Bedrock<br/>Alternative<br/>Claude / Titan"]
     end
-    
+
     subgraph EXTERNAL["🔗 EXTERNAL SERVICES"]
         TAVILY["Tavily Web Search<br/>API"]
         S3["Amazon S3<br/>Document Storage"]
         SSMP["Document Loaders<br/>& Processors"]
     end
-    
+
     subgraph STORAGE["💾 PERSISTENT STORAGE"]
         DYNODB["DynamoDB<br/>Session Cache<br/>Processed Docs"]
         RDS["RDS PostgreSQL<br/>Document Metadata<br/>Audit Logs"]
     end
-    
+
     subgraph MONITORING["📊 MONITORING & OBSERVABILITY"]
         CLOUDWATCH["CloudWatch<br/>Logs & Metrics"]
         XRAY["X-Ray<br/>Distributed Tracing"]
         LOGS["Application Logs<br/>Performance Metrics"]
     end
-    
+
     %% Main Flow
     ECS -->|executes| STRANDS
     STRANDS -->|orchestrated by| AGENTCORE
@@ -92,25 +92,25 @@ graph TB
     TOOLS -->|calls| OLLAMA
     TOOLS -->|optionally| TAVILY
     TOOLS -->|uses| AGENTCORE
-    
+
     %% Storage connections
     S3 -->|feeds| SSMP
     SSMP -->|processes| MILVUS
     MILVUS -->|metadata| DynamoDB
     MILVUS -->|audit| RDS
-    
+
     %% Monitoring
     ECS -->|sends metrics| CLOUDWATCH
     STRANDS -->|traces| XRAY
     AGENTCORE -->|logs| LOGS
-    
+
     %% Styling
     classDef aws fill:#FF9900,stroke:#232F3E,color:#232F3E,font-weight:bold
     classDef local fill:#4A90E2,stroke:#2E5C8A,color:#fff,font-weight:bold
     classDef cache fill:#50C878,stroke:#2D7A4A,color:#fff,font-weight:bold
     classDef external fill:#FF6B6B,stroke:#8B0000,color:#fff,font-weight:bold
     classDef framework fill:#9D4EDD,stroke:#5A189A,color:#fff,font-weight:bold
-    
+
     class AWS_COMPUTE,ALB,ECS,CLOUDWATCH,XRAY,DYNODB,RDS,S3 aws
     class OLLAMA,MILVUS local
     class CACHE_LAYER,RESP_CACHE,EMB_CACHE,SEARCH_CACHE,SEM_CACHE cache
@@ -263,55 +263,55 @@ graph TB
         WEB["React App<br/>CloudFront CDN"]
         MOBILE["Mobile/Web Client"]
     end
-    
+
     subgraph AWS_ENTRY["🌐 API GATEWAY & INGRESS"]
         APIGW["API Gateway<br/>REST / WebSocket"]
         COGNITO["Amazon Cognito<br/>Auth/Identity"]
     end
-    
+
     subgraph SERVERLESS["⚡ SERVERLESS COMPUTE"]
         LAMBDA["AWS Lambda<br/>Agent Executor<br/>Python Runtime"]
         SQS["Amazon SQS<br/>Async Tasks"]
         EVENTBRIDGE["EventBridge<br/>Event Routing"]
     end
-    
+
     subgraph AGENTCORE_SLS["🤖 AGENTCORE IN SERVERLESS"]
         AGENTCORE_SLS_BOX["AgentCore Runtime<br/>• Orchestration<br/>• Tool Invocation<br/>• State Management"]
     end
-    
+
     subgraph AGENT_SKILLS["🧠 RAG SKILLS (Stateless)"]
         RETRIEVAL["Retrieval Skill<br/>Query Vector DB"]
         GENERATION["Generation Skill<br/>Call LLM API"]
         WEBSEARCH["Web Search Skill<br/>Tavily Integration"]
     end
-    
+
     subgraph CACHE_LAYER["⚡ DISTRIBUTED CACHE"]
         ELASTICACHE["ElastiCache<br/>Redis Cluster<br/>• Embedding Cache<br/>• Response Cache<br/>• Search Results"]
     end
-    
+
     subgraph VECTOR_DB_SLS["🗄️ MANAGED VECTOR DB"]
         OPENSEARCH["OpenSearch<br/>Vector Engine OR"]
         PINECONE["Pinecone<br/>Serverless Indexes"]
     end
-    
+
     subgraph LLM_SERVICES["🤖 LLM SERVICES"]
         BEDROCK["Amazon Bedrock<br/>Claude / Titan<br/>Serverless"]
     end
-    
+
     subgraph EXTERNAL_SLS["🔗 EXTERNAL APIs"]
         TAVILY_SLS["Tavily Web Search"]
     end
-    
+
     subgraph STORAGE_SLS["💾 SERVERLESS STORAGE"]
         S3_SLS["S3<br/>Documents<br/>Embeddings"]
         DYNAMODB_SLS["DynamoDB<br/>Session State<br/>Metadata"]
     end
-    
+
     subgraph MONITORING_SLS["📊 OBSERVABILITY"]
         CW["CloudWatch<br/>Logs & Metrics"]
         XRAY_SLS["X-Ray Tracing"]
     end
-    
+
     %% Flow
     Client -->|HTTPS| APIGW
     APIGW -->|auth| COGNITO
@@ -319,31 +319,31 @@ graph TB
     LAMBDA -->|publishes| EVENTBRIDGE
     EVENTBRIDGE -->|routes to| AGENTCORE_SLS_BOX
     AGENTCORE_SLS_BOX -->|orchestrates| AGENT_SKILLS
-    
+
     RETRIEVAL -->|cache check| ELASTICACHE
     RETRIEVAL -->|query| OPENSEARCH
     GENERATION -->|LLM call| BEDROCK
     WEBSEARCH -->|search| TAVILY_SLS
-    
+
     ELASTICACHE -->|stores| DYNAMODB_SLS
     OPENSEARCH -->|indexes| S3_SLS
-    
+
     LAMBDA -->|async tasks| SQS
     SQS -->|processes| LAMBDA
-    
+
     LAMBDA -->|metrics| CW
     LAMBDA -->|traces| XRAY_SLS
-    
+
     BEDROCK -->|generates text| GENERATION
     OPENSEARCH -->|vector search| RETRIEVAL
-    
+
     %% Styling
     classDef serverless fill:#FF9900,stroke:#232F3E,color:#232F3E,font-weight:bold
     classDef memory fill:#50C878,stroke:#2D7A4A,color:#fff,font-weight:bold
     classDef framework fill:#9D4EDD,stroke:#5A189A,color:#fff,font-weight:bold
     classDef external fill:#FF6B6B,stroke:#8B0000,color:#fff,font-weight:bold
     classDef managed fill:#4A90E2,stroke:#2E5C8A,color:#fff,font-weight:bold
-    
+
     class LAMBDA,APIGW,EVENTBRIDGE,SQS,COGNITO,BEDROCK serverless
     class ELASTICACHE memory
     class AGENTCORE_SLS_BOX,AGENT_SKILLS framework
@@ -385,21 +385,21 @@ graph TB
 # Lambda handler with AgentCore
 async def lambda_handler(event, context):
     agentcore_runtime = AgentCore()
-    
+
     # Initialize skills (stateless)
     skills = {
         "retrieval": RetrievalSkill(opensearch_client),
         "generation": GenerationSkill(bedrock_client),
         "websearch": WebSearchSkill(tavily_client)
     }
-    
+
     # Execute agent orchestration
     response = await agentcore_runtime.execute(
         question=event["question"],
         skills=skills,
         conversation_history=event.get("history", [])
     )
-    
+
     return {"answer": response}
 ```
 
@@ -585,13 +585,13 @@ Resources:
 
 ### Choose Architecture 1 (Container) If:
 
-✅ Your application has **consistent traffic patterns** (predictable load)  
-✅ You need **sub-100ms latency** for all queries (cache hit or miss)  
-✅ You want to run **Ollama locally** (cost savings, data privacy)  
-✅ You have **dedicated infrastructure team** (ops overhead manageable)  
-✅ You need **persistent connections** (WebSocket chats)  
-✅ Your **document corpus is large** (>1GB, Milvus more efficient)  
-✅ You have **strict data residency** requirements (keep everything on your servers)  
+✅ Your application has **consistent traffic patterns** (predictable load)
+✅ You need **sub-100ms latency** for all queries (cache hit or miss)
+✅ You want to run **Ollama locally** (cost savings, data privacy)
+✅ You have **dedicated infrastructure team** (ops overhead manageable)
+✅ You need **persistent connections** (WebSocket chats)
+✅ Your **document corpus is large** (>1GB, Milvus more efficient)
+✅ You have **strict data residency** requirements (keep everything on your servers)
 
 **Ideal For:**
 - Enterprise customers with existing Kubernetes/ECS infrastructure
@@ -601,13 +601,13 @@ Resources:
 
 ### Choose Architecture 2 (Serverless) If:
 
-✅ Your load is **highly variable** (spiky traffic patterns)  
-✅ You want **zero infrastructure management** (fully managed)  
-✅ You prioritize **cost predictability** (pay only what you use)  
-✅ You have **small to medium teams** (minimal ops staff)  
-✅ You need **multi-region deployment** (Lambda has global edge locations)  
-✅ You want **built-in security & compliance** (AWS managed)  
-✅ You prefer **cloud-native architecture** (greenfield projects)  
+✅ Your load is **highly variable** (spiky traffic patterns)
+✅ You want **zero infrastructure management** (fully managed)
+✅ You prioritize **cost predictability** (pay only what you use)
+✅ You have **small to medium teams** (minimal ops staff)
+✅ You need **multi-region deployment** (Lambda has global edge locations)
+✅ You want **built-in security & compliance** (AWS managed)
+✅ You prefer **cloud-native architecture** (greenfield projects)
 
 **Ideal For:**
 - Startups and small teams
@@ -626,10 +626,10 @@ graph LR
     A["Phase 1:<br/>Serverless MVP<br/>Lambda + Bedrock<br/>0-1 month"]
     B["Phase 2:<br/>Optimize Costs<br/>Add local Ollama<br/>Replace Bedrock<br/>1-3 months"]
     C["Phase 3:<br/>Scale to ECS<br/>Self-host Milvus<br/>Production Ops<br/>3-6 months"]
-    
+
     A -->|Cost reduction<br/>+50% faster cache| B
     B -->|Scale to<br/>100+ users| C
-    
+
     style A fill:#9D4EDD,stroke:#5A189A,color:#fff
     style B fill:#50C878,stroke:#2D7A4A,color:#fff
     style C fill:#FF9900,stroke:#232F3E,color:#232F3E

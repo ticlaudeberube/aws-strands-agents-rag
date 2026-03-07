@@ -10,10 +10,11 @@ A high-performance Retrieval-Augmented Generation (RAG) system using AWS Strands
 |----------|-----------|
 | **Getting Started** | [Setup Guide](docs/GETTING_STARTED.md) • [Configuration](docs/GETTING_STARTED.md#configuration) |
 | **Architecture** | [System Design](docs/ARCHITECTURE.md) • [Data Flow](docs/ARCHITECTURE.md#data-flow) • [Caching](docs/CACHING_STRATEGY.md) • [AWS Deployment](docs/AWS_ARCHITECTURE.md) • [Chat + Skills Flow](docs/CHAT_REQUEST_SKILLS_FLOW.md) |
-| **Development** | [Code Examples](docs/DEVELOPMENT.md) • [API Reference](docs/API_SERVER.md) • [Strands Reference](docs/STRANDS_QUICK_REFERENCE.md) |
-| **Operations** | [React Deployment](docs/REACT_DEPLOYMENT.md) • [Docker Setup](docker/README.md) • [Troubleshooting](docs/GETTING_STARTED.md#troubleshooting) |
+| **Development** | [Code Examples](docs/DEVELOPMENT.md) • [API Reference](docs/API_SERVER.md) • [Strands Reference](docs/STRANDS_QUICK_REFERENCE.md) • [Web Search](docs/WEB_SEARCH_INTEGRATION.md) |
+| **Operations** | [React Deployment](docs/REACT_DEPLOYMENT.md) • [Docker Setup](docker/README.md) • [Troubleshooting](docs/GETTING_STARTED.md#troubleshooting) • [**Production Readiness**](docs/PRODUCTION_READINESS.md) |
 | **CI/CD** | [GitHub Actions Setup](docs/GITHUB_ACTIONS_SETUP.md) |
 | **Performance** | [Model Comparison](docs/MODEL_PERFORMANCE_COMPARISON.md) • [Optimization](docs/LATENCY_OPTIMIZATION.md) • [Tips](docs/LATENCY_OPTIMIZATION.md#performance-tips) |
+| **Updates** | [Recent Changes](docs/CHANGELOG_RECENT.md) |
 
 ## Architecture Overview
 
@@ -54,17 +55,17 @@ graph TD
         C --> D["🧮 Generate Embeddings<br/>Ollama LLM"]
         D --> E["💾 Store in Milvus<br/>with metadata"]
     end
-    
+
     subgraph Query["❓ QUERY PIPELINE - With Multi-Layer Caching"]
         F["👤 User Question"]
-        
+
         subgraph L1["Layer 1: response cache<br/>(Exact Match)"]
             F --> G{"Answer<br/>Cache<br/>HIT?"}
             G -->|YES| M1["✅ Return Cached<br/>Answer + Sources<br/>&lt;50ms"]
         end
-        
+
         G -->|NO| H["🧮 Embed Question<br/>Ollama LLM"]
-        
+
         subgraph L2["Layer 2: Embedding Cache"]
             H --> H2{"Embedding<br/>Cache<br/>HIT?"}
             H2 -->|YES| H3["✅ Use Cached<br/>Embedding"]
@@ -72,16 +73,16 @@ graph TD
             H3 --> H5["Embedding Ready"]
             H4 --> H5
         end
-        
+
         H5 --> I["Query Vector Ready"]
-        
+
         subgraph L4["Layer 4: Semantic Response Cache<br/>(Milvus - Persistent)"]
             I --> I2{"Semantic<br/>Match<br/>in Milvus?"}
             I2 -->|YES<br/>92%+ similar| M2["✅ Return Similar<br/>Cached Answer<br/>~100-200ms"]
         end
-        
+
         I2 -->|NO| J["🔍 Vector Search"]
-        
+
         subgraph L3["Layer 3: Search Cache"]
             J --> J2{"Search Cache<br/>HIT?"}
             J2 -->|YES| J3["✅ Use Cached<br/>Search Results"]
@@ -89,20 +90,20 @@ graph TD
             J3 --> J5["Results Ready"]
             J4 --> J5
         end
-        
+
         J5 --> K["📋 Retrieve Top-K<br/>Chunks + Sources"]
         K --> L["💬 LLM Prompt<br/>Question + Context"]
         L --> N["✍️ Generate Answer<br/>with Sources"]
         N --> O["💾 Cache Answer"]
         O --> P["📤 Return Response<br/>API/Chatbot<br/>1-2s"]
-        
+
         M1 -.->|Short-circuit| P
         M2 -.->|Short-circuit| P
     end
-    
+
     E -.->|Stored vectors| J4
     P --> Q["Done"]
-    
+
     style L1 fill:#c8e6c9
     style L2 fill:#bbdefb
     style L3 fill:#ffe0b2
@@ -110,7 +111,7 @@ graph TD
     style Index fill:#e1f5ff
     style M1 fill:#4caf50,color:#fff
     style M2 fill:#4caf50,color:#fff
-    
+
     classDef cacheHit fill:#4caf50,color:#fff,stroke:#2e7d32,stroke-width:3px
     classDef shortCircuit fill:#ff9800,color:#fff,stroke-width:2px,stroke-dasharray: 5 5
 ```
@@ -193,7 +194,7 @@ curl http://localhost:8000/v1/chat/completions/stream \
 # 1. Start services
 cd docker && ./optimize.sh --all && cd ..
 
-# 2. Pull models  
+# 2. Pull models
 ollama pull qwen2.5:0.5b nomic-embed-text:v1.5
 
 # 3. Install & run
@@ -232,11 +233,13 @@ See [DEVELOPMENT.md](docs/DEVELOPMENT.md) for:
 ## Roadmap
 
 **Todos:**
-- [ ] Show a responses cache list to the web app users
-- [ ] Red Teaming (Giskard / PromptFoo) 
+- [ ] Add new searches in the client cache list
+- [ ] Strands Agents AG-UI GUI integration
+- [ ] Red Teaming (Giskard / PromptFoo)
 - [ ] Integrate pre-commit into GitHub pipeline
 - [ ] Serverless deployment with AgentCore (Lambda, SAM, CloudFront)
 - [ ] AgentCore SessionManager for conversation history caching
+- [X] Show a responses cache list to the web app users
 
 ## Contributing
 

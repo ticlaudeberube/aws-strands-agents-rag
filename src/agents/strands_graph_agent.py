@@ -11,7 +11,7 @@ Benefits:
 - Each node uses optimized model for its task
 - Clean separation of concerns
 - Parallel execution support for checkers
-- Comprehensive execution tracing via GraphResult
+- Comprehensive execution tracing via GraphExecutionResult
 
 Architecture:
     Input → Topic Check → Security Check → RAG Worker → Output
@@ -19,15 +19,24 @@ Architecture:
            Rejection    Rejection
 
 Usage:
-    from src.agents.strands_graph_agent import create_rag_graph
+    from src.agents.strands_graph_agent import StrandsGraphRAGAgent
+    from src.config.settings import Settings
 
-    workflow = create_rag_graph(settings=settings)
-    result = workflow.invoke("What is Milvus?")
+    settings = Settings()
+    agent = StrandsGraphRAGAgent(settings)
 
-    # Access results
-    print(f"Answer: {result.answer}")
-    print(f"Sources: {result.sources}")
-    print(f"Execution Path: {[n for n in result.execution_order]}")
+    # Answer a question
+    answer, sources = agent.answer_question("What is Milvus?")
+    print(f"Answer: {answer}")
+    print(f"Sources: {sources}")
+
+    # Or retrieve context separately
+    context, sources = agent.retrieve_context(
+        collection_name="milvus_docs",
+        query="What is Milvus?",
+        top_k=5
+    )
+    print(f"Context: {context}")
 """
 
 import logging
@@ -450,7 +459,8 @@ def _is_security_attack(
 def _is_question_in_scope(question: str, ollama_client: OllamaClient, settings: Settings) -> bool:
     """Check if question is about databases, search, or information retrieval.
 
-    Uses fast keyword matching first, then LLM-based classification for edge cases.
+    Uses fast keyword matching for instant classification without LLM calls.
+    This enables sub-second rejection of out-of-scope queries.
     """
     question_lower = question.lower()
 
@@ -497,35 +507,15 @@ def _is_question_in_scope(question: str, ollama_client: OllamaClient, settings: 
             if keyword in word and len(keyword) > 2:
                 score += in_scope_keywords[keyword] // 2
 
-    # High confidence threshold
-    if score > 12:
+    # High confidence threshold - any keyword match means in-scope
+    if score > 0:
         logger.debug(f"[SCOPE_CHECK] Keyword match (score={score}): in-scope")
         return True
 
-    if score > 0:
-        logger.debug(f"[SCOPE_CHECK] Partial match (score={score}): in-scope")
-        return True
-
-    # Only use LLM for ambiguous cases
-    try:
-        response = (
-            ollama_client.generate(
-                prompt=prompts.ScopeCheckPrompts.LLM_CLASSIFICATION.format(question=question),
-                model=settings.ollama_model,
-                temperature=0.0,
-                max_tokens=3,
-            )
-            .strip()
-            .upper()
-        )
-
-        is_in_scope = response.startswith("YES")
-        logger.debug(f"[SCOPE_CHECK] LLM result: {response}")
-        return is_in_scope
-
-    except Exception as e:
-        logger.warning(f"[SCOPE_CHECK] LLM failed: {e}. Defaulting to False.")
-        return False
+    # Fast reject: No keywords at all = definitely out of scope
+    # This avoids expensive LLM calls for clearly out-of-scope queries
+    logger.debug("[SCOPE_CHECK] No keyword match (score=0): out-of-scope (fast reject)")
+    return False
 
 
 # ============================================================================
@@ -576,6 +566,14 @@ def create_rag_graph(
     rag_model = rag_model_id or settings.ollama_model
 
     logger.info(f"Creating RAG Graph with models: fast={fast_model}, rag={rag_model}")
+
+    # Initialize web search client (only if enabled)
+    web_search = None
+    if settings.enable_web_search_supplement:
+        from src.tools import WebSearchClient
+
+        web_search = WebSearchClient(timeout=settings.web_search_timeout)
+        logger.info("Web search supplementary sources enabled")
 
     # Create tools
     retrieval_tool = create_milvus_retrieval_tool(vector_db, ollama_client, settings)
@@ -632,18 +630,52 @@ def create_rag_graph(
 
         logger.info(f"[RAG_WORKER] Processing: {question[:50]}...")
 
-        # Retrieve documents
+        # Retrieve documents from knowledge base
         retrieval_result = retrieval_tool(
             question=question,
             collections=collections,
             top_k=top_k,
         )
 
-        # Generate answer
+        kb_sources = retrieval_result["sources"]
+        context_text = retrieval_result["context"]
+
+        # Add web search results as supplementary sources (if enabled)
+        # Matches old strands_rag_agent.py behavior (commit a0f1c64)
+        # Web results are added to sources list but DON'T modify context_text
+        # This keeps LLM focused on KB while showing web resources in UI
+        if web_search and settings.enable_web_search_supplement:
+            try:
+                logger.info("[RAG_WORKER] Adding web search supplementary sources...")
+                web_results = web_search.search(query=question, max_results=3)
+
+                # Format web search results with proper source_type for UI display
+                for web_result in web_results:
+                    kb_sources.append(
+                        {
+                            "source_type": "web_search",
+                            "url": web_result.get("url", ""),
+                            "title": web_result.get("title", "Web Result"),
+                            "text": web_result.get("snippet", ""),
+                            "snippet": web_result.get("snippet", ""),
+                            "distance": 0.7,  # Fixed relevance score for web results
+                            "metadata": {
+                                "source": "web",
+                                "title": web_result.get("title", ""),
+                            },
+                        }
+                    )
+
+                logger.info(f"[RAG_WORKER] Added {len(web_results)} web search sources")
+
+            except Exception as e:
+                logger.warning(f"[RAG_WORKER] Web search failed (non-critical): {e}")
+
+        # Generate answer with KB sources (and optionally web sources)
         rag_result = generation_tool(
             question=question,
-            context=retrieval_result["context"],
-            sources=retrieval_result["sources"],
+            context=context_text,
+            sources=kb_sources,  # Combined KB + web sources
             temperature=state.get("temperature"),
             max_tokens=state.get("max_tokens"),
         )
@@ -654,7 +686,7 @@ def create_rag_graph(
             "retrieval_time": retrieval_result["retrieval_time"],
         }
 
-        logger.info(f"[RAG_WORKER] Generated answer with {len(rag_result.sources)} sources")
+        logger.info(f"[RAG_WORKER] Generated answer with {len(rag_result.sources)} total sources")
 
         return state
 
@@ -793,6 +825,15 @@ class StrandsGraphRAGAgent:
 
         self.web_search = WebSearchClient(timeout=settings.web_search_timeout)
 
+        # Initialize response cache for semantic caching
+        from src.tools import MilvusResponseCache
+
+        self.response_cache = MilvusResponseCache(
+            vector_db=self.vector_db,
+            embedding_dim=settings.response_cache_embedding_dim,
+            distance_threshold=settings.response_cache_threshold,
+        )
+
         try:
             self.graph_config = create_rag_graph(settings)
             logger.info("StrandsGraphRAGAgent initialized")
@@ -861,6 +902,104 @@ class StrandsGraphRAGAgent:
             logger.error(f"Retrieval failed: {e}")
             return [], []
 
+    def retrieve_documents(
+        self,
+        collection_name: str,
+        query: str,
+        top_k: int = 5,
+        filter_source: Optional[str] = None,
+    ) -> List[Dict]:
+        """Retrieve relevant documents from vector database.
+
+        This is a wrapper around retrieve_context for MCP tool compatibility.
+
+        Args:
+            collection_name: Name of the collection to search
+            query: Query text to search for
+            top_k: Number of results to retrieve
+            filter_source: Optional source filter (not implemented yet)
+
+        Returns:
+            List of document dictionaries with text, metadata, and distance
+        """
+        _, sources = self.retrieve_context(collection_name, query, top_k)
+
+        # Filter by source if specified
+        if filter_source:
+            sources = [
+                doc for doc in sources if doc.get("metadata", {}).get("source") == filter_source
+            ]
+
+        return sources
+
+    def search_by_source(
+        self,
+        collection_name: str,
+        query: str,
+        source: str,
+        top_k: int = 5,
+    ) -> List[Dict]:
+        """Search documents filtered by source.
+
+        Args:
+            collection_name: Name of the collection to search
+            query: Query text to search for
+            source: Source to filter by
+            top_k: Number of results to retrieve
+
+        Returns:
+            List of document dictionaries filtered by source
+        """
+        return self.retrieve_documents(collection_name, query, top_k, filter_source=source)
+
+    def generate_answer(
+        self,
+        question: str,
+        context: str,
+        temperature: float = 0.1,
+        max_tokens: Optional[int] = None,
+    ) -> str:
+        """Generate an answer based on question and context.
+
+        Args:
+            question: User question
+            context: Retrieved context for answering
+            temperature: LLM sampling temperature
+            max_tokens: Maximum tokens to generate
+
+        Returns:
+            Generated answer text
+        """
+        try:
+            # Use provided values or settings defaults
+            temp = temperature
+            tokens = max_tokens if max_tokens is not None else self.settings.ollama_max_tokens
+
+            # Format RAG prompt
+            system_instructions = prompts.RAGPrompts.SYSTEM_INSTRUCTIONS.format(
+                formatting_rules=prompts.FORMATTING_RULES
+            )
+
+            prompt = prompts.format_rag_prompt(
+                system_instructions=system_instructions,
+                question=question,
+                context=context,
+            )
+
+            # Generate answer
+            answer = self.ollama_client.generate(
+                prompt=prompt,
+                model=self.settings.ollama_model,
+                temperature=temp,
+                max_tokens=tokens,
+            )
+
+            return answer
+
+        except Exception as e:
+            logger.error(f"Answer generation failed: {e}")
+            return f"Error generating answer: {str(e)}"
+
     def answer_question(
         self,
         question: str,
@@ -910,6 +1049,29 @@ class StrandsGraphRAGAgent:
         }
 
         start_time = time.time()
+
+        # Check response cache first (before any graph execution)
+        if self.response_cache:
+            try:
+                question_embedding = self.ollama_client.embed_text(
+                    question,
+                    model=self.settings.ollama_embed_model,
+                )
+                cached = self.response_cache.search_cache(
+                    question=question,
+                    question_embedding=question_embedding,
+                    limit=1,
+                )
+                if cached:
+                    elapsed = time.time() - start_time
+                    logger.info(f"✓ Cache hit! Retrieved in {elapsed * 1000:.0f}ms")
+                    answer = cached.get("response", "")
+                    sources = cached.get("sources", [])
+                    self._last_stream_sources = sources
+                    return (answer, sources)
+            except Exception as e:
+                logger.warning(f"Cache lookup failed: {e}, proceeding with RAG")
+
         logger.info(f"Executing graph for: {question[:50]}...")
 
         try:
@@ -941,10 +1103,33 @@ class StrandsGraphRAGAgent:
             sources = state.get("final_sources", [])
             self._last_stream_sources = sources
 
-            return (
-                state.get("final_answer", ""),
-                sources,
-            )
+            answer = state.get("final_answer", "")
+
+            # Store response in cache ONLY for successful RAG responses (not rejections)
+            # Skip caching for rejected queries to avoid unnecessary embedding calls
+            is_rejection = state.get("final_confidence", 0) == 0.0
+            if self.response_cache and answer and not state.get("is_cached") and not is_rejection:
+                try:
+                    question_embedding = self.ollama_client.embed_text(
+                        question,
+                        model=self.settings.ollama_embed_model,
+                    )
+                    self.response_cache.store_response(
+                        question=question,
+                        question_embedding=question_embedding,
+                        response=answer,
+                        metadata={
+                            "sources": sources,
+                            "collection": collection_name or "unknown",
+                            "response_time": round(total_time * 1000, 2),  # milliseconds
+                            "confidence": state.get("final_confidence", 0),
+                        },
+                    )
+                    logger.debug(f"Stored response in cache for question: {question[:60]}")
+                except Exception as cache_error:
+                    logger.warning(f"Failed to cache response: {cache_error}")
+
+            return (answer, sources)
 
         except Exception as e:
             logger.error(f"Graph execution failed: {e}", exc_info=True)
@@ -1080,6 +1265,43 @@ class StrandsGraphRAGAgent:
                 top_k = self.settings.default_top_k
             if collection_name is None:
                 collection_name = self.settings.ollama_collection_name
+
+            # CHECK RESPONSE CACHE FIRST
+            if self.response_cache:
+                try:
+                    start_time = time.time()
+                    question_embedding = self.ollama_client.embed_text(
+                        question,
+                        model=self.settings.ollama_embed_model,
+                    )
+                    cached = self.response_cache.search_cache(
+                        question=question,
+                        question_embedding=question_embedding,
+                        limit=1,
+                    )
+                    if cached:
+                        elapsed = time.time() - start_time
+                        logger.info(f"✓ Cache hit! Retrieved in {elapsed * 1000:.0f}ms (streaming)")
+                        answer = cached.get("response", "")
+                        sources = cached.get("sources", [])
+                        self._last_stream_sources = sources
+
+                        # Stream the cached answer in chunks for consistency
+                        words = answer.split()
+                        buffer = ""
+                        for word in words:
+                            buffer += word + " "
+                            if len(buffer) >= 10:  # ~2 words per chunk
+                                yield buffer
+                                buffer = ""
+                                await asyncio.sleep(0.01)  # Small delay for streaming effect
+                        if buffer:
+                            yield buffer
+                        return
+                except Exception as e:
+                    logger.warning(
+                        f"Cache lookup failed during streaming: {e}, proceeding with RAG"
+                    )
 
             # SECURITY CHECK
             if _is_security_attack(question):
@@ -1290,7 +1512,7 @@ class StrandsGraphRAGAgent:
         Yields:
             Chunks of the generated answer as they are produced
         """
-        sources = []
+        sources: List[Dict[str, Any]] = []
         self._last_stream_sources = []  # Initialize immediately so it's always set
 
         try:
@@ -1324,6 +1546,10 @@ class StrandsGraphRAGAgent:
                 web_context = "\n".join(
                     [f"- {s.get('title', 'Web Result')}: {s.get('snippet', '')}" for s in sources]
                 )
+                logger.info(f"[WEB_CONTEXT] Built context from {len(sources)} sources:")
+                for i, s in enumerate(sources[:2], 1):  # Log first 2 for debugging
+                    snippet_preview = s.get("snippet", "")[:100]
+                    logger.info(f"  [{i}] {s.get('title', 'No title')[:50]}: {snippet_preview}...")
             else:
                 web_context = "No web search results found."
 
@@ -1376,3 +1602,108 @@ class StrandsGraphRAGAgent:
             # Ensure sources are set even on outer exception
             self._last_stream_sources = sources
             yield f"[Error: {str(e)}]"
+
+    def list_collections(self) -> List[str]:
+        """List all available collections in the vector database.
+
+        Returns:
+            List of collection names
+        """
+        try:
+            collections = self.vector_db.list_collections()
+            logger.debug(f"Found {len(collections)} collections")
+            return collections
+        except Exception as e:
+            logger.error(f"Failed to list collections: {e}")
+            return []
+
+    def add_documents(
+        self,
+        collection_name: str,
+        documents: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """Add documents to the vector database.
+
+        This is a placeholder implementation for MCP tool compatibility.
+        Full implementation would require embedding and indexing logic.
+
+        Args:
+            collection_name: Target collection name
+            documents: List of documents with text, source, and metadata
+
+        Returns:
+            Result dictionary with success status and count
+        """
+        logger.warning(
+            f"add_documents called but not fully implemented. Collection: {collection_name}"
+        )
+        return {"success": False, "message": "add_documents not yet implemented", "count": 0}
+
+    # === API Server Compatibility Methods ===
+
+    def answer_question_no_cache(
+        self,
+        question: str,
+        collection_name: Optional[str] = None,
+        top_k: int = 5,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+    ) -> Tuple[str, List[Dict]]:
+        """Answer question bypassing response cache (for API server compatibility).
+
+        This method provides backward compatibility with the old agent interface.
+        It calls answer_question() which uses the graph flow, but the response
+        cache node could be modified to respect a bypass flag in the future.
+
+        Args:
+            question: User query
+            collection_name: Collection to search
+            top_k: Number of results
+            temperature: LLM temperature
+            max_tokens: Max response tokens
+
+        Returns:
+            Tuple of (answer_text, sources_list)
+        """
+        logger.info(f"[NO_CACHE] Answering without cache: {question[:100]}...")
+        # Currently just calls normal flow - in future, could pass bypass_cache flag
+        # through state to skip ResponseCache tool
+        return self.answer_question(
+            question=question,
+            collection_name=collection_name,
+            top_k=top_k,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+
+    def answer_question_web_search_only(
+        self,
+        question: str,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+    ) -> Tuple[str, List[Dict]]:
+        """Answer using only web search (for API server compatibility).
+
+        This method provides backward compatibility with the old agent interface.
+        Currently not fully supported in graph architecture - returns empty response.
+        Web search is designed as a supplement to KB results in the graph flow.
+
+        Args:
+            question: User query
+            temperature: LLM temperature
+            max_tokens: Max response tokens
+
+        Returns:
+            Tuple of (answer_text, sources_list)
+        """
+        logger.warning(f"[WEB_SEARCH_ONLY] Not fully supported in graph agent: {question[:100]}...")
+        logger.warning("[WEB_SEARCH_ONLY] Graph architecture uses web search as supplement only")
+        logger.warning(
+            "[WEB_SEARCH_ONLY] Enable ENABLE_WEB_SEARCH_SUPPLEMENT in .env for web + KB results"
+        )
+        return (
+            "Web search-only mode is not supported in the graph-based agent. "
+            "To enable web search as a supplement to knowledge base results, "
+            "set ENABLE_WEB_SEARCH_SUPPLEMENT=true in your .env file and restart the server.",
+            [],
+        )

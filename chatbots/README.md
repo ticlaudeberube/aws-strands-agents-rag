@@ -108,4 +108,3 @@ The chatbot uses settings from your `.env` file:
 **"No results found"**
 - Ensure documents are loaded: `python document-loaders/load_milvus_docs_ollama.py`
 - Check that `OLLAMA_COLLECTION_NAME` matches the loaded collection
-

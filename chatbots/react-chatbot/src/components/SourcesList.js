@@ -66,10 +66,10 @@ function SourcesList({ sources, timing }) {
                         ✓ {getRelevancePercentage(source.distance)}% relevant
                       </span>
                     )}
-                    <a 
-                      href={source.url} 
-                      target="_blank" 
-                      rel="noopener noreferrer" 
+                    <a
+                      href={source.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
                       className="web-link"
                       title={source.url}
                     >
@@ -82,7 +82,7 @@ function SourcesList({ sources, timing }) {
             ))}
           </div>
         )}
-        
+
         {/* Local document sources */}
         {localSources.length > 0 && (
           <div className="local-sources-section">
@@ -97,10 +97,10 @@ function SourcesList({ sources, timing }) {
                       </span>
                     )}
                     {source.url ? (
-                      <a 
-                        href={source.url} 
-                        target="_blank" 
-                        rel="noopener noreferrer" 
+                      <a
+                        href={source.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
                         className="web-link"
                         title={source.url}
                       >

@@ -16,13 +16,13 @@ class KnowledgeBaseSkill:
     # Skill documentation
     SKILL_DESCRIPTION = """
     # Knowledge Base Skill
-    
+
     Manages documents and collections in the knowledge base.
-    
+
     ## Tools in This Skill
-    
+
     - **add_documents**: Add documents to a collection
-    
+
     ## Use Cases
     - User provides new documents → add_documents indexes them
     - Extend the knowledge base with new content

@@ -34,6 +34,7 @@
   box-shadow: none;
   overflow: hidden;
   background: #f9fafb;
+  position: relative;
 }
 
 .chat-header {
@@ -55,6 +56,29 @@
 .header-content p {
   font-size: 14px;
   opacity: 0.9;
+}
+
+.header-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.sidebar-toggle-btn {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: white;
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 18px;
+  transition: background 0.2s;
+  display: none;
+}
+
+.sidebar-toggle-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
 }
 
 .api-status {
@@ -97,6 +121,34 @@
   }
 }
 
+.cache-toggle-btn {
+  padding: 8px 14px;
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 20px;
+  color: white;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.cache-toggle-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+.cache-toggle-btn.active {
+  background: rgba(100, 116, 139, 0.9);
+  border-color: rgba(100, 116, 139, 1);
+}
+
+.cache-toggle-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .messages-container {
   flex: 1;
   overflow-y: auto;
@@ -121,6 +173,13 @@
 
 .messages-container::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
+}
+
+.clear-chat-container {
+  display: flex;
+  justify-content: right;
+  padding: 16px 0;
+  margin-top: 8px;
 }
 
 .typing-indicator {
@@ -167,15 +226,21 @@
   gap: 12px;
 }
 
+.footer-top {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
 .button-group {
   display: flex;
   gap: 12px;
   justify-content: flex-end;
 }
 
-.clear-btn {
+.cache-drawer-btn {
   padding: 8px 16px;
-  background: #ef4444;
+  background: #3b82f6;
   color: white;
   border: none;
   border-radius: 6px;
@@ -185,12 +250,32 @@
   transition: background 0.2s;
 }
 
+.cache-drawer-btn:hover {
+  background: #2563eb;
+}
+
+.cache-drawer-btn:active {
+  transform: scale(0.98);
+}
+
+.clear-btn {
+  padding: 8px 16px;
+  color: gray;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+  border: 1px solid gray;
+}
+
 .clear-btn:hover {
-  background: #dc2626;
+  background: #475569;
 }
 
 .clear-btn:active {
-  transform: scale(0.98);
+  background: #334155;
 }
 
 .clear-cache-btn {
@@ -216,4 +301,107 @@
 .clear-cache-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+/* ============================================================================
+   CACHE DRAWER STYLES (Bottom Drawer)
+   ============================================================================ */
+
+.cache-drawer {
+  background: #f3f4f6;
+  border-top: 1px solid #e5e7eb;
+  overflow: hidden;
+  transition: max-height 0.3s ease, opacity 0.3s ease;
+  display: flex;
+  flex-direction: column;
+  z-index: 30;
+  max-height: 0;
+  opacity: 0;
+  pointer-events: none;
+  box-shadow: 0 -3px 12px rgba(0, 0, 0, 0.15);
+}
+
+.cache-drawer.open {
+  max-height: 40vh;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.cache-drawer.closed {
+  max-height: 0;
+  opacity: 0;
+}
+
+/* ============================================================================
+   RESPONSIVE DESIGN
+   ============================================================================ */
+
+/* Tablets and smaller desktops (1200px and below) */
+@media (max-width: 1200px) {
+  .cache-drawer.open {
+    max-height: 45vh;
+  }
+}
+
+/* Phones (480px and below) */
+@media (max-width: 480px) {
+  .cache-drawer {
+    bottom: 110px;
+  }
+
+  .cache-drawer.open {
+    max-height: 50vh;
+  }
+
+  .chat-header {
+    padding: 12px;
+  }
+
+  .header-content h1 {
+    font-size: 18px;
+    margin-bottom: 2px;
+  }
+
+  .header-content p {
+    font-size: 11px;
+  }
+
+  .header-controls {
+    gap: 8px;
+  }
+
+  .api-status {
+    padding: 6px 10px;
+    font-size: 11px;
+  }
+
+  .status-dot {
+    width: 6px;
+    height: 6px;
+  }
+
+  .messages-container {
+    padding: 8px;
+    gap: 12px;
+  }
+
+  .chat-footer {
+    padding: 12px 16px;
+    gap: 10px;
+  }
+
+  .footer-top {
+    gap: 8px;
+  }
+
+  .button-group {
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .clear-btn,
+  .clear-cache-btn,
+  .cache-drawer-btn {
+    padding: 6px 12px;
+    font-size: 12px;
+  }
 }

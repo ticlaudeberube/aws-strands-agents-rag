@@ -110,6 +110,10 @@ class Settings(BaseSettings):
     api_port: int = 8000  # API server port (reads API_PORT from .env, defaults to 8000)
     enable_cache_warmup: bool = False  # Enable/disable response cache warmup on startup (reads ENABLE_CACHE_WARMUP from .env)
     web_search_timeout: int = 10  # Web search request timeout in seconds
+    enable_web_search_supplement: bool = Field(
+        default=False,
+        validation_alias="ENABLE_WEB_SEARCH_SUPPLEMENT",
+    )  # Add web search results as supplementary sources to KB results (off by default)
 
     # AWS Configuration (optional)
     aws_region: Optional[str] = "us-west-1"

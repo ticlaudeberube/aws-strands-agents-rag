@@ -16,13 +16,13 @@ class AnswerGenerationSkill:
     # Skill documentation
     SKILL_DESCRIPTION = """
     # Answer Generation Skill
-    
+
     Generates answers and synthesizes text using the local LLM.
-    
+
     ## Tools in This Skill
-    
+
     - **generate_answer**: Synthesis answers based on context and questions
-    
+
     ## Use Cases
     - After retrieving documents, generate_answer creates a natural response
     - Summarize retrieved context into a concise answer

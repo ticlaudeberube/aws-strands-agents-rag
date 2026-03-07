@@ -203,13 +203,13 @@ ruff check --fix
 
 - **Unused imports** (F401): `from x import y  # unused`
   - Fix: `ruff check --fix` auto-removes unused imports
-  
+
 - **Unused variables** (F841): `x = value  # assigned but never used`
   - Fix: Remove the assignment or use `_ = value` for intentional discards
   ```python
   # Before
   unused_var = some_function()
-  
+
   # After
   _ = some_function()  # Intentionally discarding return value
   ```
@@ -219,7 +219,7 @@ ruff check --fix
   ```python
   # Before
   result = some_function(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9)
-  
+
   # After
   result = some_function(
       arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9
@@ -231,7 +231,7 @@ ruff check --fix
   ```python
   # Before
   print(datetime.now())
-  
+
   # After
   from datetime import datetime
   print(datetime.now())
@@ -245,7 +245,7 @@ ruff check --fix
       something()
   except:
       pass
-  
+
   # After
   try:
       something()
@@ -303,7 +303,7 @@ mypy src  # Type check the src folder
   # Before
   def get_value(key):
       return config[key]
-  
+
   # After
   def get_value(key: str) -> Any:
       return config[key]
@@ -313,7 +313,7 @@ mypy src  # Type check the src folder
   ```python
   # Before
   x: int = "hello"  # error: str incompatible with int
-  
+
   # After
   x: str = "hello"
   ```
@@ -322,7 +322,7 @@ mypy src  # Type check the src folder
   ```python
   # Before
   value: str = None  # error: Optional expected
-  
+
   # After
   value: Optional[str] = None
   # or with Python 3.10+
@@ -333,7 +333,7 @@ mypy src  # Type check the src folder
   ```python
   # Before
   obj.nonexistent_attr  # error: has no attribute
-  
+
   # After: Check if attribute exists or add type hints
   if hasattr(obj, 'attr'):
       obj.attr
@@ -466,15 +466,15 @@ ollama_client = OllamaClient(host=settings.ollama_host)
 def load_my_documents():
     """Load documents from your source."""
     documents = []
-    
+
     # Load from your source (files, APIs, databases, etc.)
     documents = [
         {"content": "Document text", "source": "my_source", "metadata": {...}}
     ]
-    
+
     # Embed documents
     embeddings = embed_documents(documents, ollama_client)
-    
+
     # Insert into Milvus
     vector_db.insert_embeddings(
         collection_name="my_collection",
@@ -691,7 +691,7 @@ python -m cProfile -s cumulative examples/basic_rag.py | head -30
 class StrandsRAGAgent:
     # Initialization
     def __init__(self, settings: Settings, cache_size: int = None)
-    
+
     # Answer Question (Full RAG Pipeline)
     def answer_question(
         question: str,
@@ -700,7 +700,7 @@ class StrandsRAGAgent:
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None
     ) -> Tuple[str, List[Dict]]  # (answer, sources)
-    
+
     # Retrieve Context
     def retrieve_context(
         collection_name: str,
@@ -709,13 +709,13 @@ class StrandsRAGAgent:
         offset: int = 0,
         filter_source: Optional[str] = None
     ) -> Tuple[List[str], List[Dict]]  # (chunks, sources)
-    
+
     # Document Management
     def add_documents(
         collection_name: str,
         documents: List[Union[str, Dict]]
     ) -> str  # status message
-    
+
     # Cache Management
     def clear_caches() -> None
 ```
@@ -724,13 +724,13 @@ class StrandsRAGAgent:
         page: int = 0,
         page_size: int = 5
     ) -> Tuple[List[str], List[Dict], int]
-    
+
     # Document Management
     def add_documents(
         collection_name: str,
         documents: List[str]
     ) -> bool
-    
+
     # Cache Management
     def clear_caches() -> None
 ```
@@ -746,7 +746,7 @@ class MilvusVectorDB:
         port: int = 19530,
         db_name: str = "default"
     )
-    
+
     # Collection Management
     def create_collection(
         collection_name: str,
@@ -754,10 +754,10 @@ class MilvusVectorDB:
         index_type: str = "HNSW",
         metric_type: str = "COSINE"
     ) -> bool
-    
+
     def delete_collection(collection_name: str) -> bool
     def list_collections() -> List[str]
-    
+
     # Data Management
     def insert_embeddings(
         collection_name: str,
@@ -765,7 +765,7 @@ class MilvusVectorDB:
         texts: List[str],
         metadata: List[Dict] = None
     ) -> List[int]
-    
+
     # Search Methods
     def search(
         collection_name: str,
@@ -775,7 +775,7 @@ class MilvusVectorDB:
         search_params: Dict = None,
         filter_expr: Optional[str] = None
     ) -> List[Dict]
-    
+
     async def search_async(
         collection_name: str,
         query_embedding: List[float],
@@ -784,7 +784,7 @@ class MilvusVectorDB:
         search_params: Dict = None,
         filter_expr: Optional[str] = None
     ) -> List[Dict]
-    
+
     def search_by_source(
         collection_name: str,
         query_embedding: List[float],
@@ -798,22 +798,22 @@ class MilvusVectorDB:
 ```python
 class OllamaClient:
     def __init__(self, host: str = "http://localhost:11434")
-    
+
     def is_available(timeout: int = 5) -> bool
     def get_available_models() -> List[str]
-    
+
     def embed_text(
         text: str,
         model: str = "nomic-embed-text:v1.5"
     ) -> List[float]
-    
+
     def embed_texts(
         texts: List[str],
         model: str = "nomic-embed-text:v1.5",
         batch_size: int = 32,
         max_workers: Optional[int] = None
     ) -> List[List[float]]
-    
+
     def generate(
         prompt: str,
         model: str = "qwen2.5:0.5b",
@@ -830,21 +830,21 @@ class Settings:
     ollama_host: str
     ollama_model: str
     ollama_embed_model: str
-    
+
     # Milvus Configuration
     milvus_host: str
     milvus_port: int
     milvus_db_name: str
-    
+
     # Collection Configuration
     ollama_collection_name: str
-    
+
     # Performance Settings
     agent_cache_size: int          # LRU cache size
     embedding_batch_size: int      # Batch size for bulk operations
     max_chunk_length: int
     embedding_dim: int
-    
+
     # Application Configuration
     log_level: str
     batch_size: int
@@ -878,21 +878,21 @@ class OllamaClient:
 ```python
 class WebSearchClient:
     def __init__(timeout: int = 10)
-    
+
     # Basic web search
     def search(
         query: str,
         max_results: int = 5,
         safe_search: bool = True
     ) -> List[Dict[str, str]]  # [{"title", "snippet", "url", "source"}]
-    
+
     # Comparative product search with feature-focused queries
     def search_comparison(
         product1: str,
         product2: str,
         max_results: int = 5
     ) -> Dict[str, Any]  # {"comparison": [...], "product1": {...}, "product2": {...}}
-    
+
     # Format search results as readable text
     def extract_text_summary(
         results: List[Dict[str, str]]

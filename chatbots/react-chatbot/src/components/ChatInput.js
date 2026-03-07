@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import './ChatInput.css';
 
-function ChatInput({ onSendMessage, disabled, placeholder }) {
+function ChatInput({ onSendMessage, disabled, placeholder, webSearchEnabled }) {
   const [input, setInput] = useState('');
   const [forceWebSearch, setForceWebSearch] = useState(false);
 
@@ -32,14 +32,16 @@ function ChatInput({ onSendMessage, disabled, placeholder }) {
         disabled={disabled}
         rows="1"
       />
-      <button
-        className={`web-search-btn ${forceWebSearch ? 'active' : ''}`}
-        onClick={() => setForceWebSearch(!forceWebSearch)}
-        disabled={disabled}
-        title={forceWebSearch ? 'Force web search enabled' : 'Force web search (disabled)'}
-      >
-        🌐
-      </button>
+      {webSearchEnabled && (
+        <button
+          className={`web-search-btn ${forceWebSearch ? 'active' : ''}`}
+          onClick={() => setForceWebSearch(!forceWebSearch)}
+          disabled={disabled}
+          title={forceWebSearch ? 'Force web search enabled' : 'Click to enable web search'}
+        >
+          🌐
+        </button>
+      )}
       <button
         className="send-btn"
         onClick={handleSend}

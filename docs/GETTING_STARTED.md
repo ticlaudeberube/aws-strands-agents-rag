@@ -33,7 +33,7 @@ cd /path/to/aws-stands-agents-rag
 chmod +x setup.sh
 
 # Run setup
-./scripts/setup.sh 
+./scripts/setup.sh
 ```
 
 ### Windows
@@ -187,7 +187,7 @@ ollama list
 # Test the language model
 ollama run qwen2.5:0.5b "What is Python?"
 
-# Test the embedding model  
+# Test the embedding model
 ollama run nomic-embed-text:v1.5 "test"
 ```
 

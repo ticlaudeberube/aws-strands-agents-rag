@@ -390,12 +390,13 @@ class MilvusResponseCache:
                 collection_name=self.cache_collection_name,
                 db_name=self.vector_db.db_name,
                 limit=settings.response_cache_stats_limit,
+                output_fields=["text", "metadata"],  # Explicitly request fields
             )
 
             return {
                 "collection": self.cache_collection_name,
                 "cached_responses": len(results) if results else 0,
-                "similarity_threshold": self.SIMILARITY_THRESHOLD,
+                "distance_threshold": self.distance_threshold,
             }
         except Exception as e:
             return {

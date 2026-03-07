@@ -106,7 +106,7 @@ Examples of comparisons:
 - "What are Milvus advantages over Pinecone?"
 - "Compare Elasticsearch and Weaviate"
 - "How does Qdrant compare to Pinecone?"
-- "PostgreSQL vs Milvus" 
+- "PostgreSQL vs Milvus"
 - "Which is better - Pinecone or Qdrant?"
 
 Examples of non-comparisons (DO NOT CLASSIFY AS COMPARISON):
@@ -133,7 +133,7 @@ Create a concise, feature-focused comparison. IMPORTANT:
 - Use this structure in your response:
 * Core Differences
 * {product1_display} Strengths
-* {product2_display} Strengths  
+* {product2_display} Strengths
 * Key Considerations
 - Be specific with numbers/metrics when available
 - Keep response under 500 words
@@ -203,12 +203,18 @@ class WebSearchPrompts:
 
 {formatting_rules}
 
-INSTRUCTIONS:
-1. Answer ONLY using the provided web search snippets
-2. Clearly cite the source by name using HTML links: From <a href="https://example.com">the official website</a>, ...
-   - WRONG: From [the official website](https://example.com), ... (MARKDOWN - FORBIDDEN)
-3. Be accurate and concise
-4. If no relevant web results, explain that web search didn't find relevant information"""
+CRITICAL INSTRUCTIONS:
+1. Answer EXCLUSIVELY using the information in the provided web search snippets below
+2. DO NOT use your training knowledge - only cite what's explicitly in the snippets
+3. Cite sources using HTML links: From <a href="URL">Source Name</a>, ...
+   - WRONG: [Source Name](URL) - Markdown is FORBIDDEN
+4. If the snippets contain multiple perspectives, synthesize them
+5. If web results don't answer the question, say "The web search didn't find sufficient information"
+
+EXAMPLES OF GOOD CITATIONS:
+- According to <a href="https://example.com">the official documentation</a>, ...
+- From <a href="https://example.org">Wikipedia</a>, ...
+- <a href="https://blog.example.com">Example Blog</a> explains that ..."""
 
     PROMPT_TEMPLATE = """{system_instructions}
 
@@ -217,7 +223,7 @@ Web search results:
 
 User question: {question}
 
-Provide a direct answer based on the web search results."""
+Answer based ONLY on the web snippets above. Quote or paraphrase the snippets directly."""
 
 
 # ============================================================================

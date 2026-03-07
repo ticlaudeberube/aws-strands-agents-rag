@@ -1,4 +1,4 @@
-
+---
 services:
   # etcd - Distributed configuration and metadata storage
   etcd:

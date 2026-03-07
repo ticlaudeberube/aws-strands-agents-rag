@@ -62,7 +62,7 @@ function SourcesPanel({ sources, isLoading, timing }) {
       <div className="sources-panel-list">
         {uniqueSources.map((source, index) => {
           const isWebSource = source.source_type === 'web_search' || source.url;
-          
+
           if (isWebSource) {
             return (
               <div key={index} className="sources-panel-item web-source-item">
@@ -78,11 +78,11 @@ function SourcesPanel({ sources, isLoading, timing }) {
               </div>
             );
           }
-          
+
           // Show document name if available, otherwise show text snippet
           const displayName = source.document_name || (source.text ? source.text.substring(0, 100) + '...' : 'Unnamed source');
           const isDocumentName = !!source.document_name;
-          
+
           // Extract filename from metadata
           let metadata = source.metadata;
           if (typeof metadata === 'string') {
@@ -93,7 +93,7 @@ function SourcesPanel({ sources, isLoading, timing }) {
             }
           }
           const filename = metadata?.filename || metadata?.document_name || '';
-          
+
           return (
             <div key={index} className="sources-panel-item">
               <div className="sources-panel-number">{index + 1}</div>

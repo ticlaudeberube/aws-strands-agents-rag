@@ -2,7 +2,7 @@
 
 ###############################################################################
 # RAG Application Docker Performance Optimization Script
-# 
+#
 # This script optimizes Docker and system settings for the RAG application
 # with Milvus, MinIO, and etcd services.
 ###############################################################################
@@ -40,27 +40,27 @@ log_error() {
 
 optimize_docker_desktop() {
     log_info "Configuring Docker Daemon..."
-    
+
     local DOCKER_CONFIG="${HOME}/.docker"
     local DAEMON_JSON="${DOCKER_CONFIG}/daemon.json"
     local SCRIPT_DIR="$(dirname "$0")"
     local SOURCE_DAEMON="${SCRIPT_DIR}/daemon.json"
-    
+
     # Create Docker config directory if it doesn't exist
     mkdir -p "$DOCKER_CONFIG"
-    
+
     # Check if source daemon.json exists
     if [ ! -f "$SOURCE_DAEMON" ]; then
         log_warning "daemon.json template not found, skipping daemon configuration"
         return 0
     fi
-    
+
     # Backup existing daemon.json if it exists
     if [ -f "$DAEMON_JSON" ]; then
         log_warning "Backing up existing daemon.json to daemon.json.bak"
         cp "$DAEMON_JSON" "${DAEMON_JSON}.bak" 2>/dev/null || log_warning "Could not backup daemon.json"
     fi
-    
+
     # Copy optimized daemon.json
     cp "$SOURCE_DAEMON" "$DAEMON_JSON" 2>/dev/null
     if [ $? -eq 0 ]; then
@@ -72,12 +72,12 @@ optimize_docker_desktop() {
 
 optimize_system_macos() {
     log_info "Optimizing macOS system settings..."
-    
+
     # Note: These settings may require admin privileges
     # They're informational for macOS users
-    
+
     cat << 'EOF'
-    
+
 For macOS, we recommend configuring Docker Desktop settings manually:
 
 1. Open Docker Desktop Preferences (⌘ + ,)
@@ -86,70 +86,70 @@ For macOS, we recommend configuring Docker Desktop settings manually:
    - Memory: 16 GB (or more for better performance)
    - Swap: 2 GB
    - Disk image size: 100 GB (or more)
-   
+
 3. Go to Features in development tab:
    - Enable VirtioFS (faster than osxfs)
    - Enable Rosetta 2 (if using Apple Silicon)
-   
+
 4. Go to File Sharing and ensure project directory is shared
 
 EOF
-    
+
     log_success "macOS optimization recommendations displayed"
 }
 
 optimize_system_linux() {
     log_info "Optimizing Linux system settings..."
-    
+
     # Check if running as root
-    if [ "$EUID" -ne 0 ]; then 
+    if [ "$EUID" -ne 0 ]; then
         log_warning "Some optimizations require sudo privileges. Attempting to run with sudo..."
     fi
-    
+
     # Increase file descriptors
     log_info "Setting file descriptor limits..."
     echo "* soft nofile 65536" | sudo tee -a /etc/security/limits.conf > /dev/null 2>&1 || true
     echo "* hard nofile 65536" | sudo tee -a /etc/security/limits.conf > /dev/null 2>&1 || true
-    
+
     # Memory settings
     log_info "Optimizing memory settings..."
     echo "vm.swappiness=1" | sudo tee -a /etc/sysctl.conf > /dev/null 2>&1 || true
     echo "vm.max_map_count=262144" | sudo tee -a /etc/sysctl.conf > /dev/null 2>&1 || true
-    
+
     # Network optimization
     log_info "Optimizing network settings..."
     echo "net.ipv4.tcp_tw_reuse=1" | sudo tee -a /etc/sysctl.conf > /dev/null 2>&1 || true
     echo "net.ipv4.tcp_max_syn_backlog=8096" | sudo tee -a /etc/sysctl.conf > /dev/null 2>&1 || true
-    
+
     # Apply settings
     sudo sysctl -p > /dev/null 2>&1 || true
-    
+
     log_success "Linux system settings optimized"
 }
 
 cleanup_docker() {
     log_info "Cleaning up Docker resources (pruning unused items)..."
-    
+
     # Remove unused containers, networks, images, and build cache
     if docker system prune -f > /dev/null 2>&1; then
         log_success "Docker cleanup completed"
     else
         log_warning "Docker cleanup had warnings (this is usually safe to ignore)"
     fi
-    
+
     # Optionally remove unused volumes (commented out to be safe)
     # docker volume prune -f
 }
 
 start_containers() {
     log_info "Starting optimized containers..."
-    
+
     local COMPOSE_DIR="$(dirname "$0")"
     local DOCKER_COMPOSE_CMD
-    
+
     # Change to docker directory
     cd "$COMPOSE_DIR" || return 1
-    
+
     # Detect docker compose command (prefer 'docker compose' over 'docker-compose')
     if command -v docker &> /dev/null && docker compose version &> /dev/null; then
         DOCKER_COMPOSE_CMD="docker compose"
@@ -159,20 +159,20 @@ start_containers() {
         log_error "docker compose not found. Please install Docker Desktop or docker-compose."
         return 1
     fi
-    
+
     # Check if docker daemon is working
     if ! docker ps > /dev/null 2>&1; then
         log_error "Docker daemon is not responding. Please start Docker Desktop and try again."
         return 1
     fi
-    
+
     # Stop existing containers (without causing errors if they don't exist)
     log_info "Stopping existing containers..."
     $DOCKER_COMPOSE_CMD down 2>/dev/null || log_warning "No running containers to stop"
-    
+
     # Wait a bit for cleanup
     sleep 2
-    
+
     # Start new containers
     log_info "Starting containers with docker compose..."
     if $DOCKER_COMPOSE_CMD up -d; then
@@ -188,7 +188,7 @@ start_containers() {
 
 show_service_info() {
     log_info "RAG Application Services Information:"
-    
+
     cat << 'EOF'
 
 Services:
@@ -214,7 +214,7 @@ EOF
 
 show_performance_monitoring() {
     log_info "Performance Monitoring Commands:"
-    
+
     cat << 'EOF'
 
 Real-time monitoring:
@@ -270,13 +270,13 @@ EOF
 main() {
     log_info "RAG Application Docker Optimization"
     log_info "===================================="
-    
+
     # Default to showing usage if no arguments
     if [ $# -eq 0 ]; then
         show_usage
         exit 0
     fi
-    
+
     while [[ $# -gt 0 ]]; do
         case $1 in
             -h|--help)
@@ -297,23 +297,23 @@ main() {
                 ;;
             -a|--all)
                 log_info "Running full optimization sequence..."
-                
+
                 # Try daemon config but don't fail if it doesn't work
                 optimize_docker_desktop
                 log_info "Waiting for potential Docker daemon restart (if applied)..."
                 sleep 3
-                
+
                 # Detect OS and apply system optimizations
                 if [[ "$OSTYPE" == "darwin"* ]]; then
                     optimize_system_macos
                 elif [[ "$OSTYPE" == "linux"* ]]; then
                     optimize_system_linux
                 fi
-                
+
                 # Clean up and start
                 cleanup_docker
                 start_containers
-                
+
                 if [ $? -eq 0 ]; then
                     sleep 5
                     show_service_info

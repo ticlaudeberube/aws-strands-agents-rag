@@ -8,26 +8,29 @@ A self-contained React chatbot interface for the Milvus RAG system with real-tim
 - Beautiful gradient design with smooth animations
 - Responsive layout (works on desktop and tablet)
 - Dark/light message bubbles for clarity
+- Source badges: ⚡ CACHED (default) • 🔍 KB (green) • 🌐 Web (blue)
 
 🚀 **Performance**
 - Lightweight React app
 - Efficient message rendering
-- API status indicator
-- **Real-time streaming responses** with perceived 2-3s latency
+- API status indicator with auto-reconnect
+- Real-time streaming responses (2-3s perceived latency)
 
-💬 **Real-time Features**
-- **Live response streaming** - see answers appear word-by-word as they're generated
+💬 **Interactive Features**
+- **Live response streaming** - answers appear word-by-word
+- **Web search mode** - 🌐 button for web-only search (when enabled)
+- **Cache bypass** - 🚫 button to force fresh KB queries
+- **Source display** - Clickable links with relevance scores
 - Animated streaming indicator with bouncing dots
 - Response time metrics for each message
-- Instant message feedback
-- Auto-scroll to latest message
 - Clear chat history button
+- Auto-scroll to latest message
 
 🔌 **Integration**
-- Connects to the RAG Agent API on `http://localhost:8000/v1/chat/completions` (streaming-enabled)
-- OpenAI-compatible API requests
-- Automatic API health check
-- Server-Sent Events (SSE) streaming support
+- OpenAI-compatible API (`/v1/chat/completions`)
+- Server-Sent Events (SSE) for streaming
+- Automatic API health checks every 5 seconds
+- Connects to `http://localhost:8000` by default
 
 ## Streaming Implementation
 
@@ -87,6 +90,38 @@ The app will open at `http://localhost:3000`
 # From the project root
 python api_server.py
 ```
+
+## UI Controls
+
+### Header Buttons
+
+| Button | Icon | Function |
+|--------|------|----------|
+| **API Status** | 🟢 / 🔴 | Shows connection status (auto-reconnects) |
+| **Cache Toggle** | 💾 / 🚫 | Toggle response caching (🚫 = bypass cache for fresh queries) |
+
+### Message Input Buttons
+
+| Button | Icon | Function |
+|--------|------|----------|
+| **Web Search** | 🌐 | Force web-only search (requires `ENABLE_WEB_SEARCH_SUPPLEMENT=true`) |
+| **Send** | ➤ | Send message (or press Enter) |
+
+### Source Badges
+
+Responses show badges indicating the source type:
+
+| Badge | Color | Meaning |
+|-------|-------|---------|
+| ⚡ CACHED | Gray | Answer retrieved from cache (<50ms) |
+| 🔍 KB | Green | Knowledge base search (1-2s) |
+| 🌐 Web | Blue | Web search results (3-6s) |
+
+### Cached Responses
+
+- View list of popular cached questions
+- Click to instantly load cached answer
+- Managed by semantic similarity search
 
 ## Deployment
 

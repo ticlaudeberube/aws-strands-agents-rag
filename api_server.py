@@ -207,8 +207,6 @@ async def lifespan(app: FastAPI):
         logger.info("  - Improved observability with execution tracing")
         logger.info("=" * 70 + "\n")
 
-        yield
-
     except Exception as e:
         initialization_error = str(e)
 
@@ -227,15 +225,17 @@ async def lifespan(app: FastAPI):
             logger.error("\nTo check Milvus status:")
             logger.error("  docker-compose ps")
             logger.error("=" * 70 + "\n")
-            # Don't raise - allow the API to start in degraded mode
+            # Don't raise - allow the API to start in degraded mode (must yield for context manager)
         else:
             # For other errors, show full trace and re-raise
             logger.error(f"✗ Initialization failed: {e}", exc_info=True)
             raise
 
-    finally:
-        # Shutdown
-        cleanup_resources()
+    # Always yield - required for async context manager even in degraded mode
+    yield
+
+    # Shutdown
+    cleanup_resources()
 
 
 # ============================================================================
@@ -371,8 +371,10 @@ def warm_response_cache(agent: StrandsRAGAgent, settings) -> None:
         settings: Application settings
     """
     # StrandsGraphRAGAgent doesn't have response_cache attribute
-    if not hasattr(agent, 'response_cache'):
-        logger.debug("Response cache not available (using StrandsGraphRAGAgent), skipping cache warming")
+    if not hasattr(agent, "response_cache"):
+        logger.debug(
+            "Response cache not available (using StrandsGraphRAGAgent), skipping cache warming"
+        )
         return
 
     try:
@@ -388,6 +390,15 @@ def warm_response_cache(agent: StrandsRAGAgent, settings) -> None:
         if not qa_pairs:
             logger.warning("No Q&A pairs found in responses.json")
             return
+
+        # Clear existing cache to prevent duplicates
+        logger.info("Clearing existing response cache before warmup...")
+        if hasattr(agent, "response_cache") and agent.response_cache:
+            try:
+                agent.response_cache.clear_cache()
+                logger.info("✓ Response cache cleared")
+            except Exception as e:
+                logger.warning(f"Failed to clear cache: {e}")
 
         logger.info(f"Warming response cache with {len(qa_pairs)} Q&A pairs from responses.json...")
 
@@ -416,7 +427,7 @@ def warm_response_cache(agent: StrandsRAGAgent, settings) -> None:
                     ]
 
                 # Store in response cache (if available)
-                if hasattr(agent, 'response_cache') and agent.response_cache:
+                if hasattr(agent, "response_cache") and agent.response_cache:
                     agent.response_cache.store_response(
                         question=question,
                         question_embedding=question_embedding,
@@ -494,6 +505,7 @@ async def health():
             "model": "rag-agent",
             "ollama": s.ollama_host,
             "milvus": f"{s.milvus_host}:{s.milvus_port}",
+            "web_search_enabled": s.enable_web_search_supplement,
         }
     except Exception as e:
         return {"status": "error", "detail": str(e)}
@@ -624,31 +636,42 @@ async def get_cache_stats():
         current_agent = await get_or_init_agent()
 
         response_cache_stats = {}
-        if current_agent.response_cache:
+        if hasattr(current_agent, "response_cache") and current_agent.response_cache:
             try:
                 response_cache_stats = current_agent.response_cache.get_cache_stats()
             except Exception as e:
                 logger.warning(f"Failed to get response cache stats: {e}")
 
-        return {
-            "embedding_cache": {
+        cache_stats = {"common_questions_count": len(common_questions)}
+
+        # Add embedding_cache stats if available (for older RAGAgent)
+        if hasattr(current_agent, "embedding_cache") and hasattr(current_agent, "cache_size"):
+            cache_stats["embedding_cache"] = {
                 "size": len(current_agent.embedding_cache),
                 "max_size": current_agent.cache_size,
                 "utilized": f"{(len(current_agent.embedding_cache) / current_agent.cache_size * 100):.1f}%",
-            },
-            "search_cache": {
+            }
+
+        # Add search_cache stats if available (for older RAGAgent)
+        if hasattr(current_agent, "search_cache") and hasattr(current_agent, "cache_size"):
+            cache_stats["search_cache"] = {
                 "size": len(current_agent.search_cache),
                 "max_size": current_agent.cache_size,
                 "utilized": f"{(len(current_agent.search_cache) / current_agent.cache_size * 100):.1f}%",
-            },
-            "answer_cache": {
+            }
+
+        # Add answer_cache stats if available (for older RAGAgent)
+        if hasattr(current_agent, "answer_cache") and hasattr(current_agent, "cache_size"):
+            cache_stats["answer_cache"] = {
                 "size": len(current_agent.answer_cache),
                 "max_size": current_agent.cache_size,
                 "utilized": f"{(len(current_agent.answer_cache) / current_agent.cache_size * 100):.1f}%",
-            },
-            "response_cache": response_cache_stats,
-            "common_questions_count": len(common_questions),
-        }
+            }
+
+        # Add response_cache stats (for StrandsGraphRAGAgent)
+        cache_stats["response_cache"] = response_cache_stats
+
+        return cache_stats
     except Exception as e:
         logger.error(f"Failed to get cache stats: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -1235,6 +1258,261 @@ async def clear_cache():
     except Exception as e:
         logger.error(f"Error clearing caches: {e}")
         raise HTTPException(status_code=500, detail=f"Cache clear failed: {str(e)}")
+
+
+@app.get("/v1/cache/responses", tags=["cache"])
+async def get_cached_responses(limit: int = 20):
+    """Retrieve cached Q&A pairs from the response cache.
+
+    Args:
+        limit: Maximum number of responses to return (default: 20, max: 50)
+
+    Returns:
+        JSON with cached_responses array, each containing:
+        - question: The cached question
+        - answer: The cached answer
+    """
+    limit = min(max(limit, 1), 50)
+
+    current_agent = await get_or_init_agent()
+    if not current_agent:
+        raise HTTPException(status_code=503, detail="Agent not initialized")
+
+    try:
+        if not hasattr(current_agent, "response_cache") or not current_agent.response_cache:
+            logger.info("Response cache not available on agent")
+            return {"cached_responses": []}
+
+        response_cache = current_agent.response_cache
+        logger.info(f"Cache collection: {response_cache.cache_collection_name}")
+        logger.info(f"DB name: {response_cache.vector_db.db_name}")
+
+        # Query cached responses (no filter - returns all records)
+        logger.info("Executing query to retrieve cached responses...")
+        logger.info(
+            f"Query params: collection={response_cache.cache_collection_name}, db={response_cache.vector_db.db_name}, limit={limit}"
+        )
+        results = response_cache.vector_db.client.query(
+            collection_name=response_cache.cache_collection_name,
+            db_name=response_cache.vector_db.db_name,
+            output_fields=["text", "metadata"],
+            limit=limit,
+        )
+
+        # Convert to list in case it's a generator/iterator
+        if results:
+            results = list(results)
+
+        logger.info(f"Query returned {len(results) if results else 0} results")
+
+        cached_responses = []
+        if results:
+            logger.info(f"Processing {len(results)} results...")
+            for idx, entity in enumerate(results):
+                try:
+                    metadata = entity.get("metadata", {})
+                    if isinstance(metadata, str):
+                        metadata = json.loads(metadata)
+
+                    question = metadata.get("question", "")
+                    answer = entity.get("text", "")
+                    sources = metadata.get("sources", [])  # Extract sources from metadata
+
+                    if question and answer:
+                        cached_responses.append(
+                            {
+                                "question": question,
+                                "answer": answer,
+                                "sources": sources,  # Include sources in response
+                            }
+                        )
+                except Exception as e:
+                    logger.warning(f"Error processing item {idx}: {e}")
+                    continue
+
+        logger.info(f"Returning {len(cached_responses)} cached responses")
+        return {"cached_responses": cached_responses}
+
+    except Exception as e:
+        logger.error(f"Error retrieving cached responses: {e}")
+        return {"cached_responses": []}
+
+
+@app.get("/v1/cache/questions", tags=["cache"])
+async def get_cached_questions_list():
+    """Get lightweight list of cached questions without answers.
+
+    Returns just question titles for quick loading in the UI,
+    then user can fetch individual answers on demand.
+    """
+    current_agent = await get_or_init_agent()
+    if not current_agent:
+        raise HTTPException(status_code=503, detail="Agent not initialized")
+
+    try:
+        response_cache = current_agent.response_cache
+        if not response_cache:
+            logger.info("Response cache not available on agent")
+            return {"questions": [], "count": 0}
+
+        logger.info("Fetching cached questions list (without answers)...")
+        results = response_cache.vector_db.client.query(
+            collection_name=response_cache.cache_collection_name,
+            db_name=response_cache.vector_db.db_name,
+            output_fields=["metadata", "id"],
+            limit=100,
+        )
+
+        if results:
+            results = list(results)
+
+        cached_questions = []
+        if results:
+            for idx, entity in enumerate(results):
+                try:
+                    # Get entity ID from Milvus
+                    entity_id = str(entity.get("id", idx))
+
+                    metadata = entity.get("metadata", {})
+                    if isinstance(metadata, str):
+                        metadata = json.loads(metadata)
+
+                    question = metadata.get("question", "")
+                    if question:
+                        cached_questions.append({"id": entity_id, "question": question})
+                except Exception as e:
+                    logger.warning(f"Error processing question {idx}: {e}")
+                    continue
+
+        logger.info(f"Returning {len(cached_questions)} cached questions")
+        return {"questions": cached_questions, "count": len(cached_questions)}
+
+    except Exception as e:
+        logger.error(f"Error retrieving cached questions: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/v1/cache/responses/{cache_id}", tags=["cache"])
+async def get_cached_response(cache_id: str):
+    """Get a specific cached response by ID.
+
+    Fetches the full question and answer for a given cache ID.
+    Used when user clicks on a question in the list.
+    """
+    current_agent = await get_or_init_agent()
+    if not current_agent:
+        raise HTTPException(status_code=503, detail="Agent not initialized")
+
+    try:
+        response_cache = current_agent.response_cache
+        if not response_cache:
+            raise HTTPException(status_code=404, detail="Response cache not available")
+
+        logger.info(f"Fetching cached response ID: {cache_id}")
+
+        # Query all results and find the one matching the cache_id
+        results = response_cache.vector_db.client.query(
+            collection_name=response_cache.cache_collection_name,
+            db_name=response_cache.vector_db.db_name,
+            output_fields=["text", "metadata", "id"],
+            limit=100,
+        )
+
+        if results:
+            results = list(results)
+            logger.info(f"Got {len(results)} results")
+
+        # Find the response with matching ID
+        target_response = None
+        if results:
+            for entity in results:
+                entity_id = str(entity.get("id", ""))
+                if entity_id == cache_id:
+                    target_response = entity
+                    break
+
+        if not target_response:
+            logger.warning(f"Cached response {cache_id} not found")
+            raise HTTPException(status_code=404, detail=f"Response {cache_id} not found")
+
+        metadata = target_response.get("metadata", {})
+        if isinstance(metadata, str):
+            metadata = json.loads(metadata)
+
+        answer = target_response.get("text", "")
+
+        logger.info(f"Returning cached response {cache_id}")
+        return answer
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error retrieving cached response {cache_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+        return {"error": f"Response {cache_id} not found"}
+
+    except Exception as e:
+        logger.error(f"Error retrieving cached response {cache_id}: {e}")
+        return {"error": str(e)}
+
+
+@app.get("/v1/cache/questions", tags=["cache"])
+async def get_cached_questions_v1():
+    """Retrieve lightweight list of cached questions.
+
+    Returns:
+        JSON with questions array, each containing:
+        - id: Question ID (Milvus entity ID as string)
+        - question: The question text
+    """
+    current_agent = await get_or_init_agent()
+    if not current_agent:
+        raise HTTPException(status_code=503, detail="Agent not initialized")
+
+    try:
+        if not hasattr(current_agent, "response_cache") or not current_agent.response_cache:
+            logger.info("Response cache not available on agent")
+            return {"questions": [], "count": 0}
+
+        response_cache = current_agent.response_cache
+        logger.info(f"Cache collection: {response_cache.cache_collection_name}")
+
+        # Query cached responses - get metadata and ID
+        results = response_cache.vector_db.client.query(
+            collection_name=response_cache.cache_collection_name,
+            db_name=response_cache.vector_db.db_name,
+            output_fields=["metadata", "id"],
+            limit=100,
+        )
+
+        questions = []
+        if results:
+            results_list = list(results) if not isinstance(results, list) else results
+            logger.info(f"Got {len(results_list)} results from cache")
+
+            for idx, entity in enumerate(results_list):
+                try:
+                    # Get ID from entity
+                    entity_id = str(entity.get("id", idx))
+
+                    metadata = entity.get("metadata", {})
+                    if isinstance(metadata, str):
+                        metadata = json.loads(metadata)
+
+                    question = metadata.get("question", "")
+                    if question:
+                        questions.append({"id": entity_id, "question": question})
+                        logger.info(f"Added question {entity_id}: {question[:50]}...")
+                except Exception as e:
+                    logger.warning(f"Error processing question {idx}: {e}")
+                    continue
+
+        logger.info(f"Returning {len(questions)} cached questions")
+        return {"questions": questions, "count": len(questions)}
+
+    except Exception as e:
+        logger.error(f"Error retrieving cached questions: {e}", exc_info=True)
+        return {"questions": [], "count": 0}
 
 
 def main():

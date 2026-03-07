@@ -70,18 +70,23 @@ def load_responses_cache():
     collection_name = settings.ollama_collection_name
     print(f"Using collection: {collection_name}")
 
-    # Check if response_cache collection exists
+    # Clear and recreate response_cache collection to prevent duplicates
     cache_collection = settings.response_cache_collection_name
     try:
         collections = vector_db.list_collections()
-        if cache_collection not in collections:
-            print(f"Creating {cache_collection} collection...")
-            vector_db.create_collection(
-                collection_name=cache_collection,
-                embedding_dim=settings.response_cache_embedding_dim,
-            )
+        if cache_collection in collections:
+            print(f"Clearing existing {cache_collection} collection...")
+            vector_db.delete_collection(cache_collection)
+            print(f"✓ Cleared {cache_collection}")
+
+        print(f"Creating {cache_collection} collection...")
+        vector_db.create_collection(
+            collection_name=cache_collection,
+            embedding_dim=settings.response_cache_embedding_dim,
+        )
+        print(f"✓ Created {cache_collection}")
     except Exception as e:
-        print(f"Warning: Could not verify/create {cache_collection}: {e}")
+        print(f"Warning: Could not clear/create {cache_collection}: {e}")
 
     print(f"\nLoading {len(qa_pairs)} Q&A pairs into {cache_collection}...")
     print("=" * 70)
@@ -95,6 +100,7 @@ def load_responses_cache():
     for qa in tqdm(qa_pairs, desc="Generating embeddings"):
         question = qa.get("question", "")
         answer = qa.get("answer", "")
+        sources = qa.get("sources", [])  # Get sources from Q&A pair
 
         if not question or not answer:
             logger.warning(f"Skipping incomplete Q&A pair: {question[:30]}")
@@ -114,6 +120,7 @@ def load_responses_cache():
                 "question": question,
                 "collection": collection_name,
                 "source": "pregenerated",
+                "sources": sources,  # Store sources in metadata
             }
         )
 

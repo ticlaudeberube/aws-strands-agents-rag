@@ -2,10 +2,11 @@ import React, { useState, useRef, useEffect } from 'react';
 import './App.css';
 import ChatMessage from './components/ChatMessage';
 import ChatInput from './components/ChatInput';
+import CachedResponsesList from './components/CachedResponsesList';
 
 // API Configuration from environment variables
 const API_HOST = process.env.REACT_APP_API_HOST || 'localhost';
-const API_PORT = process.env.REACT_APP_API_PORT || '8000';
+const API_PORT = process.env.REACT_APP_API_PORT || '8001';
 const API_BASE_URL = `http://${API_HOST}:${API_PORT}`;
 
 function App() {
@@ -21,6 +22,10 @@ function App() {
   ]);
   const [isLoading, setIsLoading] = useState(false);
   const [apiStatus, setApiStatus] = useState('checking');
+  const [webSearchEnabled, setWebSearchEnabled] = useState(false);
+  const [bypassCache, setBypassCache] = useState(false);
+  const [cachedResponses, setCachedResponses] = useState([]);
+  const [cacheDrawerOpen, setCacheDrawerOpen] = useState(false);
   const messagesEndRef = useRef(null);
   const nextIdRef = useRef(2);
 
@@ -32,18 +37,39 @@ function App() {
   // Check API status on mount
   useEffect(() => {
     checkApiStatus();
+    loadCachedResponses(); // Load cached responses on app startup
   }, []);
 
   const checkApiStatus = async () => {
     try {
       const response = await fetch(`${API_BASE_URL}/health`);
       if (response.ok) {
+        const data = await response.json();
         setApiStatus('connected');
+        setWebSearchEnabled(data.web_search_enabled || false);
+        console.log('[App] Web search enabled:', data.web_search_enabled);
       } else {
         setApiStatus('error');
       }
     } catch (error) {
       setApiStatus('error');
+    }
+  };
+
+  const loadCachedResponses = async () => {
+    try {
+      // Fetch just the questions list (lightweight)
+      const response = await fetch(`${API_BASE_URL}/v1/cache/questions`);
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Cached questions loaded:', data);
+        if (data.questions && Array.isArray(data.questions)) {
+          // Store questions, answers will be loaded on demand
+          setCachedResponses(data.questions);
+        }
+      }
+    } catch (error) {
+      console.error('Could not load cached questions from server:', error);
     }
   };
 
@@ -87,13 +113,26 @@ function App() {
           content: [{ text: m.text }],  // Strands standard: content is list of ContentBlocks
           timestamp: m.timestamp,
         }))
-        .concat([{ 
-          role: 'user', 
+        .concat([{
+          role: 'user',
           content: [{ text: text }],  // Strands standard: wrap in ContentBlock
           timestamp: new Date().toISOString(),
         }]);
-      
-      const response = await fetch(`${API_BASE_URL}/v1/chat/completions`, {
+
+      const url = new URL(`${API_BASE_URL}/v1/chat/completions`);
+      if (bypassCache) {
+        url.searchParams.append('bypass_cache', 'true');
+        console.log('🚫 BYPASS CACHE ACTIVE - Fresh KB query (no response cache)');
+      } else {
+        console.log('💾 Cache enabled - Using cached responses when available');
+      }
+      console.log('Request URL:', url.toString());
+
+      if (forceWebSearch) {
+        console.log('🌐 FORCE WEB SEARCH ACTIVE - Searching web only (no KB)');
+      }
+
+      const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -124,18 +163,19 @@ function App() {
 
           try {
             const data = JSON.parse(jsonStr);
-            
+
             // Extract sources if present in this chunk
             if (data.sources && Array.isArray(data.sources)) {
+              console.log('📚 Sources received:', data.sources.length, 'sources');
               sourcesRef.current = data.sources;
             }
-            
+
             // Extract text chunk from streaming response
             if (data.choices && data.choices[0]) {
               const delta = data.choices[0].delta || {};
               if (delta.content) {
                 const newText = fullText + delta.content;
-                
+
                 // Update message with new text while streaming
                 setMessages((prev) => {
                   const newMessages = [...prev];
@@ -150,7 +190,7 @@ function App() {
                   }
                   return newMessages;
                 });
-                
+
                 return newText;
               }
             }
@@ -194,11 +234,28 @@ function App() {
         if (messageIndex !== -1) {
           newMessages[messageIndex].text = fullText || 'No response received';
           newMessages[messageIndex].sources = sourcesRef.current;
-          newMessages[messageIndex].timing = { 
+          console.log('✅ Message finalized with sources:', sourcesRef.current?.length || 0);
+          newMessages[messageIndex].timing = {
             total_time_ms: Math.round(totalTime * 1000),
             is_cached: isCached
           };
           newMessages[messageIndex].isStreaming = false;
+
+          // Add to cached responses if it's a cache hit
+          if (isCached && fullText) {
+            const cachedResponse = {
+              id: assistantMessageId,
+              question: text,
+              answer: fullText,
+              sources: sourcesRef.current,
+              timing: {
+                total_time_ms: Math.round(totalTime * 1000),
+                is_cached: isCached
+              },
+              timestamp: new Date().toISOString(),
+            };
+            setCachedResponses((prev) => [cachedResponse, ...prev.slice(0, 19)]); // Keep last 20
+          }
         }
         return newMessages;
       });
@@ -235,7 +292,7 @@ function App() {
 
       const data = await response.json();
       console.log('Cache cleared:', data);
-      
+
       // Add system message
       setMessages((prev) => [
         ...prev,
@@ -277,63 +334,152 @@ function App() {
     ]);
   };
 
+  const handleSelectCachedResponse = async (response) => {
+    console.log('Selected cached question ID:', response.id);
+
+    try {
+      // Fetch the answer text from backend endpoint
+      const fullResponseData = await fetch(`${API_BASE_URL}/v1/cache/responses/${response.id}`);
+      if (!fullResponseData.ok) {
+        throw new Error(`Failed to fetch response: ${fullResponseData.status}`);
+      }
+
+      // Endpoint now returns just the answer text as a JSON string
+      const answerText = await fullResponseData.json();
+      console.log('Fetched answer text:', answerText);
+
+      const userMessage = {
+        id: nextIdRef.current++,
+        text: String(response.question || '').trim(),
+        role: 'user',
+        isStreaming: false,
+        timestamp: new Date().toISOString(),
+      };
+
+      const assistantMessage = {
+        id: nextIdRef.current++,
+        text: String(answerText || '').trim(),
+        role: 'assistant',
+        isStreaming: false,
+        sources: [],
+        timing: {
+          total_time_ms: 0,
+          is_cached: true
+        },
+        timestamp: new Date().toISOString(),
+      };
+
+      console.log('User message:', userMessage);
+      console.log('Assistant message:', assistantMessage);
+      setMessages((prev) => [...prev, userMessage, assistantMessage]);
+    } catch (error) {
+      console.error('Error loading cached response:', error);
+      // Fallback: try to use the question from the list
+      const userMessage = {
+        id: nextIdRef.current++,
+        text: String(response.question || '').trim(),
+        role: 'user',
+        isStreaming: false,
+        timestamp: new Date().toISOString(),
+      };
+
+      const assistantMessage = {
+        id: nextIdRef.current++,
+        text: `❌ Error loading cached response: ${error.message}`,
+        role: 'assistant',
+        isStreaming: false,
+        sources: [],
+        timing: {}
+      };
+
+      setMessages((prev) => [...prev, userMessage, assistantMessage]);
+    }
+  };
+
+  const handleToggleCacheDrawer = () => {
+    // Cached responses are pre-loaded on app startup, just toggle the drawer
+    setCacheDrawerOpen(!cacheDrawerOpen);
+  };
+
   return (
     <div className="app">
       <div className="app-layout">
         <div className="chat-column">
           <div className="chat-container">
             <div className="chat-header">
-          <div className="header-content">
-            <h1>🔍 Milvus RAG Chatbot</h1>
-            <p>Ask questions about Milvus documentation</p>
-          </div>
-          <div className={`api-status ${apiStatus}`}>
-            <span className="status-dot"></span>
-            {apiStatus === 'connected' && 'API Connected'}
-            {apiStatus === 'checking' && 'Checking...'}
-            {apiStatus === 'error' && 'API Offline'}
-          </div>
-        </div>
-
-        <div className="messages-container">
-          {messages.map((message) => (
-            <ChatMessage key={message.id} message={message} />
-          ))}
-          {isLoading && (
-            <div className="typing-indicator">
-              <span></span>
-              <span></span>
-              <span></span>
+              <div className="header-content">
+                <h1>🔍 Milvus RAG Chatbot</h1>
+                <p>Ask questions about Milvus documentation</p>
+              </div>
+              <div className="header-controls">
+                <div className={`api-status ${apiStatus}`}>
+                  <span className="status-dot"></span>
+                  {apiStatus === 'connected' && 'API Connected'}
+                  {apiStatus === 'checking' && 'Checking...'}
+                  {apiStatus === 'error' && 'API Offline'}
+                </div>
+                <button
+                  className={`cache-toggle-btn ${bypassCache ? 'active' : ''}`}
+                  onClick={() => setBypassCache(!bypassCache)}
+                  disabled={apiStatus !== 'connected'}
+                  title={bypassCache ? 'Cache bypassed (direct KB query)' : 'Click to bypass cache'}
+                >
+                  {bypassCache ? '🚫 No Cache' : '💾 Cache On'}
+                </button>
+              </div>
             </div>
-          )}
-          <div ref={messagesEndRef} />
-        </div>
+
+            <div className="messages-container">
+              {messages.map((message) => (
+                <ChatMessage key={message.id} message={message} />
+              ))}
+              {isLoading && (
+                <div className="typing-indicator">
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                </div>
+              )}
+              <div ref={messagesEndRef} />
+              {messages.length > 1 && (
+                <div className="clear-chat-container">
+                  <button className="clear-btn" onClick={handleClearChat}>
+                    Clear Chat
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className={`cache-drawer ${cacheDrawerOpen ? 'open' : 'closed'}`}>
+              <CachedResponsesList
+                cachedResponses={cachedResponses}
+                onSelectResponse={handleSelectCachedResponse}
+                isCollapsed={false}
+                onToggleCollapse={handleToggleCacheDrawer}
+              />
+            </div>
 
             <div className="chat-footer">
+              <div className="footer-top">
+                <button
+                  className="cache-drawer-btn"
+                  onClick={handleToggleCacheDrawer}
+                  title={cacheDrawerOpen ? 'Hide answered questions' : 'Show previously answered questions'}
+                >
+                  {cacheDrawerOpen ? '▼ Answered Questions' : '▲ Answered Questions'} ({cachedResponses.length})
+                </button>
+              </div>
               <ChatInput
                 onSendMessage={handleSendMessage}
                 disabled={isLoading || apiStatus !== 'connected'}
+                webSearchEnabled={webSearchEnabled}
                 placeholder={
                   apiStatus !== 'connected'
                     ? 'API not available - start the API server'
                     : 'Ask about Milvus...'
                 }
               />
-              {messages.length > 1 && (
-                <div className="button-group">
-                  <button className="clear-btn" onClick={handleClearChat}>
-                    Clear Chat
-                  </button>
-                  <button 
-                    className="clear-cache-btn" 
-                    onClick={handleClearCache}
-                    disabled={isLoading}
-                    title="Clear all caches: embedding, search, answer, and response cache"
-                  >
-                    Clear Cache
-                  </button>
-                </div>
-              )}
+
             </div>
           </div>
         </div>

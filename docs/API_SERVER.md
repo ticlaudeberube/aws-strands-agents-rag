@@ -198,35 +198,41 @@ The `/v1/chat/completions` endpoint supports additional parameters beyond OpenAI
 
 **Performance Impact:** 5-15 seconds (web search timeout and processing)
 
-### bypass_cache (Boolean, Optional)
-**Bypasses the response cache, forcing fresh search.**
+### bypass_cache (Query Parameter, Optional)
+**Bypasses the response cache, forcing fresh KB search.**
 
-- `false` (default): Uses cache if available (instant for cached answers)
-- `true`: Performs fresh search against both knowledge base and web
+- `false` (default): Uses response cache if available (<50ms for cached answers)
+- `true`: Skips response cache, performs fresh KB retrieval (1-2s)
 
-**Use when:** You need the freshest answer and don't want cached results.
+**Use when:** You need the freshest answer from the knowledge base.
 
 **Example:**
 ```bash
-curl -X POST http://localhost:8000/v1/chat/completions \
+curl -X POST "http://localhost:8000/v1/chat/completions?bypass_cache=true" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "rag-agent",
-    "messages": [{"role": "user", "content": "What is Milvus?"}],
-    "bypass_cache": true
+    "messages": [{"role": "user", "content": "What is Milvus?"}]
   }'
 ```
 
-**Performance Impact:** 8-15 seconds (semantic search + LLM generation)
+**Note**: Passed as **query parameter**, not in request body.
+
+**Performance Impact:** 1-2s (fresh vector search + LLM generation)
 
 ### Parameter Combinations
 
 | force_web_search | bypass_cache | Behavior |
 |---|---|---|
-| false | false | ✅ **Default** - Fast cache hit, fresh if no cache |
-| true | false | Web search only (cache not relevant) |
-| false | true | Fresh search of docs + web (ignores cache) |
-| true | true | Web search only (explicit fresh web) |
+| false | false | ✅ **Default** - Uses cache if available, otherwise fresh KB search |
+| false | true | Fresh KB search (bypasses cache) |
+| true | false | Web-only search (cache not used) |
+| true | true | Web-only search (cache not used) |
+
+**Notes**:
+- `force_web_search` completely bypasses the knowledge base
+- `bypass_cache` only bypasses the response cache layer
+- Both can improve answer freshness at the cost of latency
 
 ### Complete Example with Parameters
 
@@ -400,7 +406,7 @@ OLLAMA_HOST=http://host.docker.internal:11434  # Docker Desktop
 OLLAMA_MODEL=qwen2.5:0.5b                # LLM model
 OLLAMA_EMBED_MODEL=nomic-embed-text:v1.5  # Embedding model
 
-# Milvus Configuration  
+# Milvus Configuration
 MILVUS_HOST=localhost                      # Local development
 # OR for Docker:
 MILVUS_HOST=milvus                         # Docker service name

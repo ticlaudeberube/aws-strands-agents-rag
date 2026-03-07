@@ -38,7 +38,7 @@ The system implements a clean three-tier approach to answering questions:
 ```
 
 ### Tier 1: Cache Hits (<50ms)
-**When triggered**: Question matches in response cache (semantic similarity with entity validation)  
+**When triggered**: Question matches in response cache (semantic similarity with entity validation)
 **What happens**:
 1. Generate embedding for question
 2. Search response_cache collection in Milvus
@@ -54,7 +54,7 @@ The system implements a clean three-tier approach to answering questions:
 - Ultra-fast response time
 
 ### Tier 2: Knowledge Base (1-2s)
-**When triggered**: Cache miss OR Tier 1 not available  
+**When triggered**: Cache miss OR Tier 1 not available
 **What happens**:
 1. Retrieve relevant documents from Milvus
 2. Generate LLM answer from context
@@ -69,7 +69,7 @@ The system implements a clean three-tier approach to answering questions:
 - Local document sources only
 
 ### Tier 3: Web Search (5-15s)
-**When triggered**: User explicitly clicks globe icon (🌐) or sets `force_web_search=true`  
+**When triggered**: User explicitly clicks globe icon (🌐) or sets `force_web_search=true`
 **What happens**:
 1. Complete bypass of cache and knowledge base
 2. Query Tavily API for web results
@@ -98,13 +98,13 @@ The system implements a clean three-tier approach to answering questions:
 
 The project architecture provides:
 
-✅ **Framework Compliance**: Uses official Strands Agent patterns  
-✅ **Tool Management**: Centralized tool registry for scalability  
-✅ **Skill System**: Organized tools into logical skill groups  
-✅ **MCP Protocol**: Standard protocol for tool/resource management  
-✅ **Optimized Inference**: qwen2.5:0.5b (500M params, 85% faster)  
-✅ **Local Inference**: Ollama + Milvus for local vector operations  
-✅ **Multi-Tier Answering**: Cache hits, knowledge base, explicit web search  
+✅ **Framework Compliance**: Uses official Strands Agent patterns
+✅ **Tool Management**: Centralized tool registry for scalability
+✅ **Skill System**: Organized tools into logical skill groups
+✅ **MCP Protocol**: Standard protocol for tool/resource management
+✅ **Optimized Inference**: qwen2.5:0.5b (500M params, 85% faster)
+✅ **Local Inference**: Ollama + Milvus for local vector operations
+✅ **Multi-Tier Answering**: Cache hits, knowledge base, explicit web search
 
 ### Architecture Diagram
 
@@ -115,15 +115,15 @@ graph TB
         MCP["MCP Server"]
         Agent -->|manages| MCP
     end
-    
+
     subgraph External["External Services"]
         Ollama["Ollama<br/>qwen2.5:0.5b"]
         Milvus["Milvus<br/>Vector DB"]
     end
-    
+
     FastAPI -->|inference| Ollama
     FastAPI -->|vector ops| Milvus
-    
+
     style Agent fill:#4A90E2,stroke:#2E5C8A,color:#fff
     style MCP fill:#7B68EE,stroke:#4B3FB8,color:#fff
     style External fill:#FFA500,stroke:#CC8400,color:#fff
@@ -146,7 +146,7 @@ The primary agent class implementing Strands framework patterns with RAG capabil
 
 **Key Methods:**
 - `retrieve_documents(collection, query, top_k, filter_source)` - Semantic search
-- `generate_answer(question, context, temperature, max_tokens)` - LLM synthesis  
+- `generate_answer(question, context, temperature, max_tokens)` - LLM synthesis
 - `add_documents(collection, documents)` - Batch embedding/indexing
 - `search_by_source(collection, query, source, top_k)` - Filtered search
 - `list_collections()` - Show available data
@@ -169,9 +169,9 @@ class StrandsRAGAgent:
             user=settings.milvus_user,
             password=settings.milvus_password,
         )
-    
+
     @tool  # Marked for Strands framework
-    def retrieve_documents(self, collection: str, query: str, 
+    def retrieve_documents(self, collection: str, query: str,
                           top_k: int = 5, filter_source: str = None):
         """Retrieve documents using semantic search."""
         # Implementation uses vector_db for search
@@ -186,7 +186,7 @@ Centralized tool management system providing tool discovery and execution.
 **Key Components:**
 - `ToolDefinition` dataclass: Stores tool metadata
   - name, description, function, parameters, skill_category
-  
+
 - `ToolRegistry` class: Manages all tools
   - `register_tool()` - Register tool with metadata
   - `get_tool(name)` - Retrieve tool definition
@@ -240,7 +240,7 @@ Skills organize related tools into logical groups for better management and disc
 - Purpose: Document search and exploration
 
 **AnswerGenerationSkill** (`src/agents/skills/answer_generation_skill.py`)
-- 2 tools: 
+- 2 tools:
   - generate_answer
   - search_comparison (web search for product comparisons)
 - Purpose: Synthesize answers and comparative analysis using LLM and web sources
@@ -255,7 +255,7 @@ class RetreivalSkill:
     def __init__(self, agent: StrandsRAGAgent):
         self.agent = agent
         registry = get_registry()
-        
+
         # Register first tool
         registry.register_tool(
             name="retrieve_documents",
@@ -299,21 +299,21 @@ class RAGAgentMCPServer:
         self.agent = StrandsRAGAgent(settings)
         # Register all skills
         self._initialize_skills()
-    
+
     def get_tools(self) -> List[Dict]:
         """Return tools in MCP format."""
         # Returns list of tool definitions with schemas
-    
+
     def get_resources(self) -> List[Dict]:
         """Return skills as resources."""
         # Returns skill:// URIs for each skill
-    
+
     def get_skill_documentation(self, skill_name: str) -> str:
         """Generate markdown SKILL.md for a skill."""
-    
+
     def call_tool(self, tool_name: str, arguments: Dict) -> Any:
         """Execute a tool with validation."""
-    
+
     def get_server_info(self) -> Dict:
         """Return server metadata."""
 ```
@@ -325,7 +325,7 @@ class MCPServerInterface:
     def handle_request(self, request: Dict) -> Dict:
         """Handle MCP protocol requests."""
         # Delegates to appropriate server methods
-        # Methods: tools/list, tools/call, resources/list, 
+        # Methods: tools/list, tools/call, resources/list,
         #          resources/read, server/info
 ```
 
@@ -357,16 +357,16 @@ async def lifespan(app: FastAPI):
     # STARTUP
     logger.info("Initializing StrandsRAGAgent...")
     agent = StrandsRAGAgent(settings)
-    
+
     logger.info("Initializing MCP Server...")
     mcp_server = RAGAgentMCPServer(settings)
     mcp_server._initialize_skills()
-    
+
     # Load common questions
     load_common_questions_from_file(...)
-    
+
     yield
-    
+
     # SHUTDOWN
     if hasattr(mcp_server, 'close'):
         mcp_server.close()

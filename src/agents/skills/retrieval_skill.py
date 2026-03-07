@@ -16,15 +16,15 @@ class RetreivalSkill:
     # Skill documentation (would be extended with markdown in production)
     SKILL_DESCRIPTION = """
     # Retrieval Skill
-    
+
     Handles semantic search and document retrieval from the knowledge base.
-    
+
     ## Tools in This Skill
-    
+
     - **retrieve_documents**: Search for documents similar to a query
     - **search_by_source**: Filter search results by document source
     - **list_collections**: List all available collections
-    
+
     ## Use Cases
     - User asks "What is Milvus?" → retrieve_documents searches for answers
     - User wants docs from specific source → search_by_source filters results

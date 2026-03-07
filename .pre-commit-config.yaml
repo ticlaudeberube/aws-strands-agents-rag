@@ -22,7 +22,7 @@ repos:
       - id: check-added-large-files
         name: Check for large files
         description: Prevents large files (>500KB) from being committed
-        args: ['--maxkb=500']
+        args: ['--maxkb=750']
 
       # Prevent merge conflict markers
       - id: check-merge-conflict

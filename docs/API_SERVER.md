@@ -4,7 +4,7 @@ The RAG Agent is exposed as an OpenAI-compatible REST API server. This allows yo
 
 **📚 Related Documentation:**
 - [Cache and LLM Response Flow](CACHE_AND_LLM_RESPONSE_FLOW.md) - Understand what to expect from queries (with/without cache)
-- [Caching Strategy](CACHING_STRATEGY.md) - Deep dive into multi-layer caching architecture
+- [Caching Strategy](CACHING_STRATEGY.md) - Semantic response cache implementation
 
 ## 🚀 Performance Highlights
 

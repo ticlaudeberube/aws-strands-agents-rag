@@ -128,7 +128,7 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-        
+
         # Streaming support
         proxy_buffering off;
         proxy_request_buffering off;
@@ -263,12 +263,12 @@ _agentcore_agent = None
 def initialize_agent():
     """Initialize RAG agent on cold start."""
     global _agent, _agentcore_agent
-    
+
     if _agent is None:
         settings = get_settings()
         _agent = StrandsRAGAgent(settings)
         logger.info("✓ StrandsRAGAgent initialized")
-        
+
         if AGENTCORE_AVAILABLE:
             _agentcore_agent = AgentCore(
                 agent_name="RAGAgent",
@@ -276,7 +276,7 @@ def initialize_agent():
                 agent_instance=_agent
             )
             logger.info("✓ AgentCore wrapper initialized")
-    
+
     return _agent
 
 def format_response(body: Dict[str, Any], status_code: int = 200) -> Dict:
@@ -295,26 +295,26 @@ def format_response(body: Dict[str, Any], status_code: int = 200) -> Dict:
 def lambda_handler(event, context):
     """
     Main Lambda handler for RAG Agent API.
-    
+
     Supports:
     - Health checks: GET /health
     - Chat completions: POST /v1/chat/completions
     - Streaming: Server-Sent Events (SSE)
     """
-    
+
     try:
         # Parse request
         http_method = event.get("httpMethod", "GET")
         path = event.get("path", "/")
         body = json.loads(event.get("body", "{}")) if event.get("body") else {}
-        
+
         # CORS preflight
         if http_method == "OPTIONS":
             return format_response({})
-        
+
         # Initialize agent on first request
         agent = initialize_agent()
-        
+
         # Health check endpoint
         if path == "/health" and http_method == "GET":
             return format_response({
@@ -323,14 +323,14 @@ def lambda_handler(event, context):
                 "timestamp": datetime.utcnow().isoformat(),
                 "agentcore_available": AGENTCORE_AVAILABLE,
             })
-        
+
         # Chat completions endpoint
         if path == "/v1/chat/completions" and http_method == "POST":
             return handle_chat_completion(agent, body, context)
-        
+
         # 404 - Not found
         return format_response({"error": "Endpoint not found"}, 404)
-    
+
     except Exception as e:
         logger.error(f"Error: {e}", exc_info=True)
         return format_response(
@@ -340,31 +340,31 @@ def lambda_handler(event, context):
 
 def handle_chat_completion(agent, request_body: Dict, lambda_context) -> Dict:
     """Handle chat completion requests (non-streaming)."""
-    
+
     try:
         # Extract request parameters
         messages = request_body.get("messages", [])
         collection = request_body.get("collection_name", "milvus_rag_collection")
         stream = request_body.get("stream", False)
-        
+
         # Get user question (last message)
         if not messages:
             return format_response({"error": "No messages provided"}, 400)
-        
+
         user_message = messages[-1].get("content", "")
-        
+
         if not user_message:
             return format_response({"error": "Empty message"}, 400)
-        
+
         logger.info(f"Processing query: {user_message[:100]}...")
-        
+
         # Generate answer
         answer, sources = agent.answer_question(
             collection_name=collection,
             question=user_message,
             top_k=5
         )
-        
+
         # Format response (compatible with OpenAI format)
         response = {
             "id": f"chatcmpl-{lambda_context.request_id}",
@@ -388,13 +388,13 @@ def handle_chat_completion(agent, request_body: Dict, lambda_context) -> Dict:
             },
             "sources": sources if sources else [],
         }
-        
+
         if not stream:
             return format_response(response)
-        
+
         # Streaming response (chunked)
         return handle_streaming_response(answer, sources, lambda_context)
-    
+
     except Exception as e:
         logger.error(f"Chat completion error: {e}", exc_info=True)
         return format_response({"error": str(e)}, 500)
@@ -405,10 +405,10 @@ def handle_streaming_response(answer: str, sources: list, lambda_context) -> Dic
     Note: Lambda doesn't support true streaming (response buffering required).
     Consider API Gateway with WebSocket for real streaming.
     """
-    
+
     # For Lambda, return chunked response as multiple completion objects
     chunks = [answer[i:i+50] for i in range(0, len(answer), 50)]
-    
+
     response_body = {
         "id": f"chatcmpl-{lambda_context.request_id}",
         "object": "text_completion",
@@ -418,7 +418,7 @@ def handle_streaming_response(answer: str, sources: list, lambda_context) -> Dic
         "full_text": answer,
         "sources": sources,
     }
-    
+
     return format_response(response_body)
 ```
 
@@ -714,4 +714,3 @@ CloudFront → NextJS/Vercel (React) → Docker API → Milvus + Ollama
 ```
 Docker Compose (React + API + Milvus + Ollama) on EC2/VM
 ```
-

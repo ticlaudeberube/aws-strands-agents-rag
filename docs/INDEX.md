@@ -16,7 +16,7 @@ Quick navigation for committed documentation in this project.
 
 **Test Suite Migration (Mar 5, 2026)**: Updated test suite to use new graph agent. 48% code coverage across 619/1303 statements. See [tests/README.md](../tests/README.md) for test statistics.
 
-**Cache System Optimized (Mar 1, 2026)**: Response caching provides 1200x+ speedup for semantic matches. See [CACHING_STRATEGY.md](CACHING_STRATEGY.md).
+**Cache System Optimized (Mar 7, 2026)**: Semantic response caching provides <50ms cache hits vs 1-15s full generation. See [CACHING_STRATEGY.md](CACHING_STRATEGY.md).
 
 ---
 
@@ -24,8 +24,11 @@ Quick navigation for committed documentation in this project.
 
 ### System Architecture & Development
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** - Three-tier system architecture (Cache → KB → Web Search) + complete component details
+- **[AWS_ARCHITECTURE.md](AWS_ARCHITECTURE.md)** - AWS deployment architectures (ECS/Fargate, Lambda + AgentCore)
 - **[DEVELOPMENT.md](DEVELOPMENT.md)** - Development guidelines and patterns
-- **[CACHING_STRATEGY.md](CACHING_STRATEGY.md)** - Response cache architecture and configuration
+- **[CACHING_STRATEGY.md](CACHING_STRATEGY.md)** - Current semantic response cache implementation (single-layer Milvus)
+- **[CACHING_STRATEGY_IMPROVEMENTS.md](CACHING_STRATEGY_IMPROVEMENTS.md)** - 11 caching improvements for container-based deployment
+- **[AGENTCORE_CACHING_STRATEGY.md](AGENTCORE_CACHING_STRATEGY.md)** - Caching strategy for serverless AgentCore deployment
 
 ### Getting Started & Quick Reference
 - **[GETTING_STARTED.md](GETTING_STARTED.md)** - Installation and setup guide
@@ -42,4 +45,4 @@ Quick navigation for committed documentation in this project.
 
 ---
 
-**Note**: This index documents only committed/staged documentation files in docs/ + README.md at root (9 total).
+**Note**: This index documents only committed/staged documentation files in docs/ + README.md at root (13 total).

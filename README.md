@@ -2,14 +2,14 @@
 
 A high-performance Retrieval-Augmented Generation (RAG) system using AWS Strands Agents, Ollama for local LLM/embeddings, and Milvus as a vector database.
 
-**Key Features**: Strands framework integration • Local LLM (qwen2.5:0.5b) • Milvus vector DB • Multi-layer caching (1200x speedup) • Web search integration • React UI • Docker deployment
+**Key Features**: Strands framework integration • Local LLM (qwen2.5:0.5b) • Milvus vector DB • Semantic response caching • Web search integration • React UI • Docker deployment
 
 ## 📚 Documentation
 
 | Category | Documents |
 |----------|-----------|
 | **Getting Started** | [Setup Guide](docs/GETTING_STARTED.md) • [Configuration](docs/GETTING_STARTED.md#configuration) |
-| **Architecture** | [System Design](docs/ARCHITECTURE.md) • [Data Flow](docs/ARCHITECTURE.md#data-flow) • [Caching](docs/CACHING_STRATEGY.md) • [AWS Deployment](docs/AWS_ARCHITECTURE.md) • [Chat + Skills Flow](docs/CHAT_REQUEST_SKILLS_FLOW.md) |
+| **Architecture** | [System Design](docs/ARCHITECTURE.md) • [Data Flow](docs/ARCHITECTURE.md#data-flow) • [Caching](docs/CACHING_STRATEGY.md) • [Cache Improvements](docs/CACHING_STRATEGY_IMPROVEMENTS.md) • [AgentCore Caching](docs/AGENTCORE_CACHING_STRATEGY.md) • [AWS Deployment](docs/AWS_ARCHITECTURE.md) • [Chat + Skills Flow](docs/CHAT_REQUEST_SKILLS_FLOW.md) |
 | **Development** | [Code Examples](docs/DEVELOPMENT.md) • [API Reference](docs/API_SERVER.md) • [Strands Reference](docs/STRANDS_QUICK_REFERENCE.md) • [Web Search](docs/WEB_SEARCH_INTEGRATION.md) |
 | **Operations** | [React Deployment](docs/REACT_DEPLOYMENT.md) • [Docker Setup](docker/README.md) • [Troubleshooting](docs/GETTING_STARTED.md#troubleshooting) • [**Production Readiness**](docs/PRODUCTION_READINESS.md) |
 | **CI/CD** | [GitHub Actions Setup](docs/GITHUB_ACTIONS_SETUP.md) |
@@ -34,7 +34,7 @@ A high-performance Retrieval-Augmented Generation (RAG) system using AWS Strands
 ```
 
 **Components**:
-- **StrandsGraphRAGAgent**: Graph-based 3-node RAG agent (Topic Check → Security Check → RAG Worker) with multi-layer caching
+- **StrandsGraphRAGAgent**: Graph-based 3-node RAG agent (Topic Check → Security Check → RAG Worker) with semantic response cache
 - **Ollama** (qwen2.5:0.5b): Local LLM for generation and embeddings
 - **Milvus**: Vector database for semantic search
 - **MCP Server**: Model Context Protocol server for tool management
@@ -43,7 +43,7 @@ A high-performance Retrieval-Augmented Generation (RAG) system using AWS Strands
 
 **Pipeline**: Documents → Embeddings → Milvus Vector Search → LLM Answer Generation
 
-Multi-layer caching (embedding, search, answer, semantic) provides 1200x speedup on cached queries.
+Semantic response caching provides <50ms cache hits for frequently asked questions.
 
 ### Data Flow Diagram
 
@@ -56,72 +56,49 @@ graph TD
         D --> E["💾 Store in Milvus<br/>with metadata"]
     end
 
-    subgraph Query["❓ QUERY PIPELINE - With Multi-Layer Caching"]
+    subgraph Query["❓ QUERY PIPELINE - 3-Tier Architecture"]
         F["👤 User Question"]
 
-        subgraph L1["Layer 1: response cache<br/>(Exact Match)"]
-            F --> G{"Answer<br/>Cache<br/>HIT?"}
-            G -->|YES| M1["✅ Return Cached<br/>Answer + Sources<br/>&lt;50ms"]
+        subgraph Tier1["Tier 1: Response Cache"]
+            F --> G{"Semantic<br/>Match<br/>in Cache?"}
+            G -->|YES<br/>99%+ similar| M1["✅ Return Cached<br/>Answer + Sources<br/>&lt;50ms"]
         end
 
-        G -->|NO| H["🧮 Embed Question<br/>Ollama LLM"]
+        G -->|NO| H["🧮 Generate Embedding<br/>Ollama LLM"]
+        H --> I["🔍 Vector Search<br/>Milvus HNSW"]
 
-        subgraph L2["Layer 2: Embedding Cache"]
-            H --> H2{"Embedding<br/>Cache<br/>HIT?"}
-            H2 -->|YES| H3["✅ Use Cached<br/>Embedding"]
-            H2 -->|NO| H4["Generate New<br/>Embedding"]
-            H3 --> H5["Embedding Ready"]
-            H4 --> H5
+        subgraph Tier2["Tier 2: Knowledge Base"]
+            I --> K["📋 Retrieve Top-K<br/>Chunks + Sources"]
+            K --> L["💬 LLM Prompt<br/>Question + Context"]
+            L --> N["✍️ Generate Answer<br/>with Sources"]
+            N --> O["💾 Store in Cache"]
+            O --> P["📤 Return Response<br/>1-2s"]
         end
 
-        H5 --> I["Query Vector Ready"]
-
-        subgraph L4["Layer 4: Semantic Response Cache<br/>(Milvus - Persistent)"]
-            I --> I2{"Semantic<br/>Match<br/>in Milvus?"}
-            I2 -->|YES<br/>92%+ similar| M2["✅ Return Similar<br/>Cached Answer<br/>~100-200ms"]
+        subgraph Tier3["Tier 3: Web Search (Opt-in)"]
+            F2["👤 User Clicks 🌐"] --> W1["🌐 Tavily API<br/>Web Search"]
+            W1 --> W2["✍️ Generate from<br/>Web Results"]
+            W2 --> W3["📤 Return Response<br/>5-15s"]
         end
-
-        I2 -->|NO| J["🔍 Vector Search"]
-
-        subgraph L3["Layer 3: Search Cache"]
-            J --> J2{"Search Cache<br/>HIT?"}
-            J2 -->|YES| J3["✅ Use Cached<br/>Search Results"]
-            J2 -->|NO| J4["Query Milvus<br/>HNSW Index"]
-            J3 --> J5["Results Ready"]
-            J4 --> J5
-        end
-
-        J5 --> K["📋 Retrieve Top-K<br/>Chunks + Sources"]
-        K --> L["💬 LLM Prompt<br/>Question + Context"]
-        L --> N["✍️ Generate Answer<br/>with Sources"]
-        N --> O["💾 Cache Answer"]
-        O --> P["📤 Return Response<br/>API/Chatbot<br/>1-2s"]
 
         M1 -.->|Short-circuit| P
-        M2 -.->|Short-circuit| P
     end
 
-    E -.->|Stored vectors| J4
+    E -.->|Stored vectors| I
     P --> Q["Done"]
+    W3 --> Q
 
-    style L1 fill:#c8e6c9
-    style L2 fill:#bbdefb
-    style L3 fill:#ffe0b2
-    style L4 fill:#f8bbd0
+    style Tier1 fill:#c8e6c9
+    style Tier2 fill:#bbdefb
+    style Tier3 fill:#ffe0b2
     style Index fill:#e1f5ff
     style M1 fill:#4caf50,color:#fff
-    style M2 fill:#4caf50,color:#fff
-
-    classDef cacheHit fill:#4caf50,color:#fff,stroke:#2e7d32,stroke-width:3px
-    classDef shortCircuit fill:#ff9800,color:#fff,stroke-width:2px,stroke-dasharray: 5 5
 ```
 
-**Cache Performance Summary:**
-- **Layer 1 Hit** (exact answer): <50ms (1200x faster than full pipeline)
-- **Layer 2 Hit** (embedding cached): ~100-200ms (700x faster)
-- **Layer 3 Hit** (search cached): ~300-500ms (300x faster)
-- **Layer 4 Hit** (semantic match): ~100-200ms (600x faster)
-- **Cache Miss** (full pipeline): ~1-2s (baseline)
+**3-Tier Performance:**
+- **Tier 1 - Cache Hit**: <50ms (25-300x faster)
+- **Tier 2 - Knowledge Base**: 1-2s (baseline)
+- **Tier 3 - Web Search**: 5-15s (explicit user request)
 
 ## Advanced Features
 
@@ -233,12 +210,16 @@ See [DEVELOPMENT.md](docs/DEVELOPMENT.md) for:
 ## Roadmap
 
 **Todos:**
-- [ ] Add new searches in the client cache list
+- [ ] Open Telemetry with SideSeat
+- [ ] Grade agents with  Strands Evals SDK or Langfuse
+- [ ] Evaluate and Improve with Ragas
 - [ ] Strands Agents AG-UI GUI integration
+- [ ] Provide rich, interactive "mini-apps" or widgets with MCP-UI
 - [ ] Red Teaming (Giskard / PromptFoo)
 - [ ] Integrate pre-commit into GitHub pipeline
 - [ ] Serverless deployment with AgentCore (Lambda, SAM, CloudFront)
 - [ ] AgentCore SessionManager for conversation history caching
+- [ ] Add new searches in the client cache list
 - [X] Show a responses cache list to the web app users
 
 ## Contributing

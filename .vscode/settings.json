@@ -1,0 +1,31 @@
+{
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+  "python.linting.enabled": true,
+  "python.linting.pylintEnabled": true,
+  "python.formatting.provider": "black",
+  "[python]": {
+    "editor.defaultFormatter": "ms-python.python",
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.organizeImports": "explicit"
+    }
+  },
+  "files.exclude": {
+  "**/.git": true
+},
+  "pylance.analysis.typeCheckingMode": "basic",
+  "chat.tools.terminal.autoApprove": {
+    "/^cd /Users/claude/Documents/workspace/aws-strands-agents-rag && python -c \"\nfrom src\\.config\\.settings import Settings\nfrom src\\.agents\\.strands_rag_agent import StrandsRAGAgent\n\nsettings = Settings\\(\\)\nagent = StrandsRAGAgent\\(settings=settings\\)\n\n# Test the question\nquestion = 'What is Milvus\\?'\nprint\\(f'Question: \\{question\\}'\\)\nprint\\('='\\*60\\)\nanswer, sources = agent\\.answer_question\\(question, collection_name=settings\\.ollama_collection_name\\)\nprint\\(f'Answer: \\{answer\\}'\\)\nprint\\('='\\*60\\)\nprint\\(f'Sources: \\{len\\(sources\\)\\} documents retrieved'\\)\n\"$/": {
+      "approve": true,
+      "matchCommandLine": true
+    },
+    "/^python3 -m pytest tests/test_strands_graph_agent\\.py::TestSecurityDetection::test_jailbreak_pattern_forget_instruction -xvs 2>&1 \\| head -100$/": {
+      "approve": true,
+      "matchCommandLine": true
+    },
+    "/^python3 -m pytest tests/test_strands_graph_agent\\.py::TestSecurityDetection -v 2>&1 \\| tail -30$/": {
+      "approve": true,
+      "matchCommandLine": true
+    }
+  }
+}

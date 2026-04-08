@@ -1,0 +1,17 @@
+{
+  "recommendations": [
+    "ms-python.python",
+    "ms-python.vscode-pylance",
+    "charliermarsh.ruff",
+    "ms-python.black-formatter",
+    "ms-python.mypy-type-checker",
+    "ms-vscode-remote.remote-containers",
+    "ms-vscode-remote.remote-ssh",
+    "ms-vscode-remote.remote-ssh-edit",
+    "ms-docker.docker",
+    "humao.rest-client",
+    "eamodio.gitlens",
+    "amazonwebservices.aws-toolkit-vscode",
+    "yzhang.markdown-all-in-one"
+  ]
+}

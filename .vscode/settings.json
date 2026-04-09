@@ -27,5 +27,10 @@
       "approve": true,
       "matchCommandLine": true
     }
+  },
+  "chat.mcp.servers": {
+    "aws-knowledge": {
+      "url": "https://knowledge-mcp.global.api.aws"
+    }
   }
 }

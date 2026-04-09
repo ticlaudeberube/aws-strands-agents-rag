@@ -165,32 +165,67 @@ mypy src/
 
 ### 4. Pre-commit Setup & Troubleshooting
 
-#### Installation
+#### What are Pre-commit Hooks?
+
+Pre-commit hooks automatically run code quality checks before each `git commit`. They enforce:
+- **Code style** (formatting, trailing whitespace, newlines)
+- **Code quality** (linting, type checking)
+- **Tests** (runs pytest to catch regressions)
+
+The configuration is in [`.pre-commit-config.yaml`](../.pre-commit-config.yaml) and defines:
+
+**File Validators (run first):**
+- Trim trailing whitespace
+- Fix missing end-of-file newlines
+- Prevent large files (>750KB) from being committed
+- Check for merge conflict markers
+- Validate YAML syntax
+
+**Python Code Quality:**
+- **Ruff** — Linting + import sorting (auto-fixes most issues)
+- **Ruff format** — Code formatting to 100-character lines
+- **MyPy** — Type checking for type safety
+- **Pytest** — Runs unit tests (excludes slow tests)
+
+**YAML:**
+- **yamllint** — YAML style validation
+
+#### Installation & Setup
 
 ```bash
-# Install pre-commit
-pip install pre-commit
-
-# Install git hooks (runs checks before each commit)
+# Pre-commit is already in dev dependencies
+# Just install git hooks (one-time setup)
+source .venv/bin/activate
 pre-commit install
 ```
 
-Once installed, pre-commit runs automatically on `git commit`. To run manually:
+Once installed, pre-commit runs automatically on `git commit`. To test manually:
 
 ```bash
 # Run all checks on all files
+source .venv/bin/activate
 pre-commit run --all-files
 
-# Run only before committing
+# Run checks on staged files only (before committing)
 pre-commit run
+```
+
+#### Skip Specific Hooks (when necessary)
+
+```bash
+# Skip only pytest tests
+SKIP=pytest git commit -m "Your message"
+
+# Skip mypy type checking
+SKIP=mypy git commit -m "Your message"
+
+# Skip all hooks (NOT recommended)
+git commit --no-verify -m "Your message"
 ```
 
 #### Fixing Pre-commit Issues
 
 When pre-commit checks fail, use these commands and strategies to fix common issues.
-
-### Override pre-commit
-git commit --no-verify -m "Your commit message"
 
 ##### Ruff Linting Errors
 

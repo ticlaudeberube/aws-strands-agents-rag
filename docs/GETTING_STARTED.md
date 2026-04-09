@@ -52,21 +52,37 @@ If you prefer to set up manually:
 
 ```bash
 # Create Python environment
-python3 -m venv venv
+python3 -m venv .venv
 
 # Activate environment
 # On macOS/Linux:
-source venv/bin/activate
+source .venv/bin/activate
 # On Windows:
-# venv\Scripts\activate
+# .venv\Scripts\activate
 
 # Install dependencies
 pip install -e .
 pip install -e ".[dev]"
 
+# Set up git pre-commit hooks (for code quality checks)
+pre-commit install
+
 # Copy environment template
 cp .env.example .env
 ```
+
+### About Pre-commit Hooks
+
+The `pre-commit install` command sets up automated code quality checks that run before each git commit. This ensures all code meets project standards.
+
+**What pre-commit checks:**
+- Code formatting (100-character line length)
+- Linting (code style, unused imports)
+- Type safety (Python type hints)
+- Tests (catches regressions)
+- File integrity (newlines, merge conflicts)
+
+See [DEVELOPMENT.md](DEVELOPMENT.md#4-pre-commit-setup--troubleshooting) for detailed hook configuration and troubleshooting.
 
 ## Step 2: Start Milvus Docker Services (Optimized Setup)
 

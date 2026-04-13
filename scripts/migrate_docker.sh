@@ -2,7 +2,7 @@
 
 ###############################################################################
 # Docker Migration Script
-# 
+#
 # Migrates from milvus-standalone to the optimized Docker setup
 # in aws-strands-agents-rag/docker
 ###############################################################################
@@ -39,29 +39,29 @@ log_error() {
 main() {
     log_info "Docker Migration Script"
     log_info "======================="
-    
+
     # Check we're in the right directory
     if [ ! -f "pyproject.toml" ]; then
         log_error "Please run this script from the aws-strands-agents-rag root directory"
         exit 1
     fi
-    
+
     if [ ! -f ".env" ]; then
         log_error ".env file not found. Please copy from .env.example first"
         exit 1
     fi
-    
+
     if [ ! -d "docker" ]; then
         log_error "docker/ directory not found. Create it first"
         exit 1
     fi
-    
+
     echo
     log_info "Step 1: Stopping current milvus-standalone services..."
-    
+
     if [ -d "../milvus-standalone" ]; then
         cd ../milvus-standalone
-        
+
         if [ -f "docker-compose.yml" ]; then
             log_info "Found milvus-standalone, stopping services..."
             docker-compose down 2>/dev/null || true
@@ -69,30 +69,30 @@ main() {
         else
             log_warning "docker-compose.yml not found in milvus-standalone"
         fi
-        
+
         cd ../aws-strands-agents-rag
     else
         log_warning "milvus-standalone directory not found (already removed?)"
     fi
-    
+
     echo
     log_info "Step 2: Cleaning up Docker resources..."
     docker system prune -f > /dev/null 2>&1 || true
     log_success "Docker cleanup completed"
-    
+
     echo
     log_info "Step 3: Starting new optimized Docker services..."
     cd docker
-    
+
     if [ ! -x "optimize.sh" ]; then
         chmod +x optimize.sh
     fi
-    
+
     # Run optimization and start
     ./optimize.sh --all
-    
+
     cd ..
-    
+
     echo
     log_success "Migration completed!"
     echo

@@ -31,6 +31,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+from src.agents.node_metrics import GraphMetrics
 from src.agents.strands_graph_agent import StrandsGraphRAGAgent as StrandsRAGAgent
 from src.config.settings import Settings, get_settings
 from src.mcp.mcp_server import RAGAgentMCPServer
@@ -51,11 +52,12 @@ logger = logging.getLogger(__name__)
 # DRY Helper Functions
 # ============================================================================
 
+
 def _determine_response_type(sources: List[Dict]) -> tuple[str, bool]:
     """Determine response type and caching status from sources (DRY helper)."""
     has_cached_sources = any(s.get("source_type") == "cached" for s in sources)
     has_web_sources = any(s.get("source_type") == "web_search" for s in sources)
-    
+
     if has_cached_sources:
         return "cached", True
     elif has_web_sources:
@@ -64,24 +66,28 @@ def _determine_response_type(sources: List[Dict]) -> tuple[str, bool]:
         return "rag", False
 
 
-def _create_timing_data(total_time_ms: float = 0, response_type: str = "rag", is_cached: bool = False) -> Dict:
+def _create_timing_data(
+    total_time_ms: float = 0, response_type: str = "rag", is_cached: bool = False
+) -> Dict:
     """Create consistent timing metadata (DRY helper)."""
     return {
         "total_time_ms": round(total_time_ms, 2),
         "response_type": response_type,
         "is_cached": is_cached,
-        "_populated": True
+        "_populated": True,
     }
 
 
-def _create_chat_response(content: str, sources: List[Dict], timing_data: Dict, model: str = "rag-agent") -> Dict:
+def _create_chat_response(
+    content: str, sources: List[Dict], timing_data: Dict, model: str = "rag-agent"
+) -> Dict:
     """Create consistent chat completion response structure (DRY helper)."""
     # Ensure content is always a string to prevent "[object Object]" errors
     safe_content = str(content) if content is not None else ""
-    
+
     return {
         "id": f"chatcmpl-{datetime.now().timestamp()}",
-        "object": "chat.completion", 
+        "object": "chat.completion",
         "created": int(datetime.now().timestamp()),
         "model": model,
         "choices": [
@@ -98,7 +104,7 @@ def _create_chat_response(content: str, sources: List[Dict], timing_data: Dict, 
         ],
         "usage": {
             "prompt_tokens": len(safe_content.split()) if safe_content else 0,
-            "completion_tokens": len(safe_content.split()) if safe_content else 0, 
+            "completion_tokens": len(safe_content.split()) if safe_content else 0,
             "total_tokens": len(safe_content.split()) * 2 if safe_content else 0,
         },
         "sources": sources,  # Backward compatibility
@@ -188,6 +194,7 @@ mcp_server: Optional[RAGAgentMCPServer] = None
 settings: Optional[Settings] = None
 initialization_error: Optional[str] = None
 common_questions: List[str] = []
+graph_metrics: GraphMetrics = GraphMetrics()
 
 
 @asynccontextmanager
@@ -689,6 +696,33 @@ async def health_milvus():
         raise HTTPException(status_code=503, detail=f"Milvus health check failed: {str(e)}")
 
 
+@app.get("/metrics", tags=["monitoring"])
+async def get_metrics():
+    """Get comprehensive metrics for the RAG graph execution.
+
+    Returns node-level metrics including:
+    - Execution counts and durations
+    - Success/error rates
+    - Token usage
+    - Early exit rates
+    - Uptime
+    """
+    global graph_metrics
+    return graph_metrics.to_dict()
+
+
+@app.get("/metrics/reset", tags=["monitoring"])
+async def reset_metrics():
+    """Reset all metrics (useful for testing and benchmarking).
+
+    WARNING: Clears all accumulated metrics. Use with caution in production.
+    """
+    global graph_metrics
+    graph_metrics.reset()
+    logger.warning("[METRICS] Metrics reset via API endpoint")
+    return {"status": "reset", "message": "All metrics have been cleared"}
+
+
 @app.get("/api/cache/questions", tags=["cache"])
 async def get_cached_questions():
     """Get list of pre-warmed common questions.
@@ -925,10 +959,13 @@ def _stream_chat_completions(
         """Generator for streaming response with SSE format."""
         chunk_count = 0
         error_occurred = False
-        
+
         try:
             # Check if agent has unrecoverable initialization error
-            if agent.initialization_error and "Milvus connection failed" not in agent.initialization_error:
+            if (
+                agent.initialization_error
+                and "Milvus connection failed" not in agent.initialization_error
+            ):
                 # Unrecoverable error - return error message through stream
                 error_msg = f"Service error: {agent.initialization_error}"
                 logger.error(f"[STREAM] Cannot process request due to: {error_msg}")
@@ -950,19 +987,23 @@ def _stream_chat_completions(
             # This yields text chunks as they're generated by the LLM
             if force_web_search:
                 # 🌐 FORCE WEB SEARCH: Only web search, no knowledge base
-                
+
                 # CRITICAL: Check competitor queries even in force web search mode for streaming
                 from src.agents.strands_graph_agent import (
                     _create_web_search_unavailable_message,
                     _is_competitor_database_query,
                 )
-                
+
                 is_competitor_query = _is_competitor_database_query(user_message)
                 if is_competitor_query:
-                    logger.info(f"[STREAMING_FORCE_WEB_SEARCH] Competitor query detected: {user_message[:50]}...")
-                    # Return same error message format as normal competitor detection  
+                    logger.info(
+                        f"[STREAMING_FORCE_WEB_SEARCH] Competitor query detected: {user_message[:50]}..."
+                    )
+                    # Return same error message format as normal competitor detection
                     if not agent.web_search:
-                        logger.warning("[STREAMING_FORCE_WEB_SEARCH] Web search unavailable for competitor query")
+                        logger.warning(
+                            "[STREAMING_FORCE_WEB_SEARCH] Web search unavailable for competitor query"
+                        )
                         error_dict = _create_web_search_unavailable_message()
                         # Send text content first
                         yield f"data: {json.dumps({'choices': [{'delta': {'content': error_dict['text']}}]})}\n\n"
@@ -970,7 +1011,12 @@ def _stream_chat_completions(
                         final_data = {
                             "choices": [{"delta": {"content": ""}}],
                             "sources": [error_dict],  # Include system message as source
-                            "timing": {"total_time_ms": 0, "response_type": "rag", "is_cached": False, "_populated": True}
+                            "timing": {
+                                "total_time_ms": 0,
+                                "response_type": "rag",
+                                "is_cached": False,
+                                "_populated": True,
+                            },
                         }
                         yield f"data: {json.dumps(final_data)}\n\n"
                         yield "data: [STREAM_END]\n\n"
@@ -979,40 +1025,58 @@ def _stream_chat_completions(
                         # Test web search availability
                         try:
                             test_query = agent._generate_web_search_query(user_message)
-                            test_results, test_status = agent.web_search.search(query=test_query, max_results=1)
-                            if test_status == 'api_unavailable':
-                                logger.warning("[STREAMING_FORCE_WEB_SEARCH] Web search API unavailable for competitor query")
+                            test_results, test_status = agent.web_search.search(
+                                query=test_query, max_results=1
+                            )
+                            if test_status == "api_unavailable":
+                                logger.warning(
+                                    "[STREAMING_FORCE_WEB_SEARCH] Web search API unavailable for competitor query"
+                                )
                                 error_dict = _create_web_search_unavailable_message()
                                 # Send text content first
                                 yield f"data: {json.dumps({'choices': [{'delta': {'content': error_dict['text']}}]})}\n\n"
-                                # Send sources information in final chunk 
+                                # Send sources information in final chunk
                                 final_data = {
                                     "choices": [{"delta": {"content": ""}}],
                                     "sources": [error_dict],  # Include system message as source
-                                    "timing": {"total_time_ms": 0, "response_type": "rag", "is_cached": False, "_populated": True}
+                                    "timing": {
+                                        "total_time_ms": 0,
+                                        "response_type": "rag",
+                                        "is_cached": False,
+                                        "_populated": True,
+                                    },
                                 }
                                 yield f"data: {json.dumps(final_data)}\n\n"
                                 yield "data: [STREAM_END]\n\n"
                                 return
                             else:
                                 # Web search available - continue with force web search streaming
-                                logger.info("[STREAMING_FORCE_WEB_SEARCH] Web search available for competitor query - continuing")
+                                logger.info(
+                                    "[STREAMING_FORCE_WEB_SEARCH] Web search available for competitor query - continuing"
+                                )
                                 # Continue to normal streaming below
                         except Exception as e:
-                            logger.warning(f"[STREAMING_FORCE_WEB_SEARCH] Web search test failed for competitor query: {e}")  
+                            logger.warning(
+                                f"[STREAMING_FORCE_WEB_SEARCH] Web search test failed for competitor query: {e}"
+                            )
                             error_dict = _create_web_search_unavailable_message()
                             # Send text content first
                             yield f"data: {json.dumps({'choices': [{'delta': {'content': error_dict['text']}}]})}\n\n"
-                            # Send sources information in final chunk 
+                            # Send sources information in final chunk
                             final_data = {
                                 "choices": [{"delta": {"content": ""}}],
                                 "sources": [error_dict],  # Include system message as source
-                                "timing": {"total_time_ms": 0, "response_type": "rag", "is_cached": False, "_populated": True}
+                                "timing": {
+                                    "total_time_ms": 0,
+                                    "response_type": "rag",
+                                    "is_cached": False,
+                                    "_populated": True,
+                                },
                             }
                             yield f"data: {json.dumps(final_data)}\n\n"
                             yield "data: [STREAM_END]\n\n"
                             return
-                
+
                 # Proceed with force web search (competitor or non-competitor that passed tests)
                 logger.info(f"🌐 [STREAMING] FORCE WEB SEARCH: {user_message[:100]}...")
                 async for chunk in agent.stream_answer_web_search_only(
@@ -1076,12 +1140,14 @@ def _stream_chat_completions(
 
             # Only send final metadata and completion if no errors occurred
             if not error_occurred:
-                # After streaming completes, send sources and timing as final chunk  
+                # After streaming completes, send sources and timing as final chunk
                 sources = agent._last_stream_sources or []
-                
+
                 # Use DRY helper to determine response type and create timing
                 response_type, is_cached = _determine_response_type(sources)
-                timing_data = _create_timing_data(0, response_type, is_cached)  # Streaming doesn't track total time easily
+                timing_data = _create_timing_data(
+                    0, response_type, is_cached
+                )  # Streaming doesn't track total time easily
 
                 # Send final chunk with sources and timing metadata
                 final_data = {
@@ -1097,16 +1163,18 @@ def _stream_chat_completions(
 
                 # Signal successful completion
                 yield "data: [STREAM_END]\n\n"
-                logger.info(f"[STREAM_COMPLETE] Streamed {chunk_count} chunks for: {user_message[:50]}...")
+                logger.info(
+                    f"[STREAM_COMPLETE] Streamed {chunk_count} chunks for: {user_message[:50]}..."
+                )
 
         except Exception as e:
             error_occurred = True
             logger.error(f"Stream generation error: {e}")
-            
+
             # Format error message consistently with other chunks
             error_msg = f"Error generating response: {str(e)}"
             yield f"data: {json.dumps({'choices': [{'delta': {'content': error_msg}}]})}\n\n"
-            
+
             # Always send STREAM_END marker even for errors
             yield "data: [STREAM_END]\n\n"
 
@@ -1195,36 +1263,46 @@ async def chat_completions(request: ChatCompletionRequest, bypass_cache: bool = 
         try:
             if force_web_search:
                 # 🌐 FORCE WEB SEARCH: Only web search, no knowledge base
-                
+
                 # CRITICAL: Check competitor queries even in force web search mode
-                # Must use same detection logic and return same error message format  
+                # Must use same detection logic and return same error message format
                 from src.agents.strands_graph_agent import (
                     _create_web_search_unavailable_message,
                     _is_competitor_database_query,
                 )
-                
+
                 is_competitor_query = _is_competitor_database_query(user_message)
                 if is_competitor_query:
-                    logger.info(f"[FORCE_WEB_SEARCH] Competitor query detected: {user_message[:50]}...")
+                    logger.info(
+                        f"[FORCE_WEB_SEARCH] Competitor query detected: {user_message[:50]}..."
+                    )
                     # Return same error message format as normal competitor detection
                     if not current_agent.web_search:
-                        logger.warning("[FORCE_WEB_SEARCH] Web search unavailable for competitor query")
+                        logger.warning(
+                            "[FORCE_WEB_SEARCH] Web search unavailable for competitor query"
+                        )
                         error_dict = _create_web_search_unavailable_message()
-                        answer = error_dict['text']
+                        answer = error_dict["text"]
                         sources = [error_dict]
                     else:
-                        # Test web search availability 
+                        # Test web search availability
                         try:
                             test_query = current_agent._generate_web_search_query(user_message)
-                            test_results, test_status = current_agent.web_search.search(query=test_query, max_results=1)
-                            if test_status == 'api_unavailable':
-                                logger.warning("[FORCE_WEB_SEARCH] Web search API unavailable for competitor query")
+                            test_results, test_status = current_agent.web_search.search(
+                                query=test_query, max_results=1
+                            )
+                            if test_status == "api_unavailable":
+                                logger.warning(
+                                    "[FORCE_WEB_SEARCH] Web search API unavailable for competitor query"
+                                )
                                 error_dict = _create_web_search_unavailable_message()
-                                answer = error_dict['text']  
+                                answer = error_dict["text"]
                                 sources = [error_dict]
                             else:
                                 # Web search available - continue with force web search
-                                logger.info("[FORCE_WEB_SEARCH] Web search available for competitor query - continuing")
+                                logger.info(
+                                    "[FORCE_WEB_SEARCH] Web search available for competitor query - continuing"
+                                )
                                 answer_chunks = []
                                 async for chunk in current_agent.stream_answer_web_search_only(
                                     question=user_message,
@@ -1233,17 +1311,25 @@ async def chat_completions(request: ChatCompletionRequest, bypass_cache: bool = 
                                 ):
                                     if chunk and chunk.strip():  # Only collect non-empty chunks
                                         answer_chunks.append(str(chunk))
-                                
+
                                 answer = "".join(answer_chunks).strip()
-                                sources = current_agent._last_stream_sources if hasattr(current_agent, '_last_stream_sources') else []
+                                sources = (
+                                    current_agent._last_stream_sources
+                                    if hasattr(current_agent, "_last_stream_sources")
+                                    else []
+                                )
                         except Exception as e:
-                            logger.warning(f"[FORCE_WEB_SEARCH] Web search test failed for competitor query: {e}")
+                            logger.warning(
+                                f"[FORCE_WEB_SEARCH] Web search test failed for competitor query: {e}"
+                            )
                             error_dict = _create_web_search_unavailable_message()
-                            answer = error_dict['text']
+                            answer = error_dict["text"]
                             sources = [error_dict]
                 else:
                     # Non-competitor query - proceed with normal force web search
-                    logger.info(f"🌐 [CHAT_ENDPOINT] FORCE WEB SEARCH SELECTED: {user_message[:100]}...")
+                    logger.info(
+                        f"🌐 [CHAT_ENDPOINT] FORCE WEB SEARCH SELECTED: {user_message[:100]}..."
+                    )
                     # Use the working streaming method and collect all chunks
                     answer_chunks = []
                     async for chunk in current_agent.stream_answer_web_search_only(
@@ -1253,10 +1339,14 @@ async def chat_completions(request: ChatCompletionRequest, bypass_cache: bool = 
                     ):
                         if chunk and chunk.strip():  # Only collect non-empty chunks
                             answer_chunks.append(str(chunk))
-                    
+
                     answer = "".join(answer_chunks).strip()
-                    sources = current_agent._last_stream_sources if hasattr(current_agent, '_last_stream_sources') else []
-                
+                    sources = (
+                        current_agent._last_stream_sources
+                        if hasattr(current_agent, "_last_stream_sources")
+                        else []
+                    )
+
                 logger.info(
                     f"[CHAT_ENDPOINT] Web search response: {len(sources)} sources, {len(answer)} chars"
                 )
@@ -1278,7 +1368,7 @@ async def chat_completions(request: ChatCompletionRequest, bypass_cache: bool = 
                     temperature=temperature,
                     max_tokens=max_tokens,
                 )
-                
+
                 # Handle both tuple and dictionary return formats
                 if isinstance(result, dict):
                     answer = result["answer"]
@@ -1317,11 +1407,20 @@ async def chat_completions(request: ChatCompletionRequest, bypass_cache: bool = 
         total_time = time.time() - total_start_time
         response_type, is_cached = _determine_response_type(sources)
         timing_data = _create_timing_data(total_time * 1000, response_type, is_cached)
-        
+
+        # Record metrics for monitoring
+        global graph_metrics
+        early_exit = response_type == "rag" and "out of scope" in str(answer).lower()
+        graph_metrics.record_request(
+            duration_ms=total_time * 1000, success=True, early_exit=early_exit
+        )
+
         # Ensure answer is always a string to prevent "[object Object]" errors
         safe_answer = str(answer) if answer is not None else ""
-        
-        return _create_chat_response(safe_answer, sources, timing_data, request.model or "rag-agent")
+
+        return _create_chat_response(
+            safe_answer, sources, timing_data, request.model or "rag-agent"
+        )
     except Exception as e:
         raise _handle_api_error(e, "chat completions")
 
@@ -1417,18 +1516,22 @@ async def chat_completions_stream(request: ChatCompletionRequest):
 
                 # After streaming completes, send sources and response_type as final chunk
                 sources = current_agent._last_stream_sources
-                
+
                 # Determine response type from sources
-                has_cached_sources = any(s.get("source_type") == "cached" for s in sources) if sources else False
-                has_web_sources = any(s.get("source_type") == "web_search" for s in sources) if sources else False
-                
+                has_cached_sources = (
+                    any(s.get("source_type") == "cached" for s in sources) if sources else False
+                )
+                has_web_sources = (
+                    any(s.get("source_type") == "web_search" for s in sources) if sources else False
+                )
+
                 if has_cached_sources:
                     response_type = "cached"
                 elif has_web_sources:
                     response_type = "web_search"
                 else:
                     response_type = "rag"
-                
+
                 if sources:
                     sources_data = {
                         "choices": [
@@ -1619,11 +1722,11 @@ async def get_cached_response(cache_id: str):
         # Ensure sources is a list and handle both dict and string sources
         if not isinstance(sources, list):
             sources = []
-        
+
         # Determine response type based on sources (defensive coding)
         has_cached_sources = False
         has_web_sources = False
-        
+
         for s in sources:
             if isinstance(s, dict):
                 source_type = s.get("source_type", "")
@@ -1632,7 +1735,7 @@ async def get_cached_response(cache_id: str):
                 elif source_type == "web_search":
                     has_web_sources = True
             # Skip string sources or malformed entries
-        
+
         if has_cached_sources and not has_web_sources:
             response_type = "cached"
         elif has_web_sources:
@@ -1650,7 +1753,7 @@ async def get_cached_response(cache_id: str):
                 "response_time": metadata.get("response_time"),
                 "confidence": metadata.get("confidence"),
                 "execution_path": metadata.get("execution_path"),
-            }
+            },
         }
 
     except HTTPException:
@@ -1673,7 +1776,7 @@ async def get_cached_questions_v1():
         JSON with questions array, each containing:
         - id: Question ID (Milvus entity ID as string)
         - question: The question text
-        
+
     Note: Deduplicates identical questions, returning only the latest cached entry.
     """
     current_agent = await get_or_init_agent()
@@ -1698,7 +1801,7 @@ async def get_cached_questions_v1():
 
         questions = []
         seen_questions = {}  # Track unique questions by text
-        
+
         if results:
             results_list = list(results) if not isinstance(results, list) else results
             logger.info(f"Got {len(results_list)} results from cache (before dedup)")
@@ -1726,21 +1829,24 @@ async def get_cached_questions_v1():
                     logger.warning(f"Error processing question {idx}: {e}")
                     continue
 
-        logger.info(f"Returning {len(questions)} unique cached questions (deduplicated from {len(results_list) if results else 0})")
+        logger.info(
+            f"Returning {len(questions)} unique cached questions (deduplicated from {len(results_list) if results else 0})"
+        )
         return {"questions": questions, "count": len(questions)}
 
     except Exception as e:
         logger.error(f"Error retrieving cached questions: {e}", exc_info=True)
         return {"questions": [], "count": 0}
 
+
 def main():
     logger.info("Press Ctrl+C to shutdown gracefully")
     logger.info("=" * 70)
 
     try:
-        # Load settings  
+        # Load settings
         settings = get_settings()
-        
+
         # Load common questions for cache endpoints
         logger.info("Loading common questions...")
         # common_questions = load_common_questions()

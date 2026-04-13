@@ -21,7 +21,7 @@ WHAT HAPPENS:
 ERROR MESSAGE (Improved):
   ❌ Milvus Connection Failed!
      Error: Milvus connection failed at localhost:19530. Make sure Milvus is running.
-     
+
      To fix this:
      1. Check if Milvus is running:
         cd docker && docker-compose ps
@@ -127,7 +127,7 @@ ERROR MESSAGE (Improved):
     ✓ Ollama is running at http://localhost:11434
     ✓ Available models: 28 found
     ❌ Error: Embedding model 'nomic-embed-text:v1.5' not found
-       Available models: llama3.2:1b, mistral:latest, ...
+       Available models: llama3.2:1b, qwen2.5:0.5b, ...
        Pull the model with: ollama pull nomic-embed-text:v1.5
 
 HOW IT WORKS:

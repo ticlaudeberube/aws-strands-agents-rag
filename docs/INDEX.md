@@ -12,6 +12,10 @@ Quick navigation for committed documentation in this project.
 
 ## 🚀 Recent Updates
 
+**Infrastructure Status Analysis (Apr 12, 2026)**: Added comprehensive analysis of actual implementation status vs documentation claims. Verified that core monitoring, retry logic, and health checks are actively working in production, while advanced features (circuit breakers, tracing) are production-ready frameworks. See [INFRASTRUCTURE_IMPLEMENTATION_STATUS.md](INFRASTRUCTURE_IMPLEMENTATION_STATUS.md).
+
+**Strands Core Agent (Apr 12, 2026)**: Added specialized Strands agent for documentation and programming assistance with 3-node architecture (TaskValidator → TaskRouter → SpecializedWorkers). Includes 9 tools across 2 skills for comprehensive code analysis and documentation management. See [STRANDS_CORE_AGENT.md](STRANDS_CORE_AGENT.md).
+
 **Graph Agent Architecture (Mar 5, 2026)**: Migrated to 3-node graph-based `StrandsGraphRAGAgent` with pattern-matching security detection. All 77 tests passing. See [ARCHITECTURE.md](ARCHITECTURE.md) and [tests/README.md](../tests/README.md) for details.
 
 **Test Suite Migration (Mar 5, 2026)**: Updated test suite to use new graph agent. 48% code coverage across 619/1303 statements. See [tests/README.md](../tests/README.md) for test statistics.
@@ -23,10 +27,14 @@ Quick navigation for committed documentation in this project.
 ## 📚 Committed Documentation Files
 
 ### System Architecture & Development
+- **[IMPLEMENTATION_ARCHITECTURE.md](IMPLEMENTATION_ARCHITECTURE.md)** - Complete RAG system implementation documentation with infrastructure components
+- **[INFRASTRUCTURE_IMPLEMENTATION_STATUS.md](INFRASTRUCTURE_IMPLEMENTATION_STATUS.md)** - Actual implementation status vs documentation claims
+- **[DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md)** - Quick API reference and usage patterns for developers
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** - Three-tier system architecture (Cache → KB → Web Search) + complete component details
 - **[QUERY_ROUTING.md](QUERY_ROUTING.md)** - Complete query routing paths, validation layers, and decision logic
 - **[AWS_ARCHITECTURE.md](AWS_ARCHITECTURE.md)** - AWS deployment architectures (ECS/Fargate, Lambda + AgentCore)
 - **[DEVELOPMENT.md](DEVELOPMENT.md)** - Development guidelines and patterns
+- **[STRANDS_CORE_AGENT.md](STRANDS_CORE_AGENT.md)** - Specialized agent for documentation and programming assistance
 - **[CACHING_STRATEGY.md](CACHING_STRATEGY.md)** - Current semantic response cache implementation (single-layer Milvus)
 - **[CACHING_STRATEGY_IMPROVEMENTS.md](CACHING_STRATEGY_IMPROVEMENTS.md)** - 11 caching improvements for container-based deployment
 - **[AGENTCORE_CACHING_STRATEGY.md](AGENTCORE_CACHING_STRATEGY.md)** - Caching strategy for serverless AgentCore deployment

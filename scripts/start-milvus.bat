@@ -22,8 +22,8 @@ echo.
 echo Download and run Ollama from: https://ollama.ai
 echo.
 echo Then pull models (in new terminal):
-echo   ollama pull mistral
-echo   ollama pull all-minilm
+echo   ollama pull qwen2.5:0.5b
+echo   ollama pull nomic-embed-text:v1.5
 echo.
 echo Finally, test the setup:
 echo   python main.py

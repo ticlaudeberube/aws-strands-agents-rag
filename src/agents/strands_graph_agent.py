@@ -52,10 +52,18 @@ from strands import Agent
 from strands.tools import tool
 
 from src.agents import prompts
+from src.agents.decorators import retry_with_backoff
+from src.agents.graph_context import NodeTiming
+from src.agents.node_config import NodeConfigManager
+from src.agents.node_metrics import GraphMetrics, NodeMetrics
 from src.config import Settings
 from src.tools import MilvusResponseCache, MilvusVectorDB, OllamaClient, WebSearchClient
 
 logger = logging.getLogger(__name__)
+
+# Global metrics instance for tracking graph execution
+graph_metrics = GraphMetrics()
+node_config_manager = NodeConfigManager()
 
 
 # ============================================================================
@@ -249,13 +257,17 @@ def create_answer_generation_tool(ollama_client: OllamaClient, settings: Setting
                 context=context,
             )
 
-            # Generate answer
-            answer = ollama_client.generate(
-                prompt=prompt,
-                model=settings.ollama_model,
-                temperature=temp,
-                max_tokens=tokens,
-            )
+            # Generate answer with retry decorator
+            @retry_with_backoff(max_retries=3, base_delay=0.5)
+            def generate_with_retry() -> str:
+                return ollama_client.generate(
+                    prompt=prompt,
+                    model=settings.ollama_model,
+                    temperature=temp,
+                    max_tokens=tokens,
+                )
+
+            answer = generate_with_retry()
 
             gen_time = time.time() - gen_start
 
@@ -464,21 +476,21 @@ def _is_web_result_relevant_to_milvus(
     web_result: Dict[str, str],
 ) -> bool:
     """Check if a web search result is relevant to Milvus/vector databases.
-    
+
     Prevents hallucinations by filtering out irrelevant web search results
     (e.g., Power Apps Collections, Postman documentation) when falling back
     to web search.
-    
+
     Args:
         web_result: Web search result with title, snippet, url fields
-        
+
     Returns:
         True if result appears relevant to Milvus/vector databases, False otherwise
     """
     title = web_result.get("title", "").lower()
     snippet = web_result.get("snippet", "").lower()
     url = web_result.get("url", "").lower()
-    
+
     # Irrelevant domain patterns that should be filtered out
     irrelevant_patterns = [
         "power apps",
@@ -490,7 +502,7 @@ def _is_web_result_relevant_to_milvus(
         "learn.microsoft",
         "jacey duprie",  # Personal blog, not authoritative
     ]
-    
+
     # Relevant domain patterns
     relevant_patterns = [
         "milvus",
@@ -505,37 +517,39 @@ def _is_web_result_relevant_to_milvus(
         "chroma",
         "faiss",
     ]
-    
+
     # Check if result contains irrelevant patterns
     combined_text = f"{title} {snippet} {url}"
     for pattern in irrelevant_patterns:
         if pattern in combined_text:
-            logger.debug(f"[WEB_RELEVANCE] Filtered out irrelevant result: {pattern} found in {title[:50]}")
+            logger.debug(
+                f"[WEB_RELEVANCE] Filtered out irrelevant result: {pattern} found in {title[:50]}"
+            )
             return False
-    
+
     # Check if result contains at least one relevant pattern
     has_relevant = any(pattern in combined_text for pattern in relevant_patterns)
     if not has_relevant:
         logger.debug(f"[WEB_RELEVANCE] Filtered out non-relevant result: {title[:60]}")
         return False
-    
+
     return True
 
 
 def _is_competitor_database_query(question: str) -> bool:
     """Check if question is specifically about competitor vector databases not covered in our KB.
-    
+
     These queries require web search to provide accurate information.
     When web search is unavailable, we should return a proper "not available" message
     instead of hallucinating information from the Milvus knowledge base.
     """
     question_lower = question.lower()
-    
+
     # Competitor databases with common typos/variations
     # Simple competitor detection - just core names (KISS principle)
     competitor_patterns = {
         "pinecone": ["pinecone"],
-        "weaviate": ["weaviate"], 
+        "weaviate": ["weaviate"],
         "qdrant": ["qdrant"],
         "chroma": ["chroma", "chromadb"],
         "voyageai": ["voyageai"],
@@ -544,22 +558,47 @@ def _is_competitor_database_query(question: str) -> bool:
         "redis": ["redis"],
         "pgvector": ["pgvector"],
         "supabase": ["supabase"],
-        "neon": ["neon"]
+        "neon": ["neon"],
     }
-    
-    # Check for direct competitor mentions in questions asking for information  
+
+    # Check for direct competitor mentions in questions asking for information
     info_requesting_patterns = [
-        "what is", "tell me about", "tell me more about", "explain", "describe", 
-        "how does", "features of", "benefits of", "capabilities of",
-        "pricing", "documentation", "getting started with", "about",
+        "what is",
+        "tell me about",
+        "tell me more about",
+        "explain",
+        "describe",
+        "how does",
+        "features of",
+        "benefits of",
+        "capabilities of",
+        "pricing",
+        "documentation",
+        "getting started with",
+        "about",
         # Additional patterns for more comprehensive detection
-        "features", "capabilities", "advantages", "benefits", "pros", "cons",
-        "performance", "scalability", "security", "api", "sdk", "tutorial",
-        "guide", "setup", "install", "configure", "use", "work with"
+        "features",
+        "capabilities",
+        "advantages",
+        "benefits",
+        "pros",
+        "cons",
+        "performance",
+        "scalability",
+        "security",
+        "api",
+        "sdk",
+        "tutorial",
+        "guide",
+        "setup",
+        "install",
+        "configure",
+        "use",
+        "work with",
     ]
-    
+
     has_info_request = any(pattern in question_lower for pattern in info_requesting_patterns)
-    
+
     # Check for any competitor pattern matches
     detected_competitor = None
     for competitor, variations in competitor_patterns.items():
@@ -569,88 +608,101 @@ def _is_competitor_database_query(question: str) -> bool:
                 break
         if detected_competitor:
             break
-    
+
     # Enhanced logic: Detect standalone competitor queries OR competitor + tech terms
     is_standalone_competitor_query = (
-        detected_competitor and has_info_request and 
-        "milvus" not in question_lower and "compare" not in question_lower and "vs" not in question_lower
+        detected_competitor
+        and has_info_request
+        and "milvus" not in question_lower
+        and "compare" not in question_lower
+        and "vs" not in question_lower
     )
-    
+
     # Additional check: Competitor + database/vector/search terms (even without info request patterns)
-    tech_terms = ["database", "vector", "search", "index", "embedding", "similarity", "query", "storage"]
+    tech_terms = [
+        "database",
+        "vector",
+        "search",
+        "index",
+        "embedding",
+        "similarity",
+        "query",
+        "storage",
+    ]
     is_competitor_tech_query = (
-        detected_competitor and 
-        any(tech_term in question_lower for tech_term in tech_terms) and
-        "milvus" not in question_lower and "compare" not in question_lower and "vs" not in question_lower
+        detected_competitor
+        and any(tech_term in question_lower for tech_term in tech_terms)
+        and "milvus" not in question_lower
+        and "compare" not in question_lower
+        and "vs" not in question_lower
     )
-    
+
     if is_standalone_competitor_query or is_competitor_tech_query:
         query_type = "info-request" if is_standalone_competitor_query else "tech-specific"
-        logger.info(f"[COMPETITOR_DETECTION] Detected competitor database query ({query_type}): {detected_competitor} (from: {question[:60]})")
+        logger.info(
+            f"[COMPETITOR_DETECTION] Detected competitor database query ({query_type}): {detected_competitor} (from: {question[:60]})"
+        )
         return True
-        
+
     return False
 
 
-def _create_web_search_unavailable_message(message_type: str = 'standard') -> Dict[str, str]:
+def _create_web_search_unavailable_message(message_type: str = "standard") -> Dict[str, str]:
     """Create standardized web search unavailable messages.
-    
+
     Args:
         message_type: Type of message - 'standard'/'competitor' (same message), 'kb_fallback', or 'stream_note'
-        
+
     Returns:
         Dictionary with 'text' and 'metadata' keys for system message
     """
     # DRY: Use the same message for all cases to maintain consistency
     standard_message = "Web search features are currently unavailable due to API quota or authentication issues. Please try again later."
-    
+
     messages = {
-        'standard': standard_message,
-        'competitor': standard_message,  # Same message for consistency
-        'kb_fallback': "Web search features are currently unavailable due to API quota or authentication issues. The following response is based only on our knowledge base.",
-        'stream_note': "**Note:** Web search features are currently unavailable due to API quota or authentication issues. This response is based only on the knowledge base."
+        "standard": standard_message,
+        "competitor": standard_message,  # Same message for consistency
+        "kb_fallback": "Web search features are currently unavailable due to API quota or authentication issues. The following response is based only on our knowledge base.",
+        "stream_note": "**Note:** Web search features are currently unavailable due to API quota or authentication issues. This response is based only on the knowledge base.",
     }
-    
-    # Use consistent metadata type for standard and competitor cases  
+
+    # Use consistent metadata type for standard and competitor cases
     metadata_types = {
-        'standard': 'web_search_unavailable',
-        'competitor': 'web_search_unavailable',  # Same type for consistency
-        'kb_fallback': 'web_search_unavailable',
-        'stream_note': 'web_search_unavailable'
+        "standard": "web_search_unavailable",
+        "competitor": "web_search_unavailable",  # Same type for consistency
+        "kb_fallback": "web_search_unavailable",
+        "stream_note": "web_search_unavailable",
     }
-    
+
     return {
-        'text': messages[message_type],
-        'metadata': f'{{"source": "system", "type": "{metadata_types[message_type]}"}}',
-        'source_type': 'system_message',
-        'url': ''
+        "text": messages[message_type],
+        "metadata": f'{{"source": "system", "type": "{metadata_types[message_type]}"}}',
+        "source_type": "system_message",
+        "url": "",
     }
 
 
 def _create_no_web_results_message(message_type: str) -> Dict[str, str]:
     """Create standardized no web results messages.
-    
+
     Args:
         message_type: Type of message - 'standard' or 'competitor'
-        
+
     Returns:
         Dictionary with 'text' and 'metadata' keys for system message
     """
     messages = {
-        'standard': 'No current information found. Web search returned no results for this time-sensitive query.',
-        'competitor': 'No current information about this external service could be found. Our knowledge base focuses on Milvus documentation.'
+        "standard": "No current information found. Web search returned no results for this time-sensitive query.",
+        "competitor": "No current information about this external service could be found. Our knowledge base focuses on Milvus documentation.",
     }
-    
-    metadata_types = {
-        'standard': 'no_web_results',
-        'competitor': 'no_web_results_competitor'
-    }
-    
+
+    metadata_types = {"standard": "no_web_results", "competitor": "no_web_results_competitor"}
+
     return {
-        'text': messages[message_type],
-        'metadata': f'{{"source": "system", "type": "{metadata_types[message_type]}"}}',
-        'source_type': 'system_message',
-        'url': ''
+        "text": messages[message_type],
+        "metadata": f'{{"source": "system", "type": "{metadata_types[message_type]}"}}',
+        "source_type": "system_message",
+        "url": "",
     }
 
 
@@ -795,6 +847,10 @@ def create_rag_graph(
         question = state.get("question", "")
         logger.info(f"[TOPIC_CHECK] Processing: {question[:50]}...")
 
+        # Record node execution start
+        node_timer = NodeTiming(node_name="topic_check")
+        node_metrics = NodeMetrics(node_name="topic_check")
+
         is_in_scope = _is_question_in_scope(question, ollama_client, settings)
 
         result = ValidationResult(
@@ -806,6 +862,11 @@ def create_rag_graph(
         )
 
         state["topic_result"] = result
+
+        # Record metrics
+        node_metrics.record_success() if is_in_scope else node_metrics.record_failure()
+        graph_metrics.add_node_metrics("topic_check", node_metrics)
+
         logger.info(f"[TOPIC_CHECK] Result: is_valid={result.is_valid}")
 
         return state
@@ -815,6 +876,10 @@ def create_rag_graph(
         """Check for security attacks and malicious input using LLM classification."""
         question = state.get("question", "")
         logger.info(f"[SECURITY_CHECK] Processing: {question[:50]}...")
+
+        # Record node execution start
+        node_timer = NodeTiming(node_name="security_check")
+        node_metrics = NodeMetrics(node_name="security_check")
 
         # Use LLM-based classification with pattern matching fallback
         is_attack = _is_security_attack(question, ollama_client, settings)
@@ -826,6 +891,11 @@ def create_rag_graph(
         )
 
         state["security_result"] = result
+
+        # Record metrics
+        node_metrics.record_success() if not is_attack else node_metrics.record_failure()
+        graph_metrics.add_node_metrics("security_check", node_metrics)
+
         logger.info(f"[SECURITY_CHECK] Result: is_valid={result.is_valid}")
 
         return state
@@ -839,6 +909,10 @@ def create_rag_graph(
         top_k = state.get("top_k", 5)
 
         logger.info(f"[RAG_WORKER] Processing: {question[:50]}...")
+
+        # Record node execution start
+        node_timer = NodeTiming(node_name="rag_worker")
+        node_metrics = NodeMetrics(node_name="rag_worker")
 
         # Retrieve documents from knowledge base
         retrieval_result = retrieval_tool(
@@ -854,14 +928,16 @@ def create_rag_graph(
         # Triggers: (1) time-sensitive query (has "latest", "recent", etc), (2) manual supplement enabled,
         #           (3) empty cache fallback, (4) KB confidence is low, (5) competitor database query
         is_time_sensitive = state.get("is_time_sensitive", False)
-        
+
         # Check if this is a competitor database query that requires web search
         is_competitor_query = _is_competitor_database_query(question)
-        
+
         should_add_web_supplement = (
             settings.enable_web_search_supplement or is_time_sensitive
         )  # Auto-enable for time-sensitive
-        should_add_web_fallback = state.get("enable_web_search_fallback", False) or is_competitor_query
+        should_add_web_fallback = (
+            state.get("enable_web_search_fallback", False) or is_competitor_query
+        )
 
         logger.info(
             f"[RAG_WORKER_WEB_SEARCH_DEBUG] is_time_sensitive={is_time_sensitive}, "
@@ -891,23 +967,29 @@ def create_rag_graph(
                     )
                 else:
                     web_search_query = question  # Use question directly for supplement mode
-                
-                web_results, web_search_status = web_search.search(query=web_search_query, max_results=3)
+
+                web_results, web_search_status = web_search.search(
+                    query=web_search_query, max_results=3
+                )
 
                 # Check if web search is unavailable due to API issues
-                if web_search_status == 'api_unavailable':
-                    logger.warning("[RAG_WORKER] Web search features unavailable due to API quota/authentication issues")
-                    
+                if web_search_status == "api_unavailable":
+                    logger.warning(
+                        "[RAG_WORKER] Web search features unavailable due to API quota/authentication issues"
+                    )
+
                     # For competitor database queries: return only system message, don't use KB
                     if is_competitor_query:
-                        logger.info("[RAG_WORKER] Competitor database query with web search unavailable - returning only system message")
+                        logger.info(
+                            "[RAG_WORKER] Competitor database query with web search unavailable - returning only system message"
+                        )
                         system_message = _create_web_search_unavailable_message()
-                        
+
                         # Return state with only system message, no KB fallback for competitors
                         rag_result = RAGResult(
                             answer="",  # Empty content - system message will display in UI
                             sources=[system_message],
-                            confidence_score=0.0
+                            confidence_score=0.0,
                         )
                         state["rag_result"] = rag_result
                         state["retrieval_metrics"] = {
@@ -917,14 +999,16 @@ def create_rag_graph(
                         return state
                     # For time-sensitive queries: return ONLY system error message, no KB fallback
                     elif is_time_sensitive:
-                        logger.info("[RAG_WORKER] Time-sensitive query with web search failure - returning only system message")
-                        system_message = _create_web_search_unavailable_message('standard')
-                        
+                        logger.info(
+                            "[RAG_WORKER] Time-sensitive query with web search failure - returning only system message"
+                        )
+                        system_message = _create_web_search_unavailable_message("standard")
+
                         # Return state with only system message
                         rag_result = RAGResult(
                             answer="",  # Empty content - system message will display in UI
                             sources=[system_message],
-                            confidence_score=0.0
+                            confidence_score=0.0,
                         )
                         state["rag_result"] = rag_result
                         state["retrieval_metrics"] = {
@@ -934,20 +1018,22 @@ def create_rag_graph(
                         return state
                     else:
                         # For non-time-sensitive, non-competitor queries: add system message and continue with KB
-                        kb_sources.append(_create_web_search_unavailable_message('kb_fallback'))
+                        kb_sources.append(_create_web_search_unavailable_message("kb_fallback"))
                 elif len(web_results) == 0:
                     logger.info("[RAG_WORKER] Web search returned no results")
-                    
+
                     # For competitor database queries with no web results: return informative message
                     if is_competitor_query:
-                        logger.info("[RAG_WORKER] Competitor database query with no web results - returning informative message")
-                        system_message = _create_no_web_results_message('competitor')
-                        
+                        logger.info(
+                            "[RAG_WORKER] Competitor database query with no web results - returning informative message"
+                        )
+                        system_message = _create_no_web_results_message("competitor")
+
                         # Return state with only informative message
                         rag_result = RAGResult(
                             answer="",  # Empty content - system message will display in UI
                             sources=[system_message],
-                            confidence_score=0.0
+                            confidence_score=0.0,
                         )
                         state["rag_result"] = rag_result
                         state["retrieval_metrics"] = {
@@ -957,14 +1043,16 @@ def create_rag_graph(
                         return state
                     # For time-sensitive queries with no web results: return system guidance message
                     elif is_time_sensitive:
-                        logger.info("[RAG_WORKER] Time-sensitive query with no web results - returning guidance message")
-                        system_message = _create_no_web_results_message('standard')
-                        
+                        logger.info(
+                            "[RAG_WORKER] Time-sensitive query with no web results - returning guidance message"
+                        )
+                        system_message = _create_no_web_results_message("standard")
+
                         # Return state with only system message
                         rag_result = RAGResult(
                             answer="",  # Empty content - system message will display in UI
                             sources=[system_message],
-                            confidence_score=0.0
+                            confidence_score=0.0,
                         )
                         state["rag_result"] = rag_result
                         state["retrieval_metrics"] = {
@@ -975,16 +1063,15 @@ def create_rag_graph(
 
                 # Build context from web results
                 web_context_parts = []
-                
+
                 # VALIDATION: Filter web results for relevance (prevent hallucinations)
                 # In fallback mode, only use results that are relevant to Milvus/vector DBs
-                if web_search_status == 'api_unavailable':
+                if web_search_status == "api_unavailable":
                     # Skip web result processing since API is unavailable
-                    pass  
+                    pass
                 elif should_add_web_fallback:
                     filtered_results = [
-                        r for r in web_results 
-                        if _is_web_result_relevant_to_milvus(r)
+                        r for r in web_results if _is_web_result_relevant_to_milvus(r)
                     ]
                     if len(filtered_results) < len(web_results):
                         logger.info(
@@ -1020,7 +1107,7 @@ def create_rag_graph(
                 # If fallback mode, rebuild context from web results
                 if should_add_web_fallback:
                     context_text = "\n".join(web_context_parts)
-                    
+
                     # SAFEGUARD: If no relevant web results found in fallback mode, return "not found" response
                     # This prevents hallucinations when falling back to web search with no results
                     if not web_context_parts:
@@ -1028,8 +1115,10 @@ def create_rag_graph(
                             "[RAG_WORKER] ⚠️ Web search fallback found NO relevant results - "
                             "returning 'not found' response to prevent hallucinations"
                         )
-                        context_text = "No relevant information found in knowledge base or web search."
-                    
+                        context_text = (
+                            "No relevant information found in knowledge base or web search."
+                        )
+
                     logger.info(
                         f"[RAG_WORKER] Rebuilt context from {len(web_results)} web results (fallback)"
                     )
@@ -1072,6 +1161,10 @@ def create_rag_graph(
             "retrieval_time": retrieval_result["retrieval_time"],
         }
 
+        # Record metrics
+        node_metrics.record_success()
+        graph_metrics.add_node_metrics("rag_worker", node_metrics)
+
         logger.info(f"[RAG_WORKER] Generated answer with {len(rag_result.sources)} total sources")
 
         return state
@@ -1082,7 +1175,7 @@ def create_rag_graph(
         # Use the same web search unavailable message for consistency
         # Many out-of-scope queries are legitimate questions that would benefit from web search
         web_unavailable_msg = _create_web_search_unavailable_message()
-        state["final_answer"] = web_unavailable_msg['text']
+        state["final_answer"] = web_unavailable_msg["text"]
         state["final_sources"] = []
         state["final_confidence"] = 0.0
         logger.info("[REJECTION] Out-of-scope query → returning web search unavailable message")
@@ -1367,18 +1460,19 @@ class StrandsGraphRAGAgent:
                 if not isinstance(result, dict):
                     logger.warning(f"Unexpected result type: {type(result)}, skipping")
                     continue
-                    
+
                 text = result.get("text", "")
                 metadata = result.get("metadata", {})
-                
+
                 # Handle metadata that might be stored as JSON string
                 if isinstance(metadata, str):
                     try:
                         import json
+
                         metadata = json.loads(metadata)
                     except (json.JSONDecodeError, TypeError):
                         metadata = {}
-                        
+
                 distance = result.get("distance", 1.0)
 
                 context_chunks.append(text)
@@ -1560,30 +1654,42 @@ class StrandsGraphRAGAgent:
         # CRITICAL: Check competitor queries BEFORE cache - they need web search first
         is_competitor_query = _is_competitor_database_query(question)
         if is_competitor_query:
-            logger.info(f"[COMPETITOR_QUERY] Detected competitor database query in answer_question: {question[:50]}...")
-            
+            logger.info(
+                f"[COMPETITOR_QUERY] Detected competitor database query in answer_question: {question[:50]}..."
+            )
+
             # For competitor queries, web search is REQUIRED - check availability first
             if not self.web_search:
-                logger.warning("[COMPETITOR_QUERY] Web search unavailable - returning error message")
+                logger.warning(
+                    "[COMPETITOR_QUERY] Web search unavailable - returning error message"
+                )
                 error_dict = _create_web_search_unavailable_message()
-                return error_dict['text'], [error_dict]
+                return error_dict["text"], [error_dict]
 
             # Test web search availability by attempting a search
             try:
                 web_search_query = self._generate_web_search_query(question)
-                web_results, web_search_status = self.web_search.search(query=web_search_query, max_results=3)
-                
-                if web_search_status == 'api_unavailable':
-                    logger.warning("[COMPETITOR_QUERY] Web search API unavailable - returning error message")
+                web_results, web_search_status = self.web_search.search(
+                    query=web_search_query, max_results=3
+                )
+
+                if web_search_status == "api_unavailable":
+                    logger.warning(
+                        "[COMPETITOR_QUERY] Web search API unavailable - returning error message"
+                    )
                     error_dict = _create_web_search_unavailable_message()
-                    return error_dict['text'], [error_dict]
+                    return error_dict["text"], [error_dict]
             except Exception as e:
-                logger.warning(f"[COMPETITOR_QUERY] Web search test failed: {e} - returning error message")
+                logger.warning(
+                    f"[COMPETITOR_QUERY] Web search test failed: {e} - returning error message"
+                )
                 error_dict = _create_web_search_unavailable_message()
-                return error_dict['text'], [error_dict]
+                return error_dict["text"], [error_dict]
 
             # Web search is available - continue with processing (skip cache)
-            logger.info("[COMPETITOR_QUERY] Web search available - continuing with web search processing")
+            logger.info(
+                "[COMPETITOR_QUERY] Web search available - continuing with web search processing"
+            )
 
         # Pre-declare time-sensitive variable for use throughout method
         is_time_sensitive = self._is_time_sensitive_query(question)
@@ -1727,36 +1833,46 @@ class StrandsGraphRAGAgent:
                     logger.info(
                         f"[TIME_SENSITIVE_QUERY] Detected time-sensitive IN-SCOPE query: {question[:50]}..."
                     )
-                    
+
                     # For time-sensitive queries, web search is REQUIRED - check availability first
                     if not self.web_search:
-                        logger.warning("[TIME_SENSITIVE_QUERY] Web search unavailable - returning error message")
+                        logger.warning(
+                            "[TIME_SENSITIVE_QUERY] Web search unavailable - returning error message"
+                        )
                         error_dict = _create_web_search_unavailable_message()
                         execution_path.append("time_sensitive_web_search_required")
-                        return error_dict['text'], [error_dict]
+                        return error_dict["text"], [error_dict]
 
                     # Test web search availability by attempting a search
                     try:
                         web_search_query = self._generate_web_search_query(question)
-                        web_results, web_search_status = self.web_search.search(query=web_search_query, max_results=3)
-                        
-                        if web_search_status == 'api_unavailable':
-                            logger.warning("[TIME_SENSITIVE_QUERY] Web search API unavailable - returning error message")
+                        web_results, web_search_status = self.web_search.search(
+                            query=web_search_query, max_results=3
+                        )
+
+                        if web_search_status == "api_unavailable":
+                            logger.warning(
+                                "[TIME_SENSITIVE_QUERY] Web search API unavailable - returning error message"
+                            )
                             error_dict = _create_web_search_unavailable_message()
                             execution_path.append("time_sensitive_web_search_unavailable")
-                            return error_dict['text'], [error_dict]
+                            return error_dict["text"], [error_dict]
                         else:
                             # Web search available - proceed with time-sensitive web search
-                            logger.info("[TIME_SENSITIVE_QUERY] Web search available - using web search for current info")
+                            logger.info(
+                                "[TIME_SENSITIVE_QUERY] Web search available - using web search for current info"
+                            )
                             # Return tuple format as expected by method signature
-                            answer, sources = self.answer_question_web_search_only(question, temperature, max_tokens)
+                            answer, sources = self.answer_question_web_search_only(
+                                question, temperature, max_tokens
+                            )
                             return answer, sources
-                            
+
                     except Exception as e:
                         logger.warning(f"[TIME_SENSITIVE_QUERY] Web search test failed: {e}")
                         error_dict = _create_web_search_unavailable_message()
                         execution_path.append("time_sensitive_web_search_error")
-                        return error_dict['text'], [error_dict]
+                        return error_dict["text"], [error_dict]
                 # ================================================================
                 # NODE 2: Security Check (Fast Model - Security Validation)
                 # ================================================================
@@ -1818,7 +1934,9 @@ class StrandsGraphRAGAgent:
                     # ================================================================
                     # CRITICAL: Use Python rag_worker for web search fallback OR time-sensitive queries
                     # (Strands agent doesn't support web search fallback logic)
-                    if state.get("enable_web_search_fallback", False) or state.get("is_time_sensitive", False):
+                    if state.get("enable_web_search_fallback", False) or state.get(
+                        "is_time_sensitive", False
+                    ):
                         if state.get("is_time_sensitive", False):
                             logger.info(
                                 "[RAG_WORKER] Using Python rag_worker for time-sensitive query "
@@ -2024,7 +2142,7 @@ class StrandsGraphRAGAgent:
     def _should_trigger_web_search_fallback(self, kb_sources: List[Dict]) -> bool:
         """Check if KB results are weak enough to trigger web search fallback.
 
-        This should only trigger when KB truly has no useful content, not just 
+        This should only trigger when KB truly has no useful content, not just
         when scores are mediocre. Users can manually trigger web search via button.
 
         Args:
@@ -2046,14 +2164,16 @@ class StrandsGraphRAGAgent:
         avg_relevance = sum(relevance_scores) / len(relevance_scores)
         max_relevance = max(relevance_scores)
         num_sources = len(kb_sources)
-        
+
         # More conservative fallback: only trigger if BOTH conditions are met:
         # 1. Average relevance is very low (below threshold)
         # 2. Even the best result is poor (below higher threshold) OR very few results
         very_poor_avg = avg_relevance < self.settings.web_search_fallback_threshold
-        very_poor_best = max_relevance < (self.settings.web_search_fallback_threshold + 0.1)  # +0.1 buffer
+        very_poor_best = max_relevance < (
+            self.settings.web_search_fallback_threshold + 0.1
+        )  # +0.1 buffer
         very_few_results = num_sources < 2
-        
+
         # Only fallback if average is poor AND (best result is also poor OR very few results)
         should_fallback = very_poor_avg and (very_poor_best or very_few_results)
 
@@ -2214,36 +2334,48 @@ class StrandsGraphRAGAgent:
             # CRITICAL: Check competitor queries BEFORE cache - they need web search first
             is_competitor_query = _is_competitor_database_query(question)
             if is_competitor_query:
-                logger.info(f"[COMPETITOR_QUERY] Detected competitor database query: {question[:50]}...")
-                
+                logger.info(
+                    f"[COMPETITOR_QUERY] Detected competitor database query: {question[:50]}..."
+                )
+
                 # For competitor queries, web search is REQUIRED - check availability first
                 if not self.web_search:
-                    logger.warning("[COMPETITOR_QUERY] Web search unavailable - returning error message")
-                    error_msg = _create_web_search_unavailable_message('competitor')
+                    logger.warning(
+                        "[COMPETITOR_QUERY] Web search unavailable - returning error message"
+                    )
+                    error_msg = _create_web_search_unavailable_message("competitor")
                     self._last_stream_sources = [error_msg]
-                    yield error_msg['text']
+                    yield error_msg["text"]
                     return
 
                 # Test web search availability by attempting a search
                 try:
                     web_search_query = self._generate_web_search_query(question)
-                    web_results, web_search_status = self.web_search.search(query=web_search_query, max_results=3)
-                    
-                    if web_search_status == 'api_unavailable':
-                        logger.warning("[COMPETITOR_QUERY] Web search API unavailable - returning error message")
-                        error_msg = _create_web_search_unavailable_message('competitor')
+                    web_results, web_search_status = self.web_search.search(
+                        query=web_search_query, max_results=3
+                    )
+
+                    if web_search_status == "api_unavailable":
+                        logger.warning(
+                            "[COMPETITOR_QUERY] Web search API unavailable - returning error message"
+                        )
+                        error_msg = _create_web_search_unavailable_message("competitor")
                         self._last_stream_sources = [error_msg]
-                        yield error_msg['text']
+                        yield error_msg["text"]
                         return
                 except Exception as e:
-                    logger.warning(f"[COMPETITOR_QUERY] Web search test failed: {e} - returning error message")
-                    error_msg = _create_web_search_unavailable_message('competitor')
+                    logger.warning(
+                        f"[COMPETITOR_QUERY] Web search test failed: {e} - returning error message"
+                    )
+                    error_msg = _create_web_search_unavailable_message("competitor")
                     self._last_stream_sources = [error_msg]
-                    yield error_msg['text']
+                    yield error_msg["text"]
                     return
 
                 # Web search is available - continue with processing (skip cache)
-                logger.info("[COMPETITOR_QUERY] Web search available - continuing with web search processing")
+                logger.info(
+                    "[COMPETITOR_QUERY] Web search available - continuing with web search processing"
+                )
 
             # CHECK RESPONSE CACHE (but skip for time-sensitive queries and competitor queries)
             elif self.response_cache and not is_time_sensitive and not is_competitor_query:
@@ -2277,14 +2409,14 @@ class StrandsGraphRAGAgent:
                             logger.info(
                                 f"✓ Cache hit! Retrieved in {elapsed * 1000:.0f}ms (streaming)"
                             )
-                            
+
                             # Mark sources as cached for proper UI badge detection
                             cached_sources = []
                             for source in sources:
                                 cached_source = source.copy()
                                 cached_source["source_type"] = "cached"  # Mark as cached for UI
                                 cached_sources.append(cached_source)
-                            
+
                             self._last_stream_sources = cached_sources
 
                             # Stream the cached answer in chunks for consistency
@@ -2321,38 +2453,48 @@ class StrandsGraphRAGAgent:
                 logger.info(
                     f"[TIME_SENSITIVE_QUERY] Detected time-sensitive IN-SCOPE query: {question[:50]}..."
                 )
-                
+
                 # For time-sensitive queries, web search is REQUIRED - check availability first
                 if not self.web_search:
-                    logger.warning("[TIME_SENSITIVE_QUERY] Web search unavailable - returning error message")
-                    error_msg = _create_web_search_unavailable_message('standard')
+                    logger.warning(
+                        "[TIME_SENSITIVE_QUERY] Web search unavailable - returning error message"
+                    )
+                    error_msg = _create_web_search_unavailable_message("standard")
                     self._last_stream_sources = [error_msg]
-                    yield error_msg['text']
+                    yield error_msg["text"]
                     return
 
                 # Test web search availability by attempting a search
                 try:
                     web_search_query = self._generate_web_search_query(question)
-                    web_results, web_search_status = self.web_search.search(query=web_search_query, max_results=3)
-                    
-                    if web_search_status == 'api_unavailable':
-                        logger.warning("[TIME_SENSITIVE_QUERY] Web search API unavailable - returning error message")
+                    web_results, web_search_status = self.web_search.search(
+                        query=web_search_query, max_results=3
+                    )
+
+                    if web_search_status == "api_unavailable":
+                        logger.warning(
+                            "[TIME_SENSITIVE_QUERY] Web search API unavailable - returning error message"
+                        )
                         error_msg = _create_web_search_unavailable_message()
                         self._last_stream_sources = [error_msg]
-                        yield error_msg['text']
+                        yield error_msg["text"]
                         return
                     else:
                         # Web search available - proceed with time-sensitive web search
-                        logger.info("[TIME_SENSITIVE_QUERY] Web search available - using web search for current info")
-                        async for chunk in self.stream_answer_web_search_only(question, temperature, max_tokens):
+                        logger.info(
+                            "[TIME_SENSITIVE_QUERY] Web search available - using web search for current info"
+                        )
+                        async for chunk in self.stream_answer_web_search_only(
+                            question, temperature, max_tokens
+                        ):
                             yield chunk
                         return
-                        
+
                 except Exception as e:
                     logger.warning(f"[TIME_SENSITIVE_QUERY] Web search test failed: {e}")
-                    error_msg = _create_web_search_unavailable_message('standard')
+                    error_msg = _create_web_search_unavailable_message("standard")
                     self._last_stream_sources = [error_msg]
-                    yield error_msg['text']
+                    yield error_msg["text"]
                     return
             # If not time-sensitive, continue with normal processing
 
@@ -2369,9 +2511,16 @@ class StrandsGraphRAGAgent:
                 self.web_search and sources and self._should_trigger_web_search_fallback(sources)
             )
             should_add_time_sensitive = is_time_sensitive and self.web_search
-            should_add_competitor_search = is_competitor_query and self.web_search  # Already checked availability above
+            should_add_competitor_search = (
+                is_competitor_query and self.web_search
+            )  # Already checked availability above
 
-            if self.web_search and (should_add_web_supplement or should_add_web_fallback or should_add_time_sensitive or should_add_competitor_search):
+            if self.web_search and (
+                should_add_web_supplement
+                or should_add_web_fallback
+                or should_add_time_sensitive
+                or should_add_competitor_search
+            ):
                 try:
                     if should_add_competitor_search:
                         logger.info(
@@ -2389,39 +2538,51 @@ class StrandsGraphRAGAgent:
                         logger.info("[STREAM] Adding web search supplementary sources...")
 
                     web_search_query = self._generate_web_search_query(question)
-                    web_results, web_search_status = self.web_search.search(query=web_search_query, max_results=3)
+                    web_results, web_search_status = self.web_search.search(
+                        query=web_search_query, max_results=3
+                    )
 
-                    if web_search_status == 'api_unavailable':
-                        logger.warning("[STREAM] Web search features unavailable due to API quota/authentication issues")
+                    if web_search_status == "api_unavailable":
+                        logger.warning(
+                            "[STREAM] Web search features unavailable due to API quota/authentication issues"
+                        )
                         # Add system message about web search being unavailable
-                        system_message = _create_web_search_unavailable_message('standard')
-                        
+                        system_message = _create_web_search_unavailable_message("standard")
+
                         # For competitor queries or time-sensitive queries: return ONLY system message, no KB content
                         if should_add_competitor_search or should_add_time_sensitive:
                             if should_add_competitor_search:
-                                logger.info("[STREAM] Competitor query with web search failure - returning only system message")
+                                logger.info(
+                                    "[STREAM] Competitor query with web search failure - returning only system message"
+                                )
                                 # Since 'competitor' and 'standard' now return identical messages, no need to recreate
                             else:
-                                logger.info("[STREAM] Time-sensitive query with web search failure - returning only system message")
+                                logger.info(
+                                    "[STREAM] Time-sensitive query with web search failure - returning only system message"
+                                )
                             self._last_stream_sources = [system_message]
-                            yield system_message['text']
+                            yield system_message["text"]
                             return  # Don't generate any content
                         else:
                             # For non-time-sensitive, non-competitor queries: add system message and continue with KB
                             sources.append(system_message)
                     elif len(web_results) == 0:
                         logger.info("[STREAM] Web search returned no results")
-                        
+
                         # For competitor queries or time-sensitive queries with no web results: return appropriate message
                         if should_add_competitor_search or should_add_time_sensitive:
                             if should_add_competitor_search:
-                                logger.info("[STREAM] Competitor query with no web results - returning informative message")
-                                guidance_message = _create_no_web_results_message('competitor')
+                                logger.info(
+                                    "[STREAM] Competitor query with no web results - returning informative message"
+                                )
+                                guidance_message = _create_no_web_results_message("competitor")
                             else:
-                                logger.info("[STREAM] Time-sensitive query with no web results - returning guidance message")
-                                guidance_message = _create_no_web_results_message('standard')
+                                logger.info(
+                                    "[STREAM] Time-sensitive query with no web results - returning guidance message"
+                                )
+                                guidance_message = _create_no_web_results_message("standard")
                             self._last_stream_sources = [guidance_message]
-                            yield guidance_message['text']
+                            yield guidance_message["text"]
                             return  # Don't generate any content
                     else:
                         for web_result in web_results:
@@ -2444,7 +2605,7 @@ class StrandsGraphRAGAgent:
 
                 except Exception as e:
                     logger.warning(f"[STREAM] Web search failed (non-critical): {e}")
-                    # For time-sensitive queries, if both KB and web search fail, 
+                    # For time-sensitive queries, if both KB and web search fail,
                     # provide a helpful response instead of generic fallback
                     if is_time_sensitive and not context_chunks:
                         logger.info("[STREAM] Time-sensitive query failed, providing guidance...")
@@ -2454,11 +2615,13 @@ class StrandsGraphRAGAgent:
                             "or official announcements from vector database companies like Milvus, Pinecone, Weaviate, and Qdrant. "
                             "However, I can help with general concepts about vector databases based on my knowledge."
                         ]
-                        sources = [{
-                            "source_type": "system_message", 
-                            "text": "System guidance for time-sensitive queries",
-                            "distance": 0.0
-                        }]
+                        sources = [
+                            {
+                                "source_type": "system_message",
+                                "text": "System guidance for time-sensitive queries",
+                                "distance": 0.0,
+                            }
+                        ]
 
             # Construct RAG prompt
             context_text = "\n".join([f"- {chunk}" for chunk in context_chunks])
@@ -2553,7 +2716,7 @@ class StrandsGraphRAGAgent:
 
             logger.info(f"[STREAM_NO_CACHE] Answering: {question[:60]}")
 
-            # Check if query is time-sensitive 
+            # Check if query is time-sensitive
             is_time_sensitive = self._is_time_sensitive_query(question)
             if is_time_sensitive:
                 logger.info(f"[STREAM_NO_CACHE] Time-sensitive query detected: {question[:50]}...")
@@ -2561,36 +2724,48 @@ class StrandsGraphRAGAgent:
             # CRITICAL: Check competitor queries BEFORE processing - they need web search first
             is_competitor_query = _is_competitor_database_query(question)
             if is_competitor_query:
-                logger.info(f"[COMPETITOR_QUERY] Detected competitor database query in stream_answer_no_cache: {question[:50]}...")
-                
+                logger.info(
+                    f"[COMPETITOR_QUERY] Detected competitor database query in stream_answer_no_cache: {question[:50]}..."
+                )
+
                 # For competitor queries, web search is REQUIRED - check availability first
                 if not self.web_search:
-                    logger.warning("[COMPETITOR_QUERY] Web search unavailable - returning error message")
-                    error_msg = _create_web_search_unavailable_message('competitor')
+                    logger.warning(
+                        "[COMPETITOR_QUERY] Web search unavailable - returning error message"
+                    )
+                    error_msg = _create_web_search_unavailable_message("competitor")
                     self._last_stream_sources = [error_msg]
-                    yield error_msg['text']
+                    yield error_msg["text"]
                     return
 
                 # Test web search availability by attempting a search
                 try:
                     web_search_query = self._generate_web_search_query(question)
-                    web_results, web_search_status = self.web_search.search(query=web_search_query, max_results=3)
-                    
-                    if web_search_status == 'api_unavailable':
-                        logger.warning("[COMPETITOR_QUERY] Web search API unavailable - returning error message")
-                        error_msg = _create_web_search_unavailable_message('competitor')
+                    web_results, web_search_status = self.web_search.search(
+                        query=web_search_query, max_results=3
+                    )
+
+                    if web_search_status == "api_unavailable":
+                        logger.warning(
+                            "[COMPETITOR_QUERY] Web search API unavailable - returning error message"
+                        )
+                        error_msg = _create_web_search_unavailable_message("competitor")
                         self._last_stream_sources = [error_msg]
-                        yield error_msg['text']
+                        yield error_msg["text"]
                         return
                 except Exception as e:
-                    logger.warning(f"[COMPETITOR_QUERY] Web search test failed: {e} - returning error message")
-                    error_msg = _create_web_search_unavailable_message('competitor')
+                    logger.warning(
+                        f"[COMPETITOR_QUERY] Web search test failed: {e} - returning error message"
+                    )
+                    error_msg = _create_web_search_unavailable_message("competitor")
                     self._last_stream_sources = [error_msg]
-                    yield error_msg['text']
+                    yield error_msg["text"]
                     return
 
                 # Web search is available - continue with processing
-                logger.info("[COMPETITOR_QUERY] Web search available - continuing with web search processing")
+                logger.info(
+                    "[COMPETITOR_QUERY] Web search available - continuing with web search processing"
+                )
 
             # SECURITY CHECK
             if _is_security_attack(question):
@@ -2617,9 +2792,16 @@ class StrandsGraphRAGAgent:
                 self.web_search and sources and self._should_trigger_web_search_fallback(sources)
             )
             should_add_time_sensitive = is_time_sensitive and self.web_search
-            should_add_competitor_search = is_competitor_query and self.web_search  # Already checked availability above
+            should_add_competitor_search = (
+                is_competitor_query and self.web_search
+            )  # Already checked availability above
 
-            if self.web_search and (should_add_web_supplement or should_add_web_fallback or should_add_time_sensitive or should_add_competitor_search):
+            if self.web_search and (
+                should_add_web_supplement
+                or should_add_web_fallback
+                or should_add_time_sensitive
+                or should_add_competitor_search
+            ):
                 try:
                     if should_add_competitor_search:
                         logger.info(
@@ -2637,13 +2819,17 @@ class StrandsGraphRAGAgent:
                         logger.info("[STREAM_NO_CACHE] Adding web search supplementary sources...")
 
                     web_search_query = self._generate_web_search_query(question)
-                    web_results, web_search_status = self.web_search.search(query=web_search_query, max_results=3)
+                    web_results, web_search_status = self.web_search.search(
+                        query=web_search_query, max_results=3
+                    )
 
                     # Check if web search is unavailable due to API issues
-                    if web_search_status == 'api_unavailable':
-                        logger.warning("[STREAM_NO_CACHE] Web search features unavailable due to API quota/authentication issues")
+                    if web_search_status == "api_unavailable":
+                        logger.warning(
+                            "[STREAM_NO_CACHE] Web search features unavailable due to API quota/authentication issues"
+                        )
                         # Add system message about web search being unavailable
-                        sources.append(_create_web_search_unavailable_message('standard'))
+                        sources.append(_create_web_search_unavailable_message("standard"))
                     else:
                         for web_result in web_results:
                             sources.append(
@@ -2668,27 +2854,33 @@ class StrandsGraphRAGAgent:
                     # If web search fails and we have no KB results for time-sensitive query,
                     # provide helpful guidance
                     if is_time_sensitive and not context_chunks:
-                        logger.info("[STREAM_NO_CACHE] Time-sensitive query failed, providing guidance...")
+                        logger.info(
+                            "[STREAM_NO_CACHE] Time-sensitive query failed, providing guidance..."
+                        )
                         context_chunks = [
                             "I don't have access to real-time information about the latest trends in vector databases. "
                             "For the most current information, I'd recommend checking recent blog posts, news articles, "
                             "or official announcements from vector database companies like Milvus, Pinecone, Weaviate, and Qdrant. "
                             "However, I can help with general concepts about vector databases based on my knowledge."
                         ]
-                        sources = [{
-                            "source_type": "system_message", 
-                            "text": "System guidance for time-sensitive queries",
-                            "distance": 0.0
-                        }]
+                        sources = [
+                            {
+                                "source_type": "system_message",
+                                "text": "System guidance for time-sensitive queries",
+                                "distance": 0.0,
+                            }
+                        ]
                     elif not context_chunks:
                         context_chunks = [
                             "I don't have access to real-time information, but I can help with general vector database concepts and Milvus documentation."
                         ]
-                        sources = [{
-                            "source_type": "system_message", 
-                            "text": "System guidance for time-sensitive queries",
-                            "distance": 0.0
-                        }]
+                        sources = [
+                            {
+                                "source_type": "system_message",
+                                "text": "System guidance for time-sensitive queries",
+                                "distance": 0.0,
+                            }
+                        ]
 
             # Build RAG prompt
             context_text = "\n".join([f"- {chunk}" for chunk in context_chunks])
@@ -2780,13 +2972,17 @@ class StrandsGraphRAGAgent:
                     raise ValueError("Web search client is not available")
 
                 web_search_query = self._generate_web_search_query(question)
-                web_results, web_search_status = await asyncio.to_thread(self.web_search.search, web_search_query, 5)
+                web_results, web_search_status = await asyncio.to_thread(
+                    self.web_search.search, web_search_query, 5
+                )
 
                 # Check if web search is unavailable due to API issues
-                if web_search_status == 'api_unavailable':
-                    logger.warning("[ASYNC_STREAM] Web search features unavailable due to API quota/authentication issues")
+                if web_search_status == "api_unavailable":
+                    logger.warning(
+                        "[ASYNC_STREAM] Web search features unavailable due to API quota/authentication issues"
+                    )
                     # Return error message for async streams - yield plain text like other streaming methods
-                    stream_note_msg = _create_web_search_unavailable_message('stream_note')
+                    stream_note_msg = _create_web_search_unavailable_message("stream_note")
                     yield f"\n\n{stream_note_msg['text']}\n\n"
                 elif len(web_results) > 0:
                     for idx, web_result in enumerate(web_results, 1):

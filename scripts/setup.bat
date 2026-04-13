@@ -80,8 +80,8 @@ echo 2. Start Ollama (in a separate terminal):
 echo    ollama serve
 echo.
 echo 3. Pull Ollama models (in another terminal):
-echo    ollama pull mistral
-echo    ollama pull all-minilm
+echo    ollama pull qwen2.5:0.5b
+echo    ollama pull nomic-embed-text:v1.5
 echo.
 echo 4. Run examples:
 echo    python examples/basic_rag.py

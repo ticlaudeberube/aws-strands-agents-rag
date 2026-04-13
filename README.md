@@ -8,13 +8,12 @@ A high-performance Retrieval-Augmented Generation (RAG) system using AWS Strands
 
 | Category | Documents |
 |----------|-----------|
-| **Getting Started** | [Setup Guide](docs/GETTING_STARTED.md) • [Configuration](docs/GETTING_STARTED.md#configuration) |
-| **Architecture** | [System Design](docs/ARCHITECTURE.md) • [Query Routing](docs/QUERY_ROUTING.md) • [Data Flow](docs/ARCHITECTURE.md#data-flow) • [Caching](docs/CACHING_STRATEGY.md) • [Cache Improvements](docs/CACHING_STRATEGY_IMPROVEMENTS.md) • [AWS Deployment](docs/AWS_ARCHITECTURE.md) • [Chat + Skills Flow](docs/CHAT_REQUEST_SKILLS_FLOW.md) |
-| **Development** | [Code Examples](docs/DEVELOPMENT.md) • [API Reference](docs/API_SERVER.md) • [Strands Reference](docs/STRANDS_QUICK_REFERENCE.md) • [Web Search](docs/WEB_SEARCH_INTEGRATION.md) |
-| **Operations** | [React Deployment](docs/REACT_DEPLOYMENT.md) • [Docker Setup](docker/README.md) • [Troubleshooting](docs/GETTING_STARTED.md#troubleshooting) • [**Production Readiness**](docs/PRODUCTION_READINESS.md) |
-| **CI/CD** | [GitHub Actions Setup](docs/GITHUB_ACTIONS_SETUP.md) |
-| **Performance** | [Model Comparison](docs/MODEL_PERFORMANCE_COMPARISON.md) • [Optimization](docs/LATENCY_OPTIMIZATION.md) • [Tips](docs/LATENCY_OPTIMIZATION.md#performance-tips) |
-| **Updates** | [Recent Changes](docs/CHANGELOG_RECENT.md) |
+| **🚀 Quick Start** | [Implementation Status](IMPLEMENTATION_STATUS.md) • [Setup Guide](docs/GETTING_STARTED.md) • [Developer Guide](docs/DEVELOPER_GUIDE.md) • [Infrastructure Status](docs/INFRASTRUCTURE_IMPLEMENTATION_STATUS.md) |
+| **🏗️ Architecture** | [Complete Implementation](docs/IMPLEMENTATION_ARCHITECTURE.md) • [System Design](docs/ARCHITECTURE.md) • [Query Routing](docs/QUERY_ROUTING.md) |
+| **👩‍💻 Development** | [API Reference](docs/DEVELOPER_GUIDE.md) • [Code Examples](docs/DEVELOPMENT.md) • [Strands Reference](docs/STRANDS_QUICK_REFERENCE.md) |
+| **⚡ Performance** | [Optimization Guide](docs/LATENCY_OPTIMIZATION.md) • [Model Comparison](docs/MODEL_PERFORMANCE_COMPARISON.md) • [Caching Strategy](docs/CACHING_STRATEGY.md) |
+| **🚀 Deployment** | [Production Readiness](docs/PRODUCTION_READINESS.md) • [React UI](docs/REACT_DEPLOYMENT.md) • [AWS Architecture](docs/AWS_ARCHITECTURE.md) |
+| **📋 Complete Index** | [All Documentation](docs/INDEX.md) |
 
 ## Architecture Overview
 

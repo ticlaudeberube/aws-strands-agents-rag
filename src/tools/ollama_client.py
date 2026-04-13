@@ -1,12 +1,13 @@
 """Ollama integration for embeddings and LLM."""
 
+import logging
 import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import List, Optional
+
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-import logging
-from typing import List, Optional
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from src.config.settings import get_settings
 
@@ -328,6 +329,10 @@ class OllamaClient:
 
             # Stream chunks as they arrive
             # Ollama returns newline-delimited JSON objects
+            chunk_count = 0
+            empty_chunk_count = 0
+            total_length = 0
+            
             for line in response.iter_lines():
                 if line:
                     try:
@@ -337,14 +342,36 @@ class OllamaClient:
 
                         # Extract the response chunk from the JSON
                         chunk = chunk_data.get("response", "")
+                        is_done = chunk_data.get("done", False)
+                        
                         if chunk:
+                            chunk_count += 1
+                            total_length += len(chunk)
                             yield chunk
+                        else:
+                            empty_chunk_count += 1
+                            
+                        # Log completion info
+                        if is_done:
+                            logger.info(
+                                f"[OLLAMA_STREAM] Stream complete: {chunk_count} chunks, "
+                                f"{empty_chunk_count} empty chunks, {total_length} total chars from model '{model}'"
+                            )
                     except json.JSONDecodeError as e:
                         logger.debug(f"Failed to parse JSON chunk: {e}")
                         continue
                     except Exception as e:
                         logger.debug(f"Failed to process chunk: {e}")
                         continue
+            
+            # Check if we got no chunks at all
+            if chunk_count == 0:
+                logger.warning(
+                    f"[OLLAMA_STREAM] No content generated! "
+                    f"Received {empty_chunk_count} empty chunks from model '{model}'. "
+                    f"This usually means the model is not generating responses. "
+                    f"Check: (1) Ollama is running, (2) Model '{model}' is loaded, (3) Compute capacity"
+                )
         except requests.exceptions.ConnectionError as e:
             logger.error(
                 f"❌ Cannot connect to Ollama at {self.host}. Make sure Ollama is running: ollama serve"

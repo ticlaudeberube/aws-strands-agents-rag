@@ -10,41 +10,63 @@ The AWS Strands Agents RAG system implements a clean **three-tier answer archite
 
 ## Three-Tier Answer Architecture
 
-The system implements a clean three-tier approach to answering questions:
+The system implements a clean three-tier approach to answering questions with intelligent routing:
 
 ```
-┌─────────────────────────────────────┐
-│ User Question                       │
-└────────────┬────────────────────────┘
+┌──────────────────────────────────────┐
+│ User Question                        │
+└────────────┬─────────────────────────┘
              │
-     ┌───────▼────────┐
-     │ Tier 1: Cache  │ (<50ms)
-     │ • Semantic sim │ response_cache
-     │ • Entity val   │
-     │ • Pre-warmed   │
-     └───────┬────────┘
-             │ if no hit
-     ┌───────▼─────────────┐
-     │ Tier 2: KB Search   │ (1-2s)
-     │ • Milvus semantic   │ Explicit path
-     │ • LLM generation    │ (no web)
-     └───────┬─────────────┘
-             │ if user requests web
-     ┌───────▼──────────────┐
-     │ Tier 3: Web Search   │ (5-15s)
-     │ • Tavily API         │ Globe icon 🌐
-     │ • Explicit only      │ force_web_search=true
-     └──────────────────────┘
+      ┌──────▼─────────────────────┐
+      │ Detect Time-Sensitive?      │ Temporal keywords:
+      │ (latest, trends, 2024...)   │ "latest", "2024", "current", etc.
+      └──────┬────────┬─────────────┘
+             │        │ YES → Skip cache
+             │        └─────────────────────┐
+             NO                             │
+             │                              │
+     ┌───────▼────────┐      ┌──────────────▼──────────┐
+     │ Tier 1: Cache  │      │ Tier 2: Fresh KB Search │
+     │ (<50ms)        │      │ (1-2s, no cache)        │
+     │ • Semantic sim │      │ • Milvus retrieval      │
+     │ • Entity val   │      │ • LLM generation        │
+     │ • Pre-warmed   │      └────────┬─────────────────┘
+     └───────┬────────┘               │
+             │                        │
+      ┌──────▼──────────┐    ┌────────▼──────────┐
+      │ Cache Hit?      │    │ Answer Quality OK? │
+      │ With Content    │    │ If empty/weak:     │
+      └──┬──────────┬───┘    │ Trigger web search │
+    YES  │ NO      │         └────────┬───────────┘
+         │ or      │                  │
+         │ EMPTY   │         ┌────────▼──────────┐
+         │ ────────┼────────→│ Tier 3: Web Search│
+     ┌───▼────┐    │         │ (5-15s, Tavily)   │
+     │ Return │    │         │ • Query Tavily API│
+     │ Cached │    │         │ • Synthesize web  │
+     │ Answer │    │         │ • Cite sources    │
+     └────────┘    │         └───────────────────┘
+                   │
+      ┌────────────▼──────────┐
+      │ Tier 2: KB Search     │
+      │ (1-2s, full query)    │
+      │ • Milvus retrieval    │
+      │ • LLM generation      │
+      └───────────────────────┘
 ```
 
 ### Tier 1: Cache Hits (<50ms)
-**When triggered**: Question matches in response cache (semantic similarity with entity validation)
+**When triggered**: Question matches in response cache (semantic similarity with entity validation) AND answer is not empty
+
 **What happens**:
-1. Generate embedding for question
-2. Search response_cache collection in Milvus
-3. Check semantic similarity (distance ≥ 0.92)
-4. Validate entity match (same product)
-5. Return cached answer if both conditions met
+1. Check if query is time-sensitive (skip cache if true)
+2. Generate embedding for question
+3. Search response_cache collection in Milvus
+4. Check semantic similarity (distance ≥ 0.92)
+5. Validate entity match (same product)
+6. **NEW**: Check if cached answer is empty
+   - If empty: Trigger web search fallback (see Tier 3)
+   - If content exists: Return cached answer
 
 **Example**: "What is Milvus?" → Returns pre-loaded answer (40ms)
 
@@ -52,40 +74,66 @@ The system implements a clean three-tier approach to answering questions:
 - 16 Q&A pairs pre-loaded on startup (ENABLE_CACHE_WARMUP=true)
 - Entity validation prevents wrong product answers
 - Ultra-fast response time
+- **NEW**: Empty answer detection triggers automatic web search
 
 ### Tier 2: Knowledge Base (1-2s)
-**When triggered**: Cache miss OR Tier 1 not available
+**When triggered**: Cache bypassed (time-sensitive query OR app startup) OR cache miss
 **What happens**:
 1. Retrieve relevant documents from Milvus
 2. Generate LLM answer from context
-3. Return answer with local source citations
+3. **NEW**: Check KB result quality
+   - If confidence is low: May trigger Tier 3 web search
+   - If answer is empty: Trigger web search fallback
+4. Return answer with local source citations
 
 **Example**: "How do vector embeddings work?" → Searches local docs, returns KB answer
 
+**Time-Sensitive Queries**:
+- Keywords detected: "latest", "recent", "trending", "2024", "today", "breaking", "just released", etc.
+- Behavior: Skip cache entirely, go directly to fresh KB search
+- Benefit: Ensures up-to-date information for temporal queries
+
 **Key Features**:
-- NO automatic web search
-- Knowledge base only
+- Knowledge base as primary source
+- Automatic cache bypass for temporal keywords
 - Fast response time (1-2 seconds)
-- Local document sources only
+- Local document sources
 
-### Tier 3: Web Search (5-15s)
-**When triggered**: User explicitly clicks globe icon (🌐) or sets `force_web_search=true`
+### Tier 3: Web Search (3-15s) 
+**When triggered**: 
+- **Automatic Fallback**: Cache returns empty answer OR KB confidence is low
+- **User-Explicit**: User clicks globe icon (🌐) or sets `force_web_search=true`
+
 **What happens**:
-1. Complete bypass of cache and knowledge base
-2. Query Tavily API for web results
-3. Synthesize answer from web results
-4. Return answer with web source URLs
+1. Query Tavily API for web results
+2. Generate answer from web context
+3. Return answer with web source URLs and timestamps
+4. Add web source badge to UI
 
-**Example**: "What's the latest on AI?" → Searches web for current info
+**Example**: "What's the latest on AI?" → Automatically searches web OR user explicitly requests via 🌐 button
+
+**Empty Cache Fallback Flow**:
+```
+Cache hit but answer is empty
+    ↓
+Set enable_web_search_fallback flag
+    ↓
+Continue to graph execution
+    ↓
+Web search triggered automatically
+    ↓
+Return web results with sources
+```
 
 **Key Features**:
-- Strictly opt-in (no automatic triggering)
-- Web results only (no KB context)
-- Requires explicit user action
-- Current/real-time information
+- Automatic fallback when cache is empty or KB confidence is low
+- Web results supplement KB knowledge
+- User can force web-only via 🌐 button (`force_web_search=true`)
+- Current/real-time information for time-sensitive queries
 
 **Key Design Decisions:**
-- **NO automatic web search** - Strict opt-in only
+- **Automatic fallback enabled** - Web search triggered when cache empty or KB weak
+- **Time-sensitive detection** - Temporal keywords bypass cache automatically
 - **Cache warmup enabled by default** - 16 Q&A pairs pre-loaded
 - **Entity validation** - Prevents cross-product cache hallucinations
 - **Simplified prompts** - No HTML/markdown formatting rules
@@ -104,7 +152,7 @@ The project architecture provides:
 ✅ **MCP Protocol**: Standard protocol for tool/resource management
 ✅ **Optimized Inference**: qwen2.5:0.5b (500M params, 85% faster)
 ✅ **Local Inference**: Ollama + Milvus for local vector operations
-✅ **Multi-Tier Answering**: Cache hits, knowledge base, explicit web search
+✅ **Multi-Tier Answering**: Cache hits, KB search, automatic web fallback, explicit web search
 
 ### Architecture Diagram
 
@@ -131,50 +179,129 @@ graph TB
 
 ---
 
-## Core Components
+## Strands Agent Framework Integration
+
+The system uses **real Strands Agent instances** for the 3-node conditional routing graph:
+
+### Three Specialized Strands Agents
+
+**Node 1: TopicChecker Agent**
+- **Model**: Fast model (llama3.2:1b or qwen2.5:0.5b)
+- **Purpose**: Validates if query is about vector databases, RAG, embeddings, etc.
+- **Latency**: ~100-150ms
+- **Early Exit**: If validation fails → reject as "out-of-scope" (saves 1500+ms)
+- **Framework**: `Strands Agent` with system_prompt, no tools
+
+**Node 2: SecurityChecker Agent**
+- **Model**: Fast model (llama3.2:1b or qwen2.5:0.5b)
+- **Purpose**: Detects jailbreak attempts, prompt injection, malicious intent
+- **Latency**: ~50-100ms
+- **Early Exit**: If security risk detected → reject (saves 1500+ms)
+- **Framework**: `Strands Agent` with system_prompt, no tools
+
+**Node 3: RAGWorker Agent**
+- **Model**: Powerful model (llama3.1:8b or larger)
+- **Purpose**: Retrieves documents and generates comprehensive answers
+- **Latency**: ~800-1500ms
+- **Tools**:
+  - `search_knowledge_base()` - Semantic search in Milvus
+  - `generate_response()` - LLM-based answer synthesis
+- **Framework**: `Strands Agent` with tools using `@tool` decorator
+
+### Conditional Routing (Real Graph Execution)
+
+```
+Input Query
+    ↓
+┌─────────────────────────┐
+│ TopicChecker Agent      │
+│ (Fast model)            │
+└────────┬────────────────┘
+         ↓
+    Is in-scope?
+    ├─ NO  → REJECT (out-of-scope)
+    └─ YES → Continue
+         ↓
+┌─────────────────────────┐
+│ SecurityChecker Agent   │
+│ (Fast model)            │
+└────────┬────────────────┘
+         ↓
+    Is safe?
+    ├─ NO  → REJECT (security risk)
+    └─ YES → Continue
+         ↓
+┌─────────────────────────┐
+│ RAGWorker Agent         │
+│ (Powerful model + tools)│
+└────────┬────────────────┘
+         ↓
+    Generate Answer + Sources
+```
+
+**Key Benefits**:
+- ✅ **Actual conditional routing** - Only nodes in execution path run
+- ✅ **Cost savings** - 60-70% reduction for invalid/malicious queries
+- ✅ **Proper separation of concerns** - Each agent has single responsibility
+- ✅ **Execution tracing** - See which path was taken
+- ✅ **Model optimization** - Fast models for validation, powerful model for RAG
+
+---
+
+## System Components
 
 ### 1. StrandsGraphRAGAgent (`src/agents/strands_graph_agent.py`)
 
-**Graph-based 3-node architecture**:
-- **Node 1: Topic Check** - Validates if question is within Milvus product scope
-- **Node 2: Security Check** - Detects jailbreak attempts, prompt injection, illegal activities
-- **Node 3: RAG Worker** - Retrieves context from Milvus and generates answer
+The primary agent class implementing **real Strands agent instances** with RAG capabilities.
 
-**Features**:
+**Structure:**
+```python
+# Real Strands Agent instantiation
+topic_agent = Agent(
+    name="TopicChecker",
+    system_prompt="Validate if query is about vector databases, embeddings, RAG...",
+    model="llama3.2:1b",  # Fast model
+    tools=[]
+)
 
-The primary agent class implementing Strands framework patterns with RAG capabilities.
+rag_agent = Agent(
+    name="RAGWorker",
+    system_prompt="Answer questions about Milvus using provided documents...",
+    model="llama3.1:8b",  # Powerful model
+    tools=[search_knowledge_base, generate_response]
+)
+
+# Real execution with routing
+def answer_question(self, question: str):
+    # Node 1: Topic validation
+    topic_response = topic_agent.invoke(context={"user_query": question})
+    if not topic_response.is_valid:
+        return rejection_response("out_of_scope")
+
+    # Node 2: Security validation
+    security_response = security_agent.invoke(context={"user_query": question})
+    if security_response.is_threat:
+        return rejection_response("security_risk")
+
+    # Node 3: RAG (only reached if above passed)
+    rag_response = rag_agent.invoke(
+        context={"question": question, "search_results": [...]}
+    )
+    return rag_response
+```
 
 **Key Methods:**
-- `retrieve_documents(collection, query, top_k, filter_source)` - Semantic search
-- `generate_answer(question, context, temperature, max_tokens)` - LLM synthesis
-- `add_documents(collection, documents)` - Batch embedding/indexing
-- `search_by_source(collection, query, source, top_k)` - Filtered search
-- `list_collections()` - Show available data
-- `answer_question(collection, question, top_k)` - Full RAG pipeline
+- `answer_question(question, top_k)` - Orchestrates 3-node Strands workflow with conditional routing
+- `retrieve_documents(query, top_k)` - @tool for semantic search in Milvus
+- `generate_response(question, context)` - @tool for LLM-based answer synthesis
+- `add_documents(collection, documents)` - Batch embedding and indexing
+- `list_collections()` - Display available data collections
 - `close()` - Cleanup resources
 
-**Architecture:**
-```python
-class StrandsRAGAgent:
-    def __init__(self, settings):
-        self.ollama_client = OllamaClient(
-            host=settings.ollama_host,
-            timeout=settings.ollama_timeout,
-            pool_size=settings.ollama_pool_size,
-        )
-        self.vector_db = MilvusVectorDB(
-            host=settings.milvus_host,
-            port=settings.milvus_port,
-            db_name=settings.milvus_db_name,
-            user=settings.milvus_user,
-            password=settings.milvus_password,
-        )
-
-    @tool  # Marked for Strands framework
-    def retrieve_documents(self, collection: str, query: str,
-                          top_k: int = 5, filter_source: str = None):
-        """Retrieve documents using semantic search."""
-        # Implementation uses vector_db for search
+**Dependencies:**
+- `strands-agents>=1.27.0` - Agent framework with @agent/@tool decorators
+- `MilvusVectorDB` - Vector database client for semantic search
+- `OllamaClient` - Local LLM inference with embedding support
 ```
 
 ---

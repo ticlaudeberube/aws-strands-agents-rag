@@ -16,6 +16,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from tqdm import tqdm
+
 from document_loaders.core.tools import MilvusVectorDB, OllamaClient
 from document_loaders.local_settings import get_loader_settings
 
@@ -102,8 +103,9 @@ def load_responses_cache():
         answer = qa.get("answer", "")
         sources = qa.get("sources", [])  # Get sources from Q&A pair
 
-        if not question or not answer:
-            logger.warning(f"Skipping incomplete Q&A pair: {question[:30]}")
+        # Only require non-empty question (empty answers are intentional - trigger web search)
+        if not question:
+            logger.warning(f"Skipping Q&A pair with no question")
             skipped_count += 1
             continue
 

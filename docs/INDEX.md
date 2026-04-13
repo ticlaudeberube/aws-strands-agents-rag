@@ -24,6 +24,7 @@ Quick navigation for committed documentation in this project.
 
 ### System Architecture & Development
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** - Three-tier system architecture (Cache → KB → Web Search) + complete component details
+- **[QUERY_ROUTING.md](QUERY_ROUTING.md)** - Complete query routing paths, validation layers, and decision logic
 - **[AWS_ARCHITECTURE.md](AWS_ARCHITECTURE.md)** - AWS deployment architectures (ECS/Fargate, Lambda + AgentCore)
 - **[DEVELOPMENT.md](DEVELOPMENT.md)** - Development guidelines and patterns
 - **[CACHING_STRATEGY.md](CACHING_STRATEGY.md)** - Current semantic response cache implementation (single-layer Milvus)
@@ -45,4 +46,4 @@ Quick navigation for committed documentation in this project.
 
 ---
 
-**Note**: This index documents only committed/staged documentation files in docs/ + README.md at root (13 total).
+**Note**: This index documents only committed/staged documentation files in docs/ + README.md at root (14 total).

@@ -1,9 +1,10 @@
 """Configuration settings for the application."""
 
 import os
+from typing import Optional
+
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from typing import Optional
 
 
 class Settings(BaseSettings):
@@ -114,6 +115,14 @@ class Settings(BaseSettings):
         default=False,
         validation_alias="ENABLE_WEB_SEARCH_SUPPLEMENT",
     )  # Add web search results as supplementary sources to KB results (off by default)
+    web_search_fallback_threshold: float = Field(
+        default=0.15,  # Much more restrictive - only fallback when KB truly has no good content
+        validation_alias="WEB_SEARCH_FALLBACK_THRESHOLD",
+    )  # Minimum average KB relevance score (0-1) before triggering web search fallback (default: 0.15, was 0.5)
+    tavily_api_key: Optional[str] = Field(
+        default=None,
+        validation_alias="TAVILY_API_KEY",
+    )  # Tavily API key for web search (reads TAVILY_API_KEY from .env)
 
     # AWS Configuration (optional)
     aws_region: Optional[str] = "us-west-1"

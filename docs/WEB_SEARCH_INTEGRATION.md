@@ -2,20 +2,107 @@
 
 ## Overview
 
-The RAG system supports web search via Tavily API with two modes:
+The RAG system supports web search via Tavily API with multiple modes:
 
-1. **Web-Only Mode** (`force_web_search: true`) - Searches only the web, bypasses knowledge base
-2. **Supplementary Mode** (future) - Combines KB + web results
+1. **Automatic Fallback** (NEW) - Triggered when cached answer is empty or KB confidence is low
+2. **Web-Only Mode** (`force_web_search: true`) - Searches only the web, bypasses knowledge base
+3. **User-Explicit Mode** - User clicks the 🌐 button in UI
 
-**Default**: Web search is OFF. Feature must be explicitly enabled.
+**Default**: Web search is OFF for normal queries. Feature is automatically triggered on fallback conditions or user request.
 
 ## Search Modes
 
 | Mode | Trigger | Sources | Use Case |
 |------|---------|---------|----------|
-| **Knowledge Base** (default) | Normal query | Milvus docs only | Technical documentation |
-| **Web-Only** | 🌐 button in UI or `force_web_search: true` | Web URLs only | Latest news, trends |
-| **Bypass Cache** | 🚫 button in UI or `bypass_cache: true` | Fresh KB query | Updated answers |
+| **Cache** | Normal query | response_cache | Fast retrieval (40ms) |
+| **Knowledge Base** | Cache miss or time-sensitive query | Milvus docs only | Technical documentation |
+| **Web Fallback** (NEW) | Cache empty OR low KB confidence | Tavily API | Stale/empty cached entries |
+| **Web-Only** | 🌐 button or `force_web_search: true` | Tavily API only | Latest trends, news |
+| **Bypass Cache** | 🚫 button or `bypass_cache: true` | Fresh KB query | Updated answers |
+
+## Automatic Web Search Fallback (NEW)
+
+The system automatically triggers web search fallback in two scenarios:
+
+### 1. Empty Cached Answer
+
+When a cached response is found but the answer field is empty or blank:
+```
+User: "What are the latest trends in vector databases?"
+    ↓
+Cache hit: Found similar question
+    ↓
+Check answer content: EMPTY
+    ↓
+Trigger automatic web search
+    ↓
+Query Tavily API and synthesize answer from web results
+```
+
+**Log Example**:
+```
+[CACHE] Cache hit with similarity: 99.2%
+[CACHE] ⚠ Cache hit but answer is EMPTY - triggering web search fallback
+[WEB_SEARCH] Searching Tavily for: What are the latest trends...
+[TAVILY] Found 5 results (time: 0.7s)
+✓ Web search fallback completed successfully
+```
+
+### 2. Low Knowledge Base Confidence
+
+When KB retrieval confidence falls below the threshold:
+```
+User: "Tell me about recent AI developments"
+    ↓
+KB search performed
+    ↓
+Check result confidence: 35% (below 50% threshold)
+    ↓
+Trigger automatic web search
+    ↓
+Combine KB + web results for comprehensive answer
+```
+
+**Configuration**:
+```bash
+# In .env
+WEB_SEARCH_FALLBACK_THRESHOLD=0.5  # 50% KB confidence threshold
+```
+
+**When to Adjust**:
+- **Lower threshold** (0.3-0.4): Web search triggers less often, prefer KB
+- **Higher threshold** (0.6-0.8): Web search triggers more often for uncertain queries
+- **Default (0.5)**: Balanced between KB and web sources
+
+### Time-Sensitive Queries
+
+Queries with temporal keywords automatically skip cache and use fresh KB/web retrieval:
+
+**Detected Keywords**:
+- Latest, recent, newest, current
+- Trends, trending, emerging
+- New, upcoming
+- 2024, 2025, 2026 (year references)
+- Today, this year, this month
+- Breaking, just released, recently launched
+
+**Behavior**:
+```
+User: "What is the latest news on vector databases?"
+    ↓
+Detect temporal keyword: "latest"
+    ↓
+Skip response cache (bypass Tier 1)
+    ↓
+Go directly to fresh KB search (Tier 2)
+    ↓
+If confidence low, trigger web search (Tier 3)
+```
+
+**Benefits**:
+- Ensures up-to-date information for current events
+- Avoids stale cached answers
+- Maintains temporal accuracy
 
 ## Setup
 
@@ -31,6 +118,9 @@ ENABLE_WEB_SEARCH_SUPPLEMENT=true
 
 # Add your Tavily API key
 TAVILY_API_KEY=tvly-your-api-key-here
+
+# Web search fallback threshold (0-1), default 0.5
+WEB_SEARCH_FALLBACK_THRESHOLD=0.5
 ```
 
 ### 3. Restart API Server
@@ -77,12 +167,28 @@ curl -X POST http://localhost:8000/v1/chat/completions \
 
 ## How It Works
 
-**Web-Only Mode** (`force_web_search: true`):
+### Automatic Fallback Flow
+
+**When Triggered**: Cache returns empty answer OR KB confidence is low
+
+1. System detects empty cached answer or weak KB results
+2. Sets `enable_web_search_fallback` flag in execution state
+3. Proceeds to graph execution with fallback enabled
+4. WebSearchClient queries Tavily API (5 results)
+5. LLM synthesizes answer from web results
+6. Returns answer with web source URLs and timestamps
+
+### Web-Only Mode
+
+**When Triggered**: User clicks 🌐 button or sends `force_web_search: true`
+
 1. Query sent with web search flag
 2. Tavily API searches web (5 results)
 3. LLM generates answer using **only web snippets**
 4. Response includes web URLs as sources
 5. Badge shows **🌐 Web** (blue)
+
+### Generic Answer Generation
 
 **Prompt Engineering**: The system now uses strict prompts to ensure LLM quotes actual web content:
 ```

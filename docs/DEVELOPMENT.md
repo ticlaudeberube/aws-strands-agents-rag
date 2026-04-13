@@ -2,7 +2,56 @@
 
 This guide provides information for developers working on this project.
 
-## 🔧 Recent Improvements (Mar 5, 2026)
+## 🔧 Recent Improvements (Apr 12, 2026)
+
+**React Frontend DRY Refactoring & System Message Consistency**:
+- **MessageContainer Component**: Extracted message rendering logic into dedicated `MessageContainer` component, eliminating 60+ lines of duplicate JSX code in App.js
+- **Consistent Message Creation**: Added `createMessage()` helper function following DRY principles, ensuring all messages (welcome, chat, cached, errors) have identical structure and timing data
+- **CSS Deduplication**: Removed duplicate styles between App.css and MessageContainer.css, maintaining single source of truth for component styling
+- **JavaScript Hoisting Fix**: Resolved "Cannot access 'createTimingData' before initialization" error by moving helper functions to proper scope
+- **System Message Consistency**: Fixed inconsistent styling where streaming and non-streaming system messages displayed differently
+- **API Streaming Fix**: Updated streaming endpoints to send `source_type: "system_message"` sources in final chunk, matching non-streaming format
+- **Warning Banner Standardization**: All system messages (web search unavailable, etc.) now consistently show ⚠️ warning banner instead of plain text
+
+**Component Architecture Improvements**:
+```javascript
+// NEW: DRY message creation pattern
+const createMessage = (text, role, options = {}) => ({
+  id: options.id || nextIdRef.current++,
+  text: typeof text === 'string' ? text : String(text || ''),
+  role: role,
+  isStreaming: options.isStreaming || false,
+  sources: options.sources || [],
+  timing: options.timing || createTimingData(),
+  timestamp: options.timestamp || new Date().toISOString(),
+});
+
+// NEW: MessageContainer component for consistent rendering
+<MessageContainer 
+  messages={messages}
+  isLoading={isLoading}
+  messagesEndRef={messagesEndRef}
+  onClearChat={handleClearChat}
+/>
+```
+
+**Previous Updates (Apr 12, 2026)**:
+
+**Query Routing & UI Fixes**:
+- **Topic Validation Fix**: TopicChecker agent now correctly parses "YES/NO" responses instead of "true/false", ensuring proper out-of-scope query rejection
+- **Query Routing Order**: Time-sensitive query detection moved to happen AFTER topic validation, preventing off-topic weather queries from reaching web search logic 
+- **Web Search Button Fix**: Health endpoint now correctly reports `web_search_enabled` based on Tavily API key availability, restoring web search button visibility in React UI
+- **Consolidated Error Messages**: Implemented DRY principles with centralized error message utilities, eliminating 13+ duplicate error messages
+
+**Previous Updates (Apr 9, 2026)**:
+
+**Cache & Web Search Optimization**:
+- Empty cache fallback: Automatically triggers web search when cached answer is empty
+- Time-sensitive query detection: Queries with temporal keywords skip cache for fresh results
+- Dual fallback mechanisms: Cache → empty detection OR KB confidence threshold
+- Playwright E2E testing: Comprehensive browser automation tests for React UI
+
+**Previous Updates (Mar 5, 2026)**:
 
 **Graph-Based Agent Architecture**: Migrated from monolithic `StrandsRAGAgent` to new `StrandsGraphRAGAgent`:
 - 3-node graph: Topic Check → Security Check → RAG Worker
@@ -16,7 +65,7 @@ This guide provides information for developers working on this project.
 - Test coverage: 48% overall (619/1303 statements)
 - Removed obsolete test files for old monolithic agent
 
-For details, see [ARCHITECTURE.md](ARCHITECTURE.md) and [CACHING_STRATEGY.md](CACHING_STRATEGY.md).
+For details, see [ARCHITECTURE.md](ARCHITECTURE.md), [CACHING_STRATEGY.md](CACHING_STRATEGY.md), and [WEB_SEARCH_INTEGRATION.md](WEB_SEARCH_INTEGRATION.md).
 
 ## Project Structure
 

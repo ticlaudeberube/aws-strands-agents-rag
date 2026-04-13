@@ -93,11 +93,29 @@
         {"document_name": "collection_management.md", "text": "Manage collections with create, drop, load, release operations", "distance": 0.15, "metadata": {"source": "milvus_docs"}},
         {"document_name": "collection_operations.md", "text": "Collections can be loaded into memory for querying or released to save resources", "distance": 0.21, "metadata": {"source": "milvus_docs"}}
       ]
+    },
+    {
+      "question": "What is the latest vector database news?",
+      "answer": "",
+      "collection": "milvus_rag_collection",
+      "sources": []
+    },
+    {
+      "question": "Tell me the latest trends in vector databases?",
+      "answer": "",
+      "collection": "milvus_rag_collection",
+      "sources": []
+    },
+    {
+      "question": "What are recent updates in the vector database space?",
+      "answer": "",
+      "collection": "milvus_rag_collection",
+      "sources": []
     }
   ],
   "description": "Pre-generated question-answer pairs for response cache with sources",
-  "generated_count": 10,
-  "total_expected": 10,
-  "version": "1.1",
+  "generated_count": 13,
+  "total_expected": 13,
+  "version": "1.2",
   "usage": "Run: python document-loaders/sync_responses_cache.py to load into response_cache"
 }

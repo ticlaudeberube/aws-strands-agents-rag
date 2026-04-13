@@ -2,14 +2,22 @@ import React from 'react';
 import './SourcesList.css';
 
 function SourcesList({ sources, timing }) {
-  if (!sources || sources.length === 0) {
+  // Debug logging
+  console.log('SourcesList received:', { type: typeof sources, isArray: Array.isArray(sources), length: sources?.length, sources });
+  
+  if (!sources || !Array.isArray(sources) || sources.length === 0) {
     return null;
   }
 
-  // Deduplicate sources by document_name, URL, or text to avoid showing duplicates
+  // Safety: ensure sources is an array of objects
+  const sanitizedSources = sources.filter(s => s && typeof s === 'object');
+  
+  if (sanitizedSources.length === 0) {
+    return null;
+  }
   const getUniqueKey = (source) => source.url || source.document_name || source.text || '';
   const seen = new Set();
-  const uniqueSources = sources.filter((source) => {
+  const uniqueSources = sanitizedSources.filter((source) => {
     const key = getUniqueKey(source);
     if (key && seen.has(key)) {
       return false;

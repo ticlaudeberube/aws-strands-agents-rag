@@ -60,9 +60,12 @@ Returns server status:
   "status": "ok",
   "model": "rag-agent",
   "ollama": "http://localhost:11434",
-  "milvus": "localhost:19530"
+  "milvus": "localhost:19530",
+  "web_search_enabled": true
 }
 ```
+
+**New in v1.2**: The `web_search_enabled` field indicates if web search functionality is available (based on Tavily API key configuration), which controls the visibility of the web search button in the React UI.
 
 ### List Models
 
@@ -117,6 +120,52 @@ OpenAI-compatible chat completions endpoint.
     "completion_tokens": 150,
     "total_tokens": 153
   }
+}
+```
+
+### Streaming Support
+
+The API server supports real-time streaming responses compatible with OpenAI's streaming format.
+
+#### Enable Streaming
+Add `"stream": true` to your chat completion request:
+
+```json
+{
+  "model": "rag-agent",
+  "messages": [
+    {"role": "user", "content": "What is Milvus?"}
+  ],
+  "stream": true
+}
+```
+
+#### Streaming Response Format
+- **Server-Sent Events (SSE)** format
+- **Real-time generation** using `agent.stream_answer()`
+- **Consistent behavior** between streaming and non-streaming modes
+- **System message consistency** - both modes return identical source structures
+
+#### Example Streaming Response
+```
+data: {"id":"chatcmpl-abc123","object":"chat.completion.chunk","created":1708800000,"model":"rag-agent","choices":[{"index":0,"delta":{"content":"Milvus"}}]}
+
+data: {"id":"chatcmpl-abc123","object":"chat.completion.chunk","created":1708800000,"model":"rag-agent","choices":[{"index":0,"delta":{"content":" is"}}]}
+
+data: {"id":"chatcmpl-abc123","object":"chat.completion.chunk","created":1708800000,"model":"rag-agent","choices":[{"index":0,"delta":{"content":" an open-source"}}]}
+
+data: [STREAM_END]
+```
+
+#### Streaming with Advanced Options
+Combine streaming with other parameters:
+
+```json
+{
+  "model": "rag-agent", 
+  "messages": [{"role": "user", "content": "Latest AI trends"}],
+  "stream": true,
+  "force_web_search": true
 }
 ```
 
@@ -175,9 +224,114 @@ const answer = data.choices[0].message.content;
 console.log(answer);
 ```
 
+### Streaming Examples
+
+#### cURL with Streaming
+```bash
+curl -X POST http://localhost:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "rag-agent",
+    "messages": [{"role": "user", "content": "Explain Milvus indexing"}],
+    "stream": true
+  }'
+```
+
+#### Python with Streaming
+```python
+import requests
+import json
+
+response = requests.post(
+    "http://localhost:8000/v1/chat/completions",
+    json={
+        "model": "rag-agent",
+        "messages": [{"role": "user", "content": "What is vector similarity?"}],
+        "stream": True,
+    },
+    stream=True  # Enable streaming response
+)
+
+# Process streaming response
+for line in response.iter_lines():
+    if line:
+        line_text = line.decode('utf-8')
+        if line_text.startswith('data: '):
+            data_part = line_text[6:]  # Remove 'data: ' prefix
+            if data_part == '[STREAM_END]':
+                break
+            try:
+                chunk = json.loads(data_part)
+                content = chunk["choices"][0]["delta"].get("content", "")
+                print(content, end="", flush=True)
+            except json.JSONDecodeError:
+                continue
+```
+
+#### JavaScript with Streaming
+
+```javascript
+async function streamChat() {
+  const response = await fetch('http://localhost:8000/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'rag-agent',
+      messages: [{ role: 'user', content: 'How does embedding work?' }],
+      stream: true,
+    }),
+  });
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    
+    const chunk = decoder.decode(value, { stream: true });
+    const lines = chunk.split('\n');
+    
+    for (const line of lines) {
+      if (line.startsWith('data: ')) {
+        const data = line.slice(6);
+        if (data === '[STREAM_END]') return;
+        
+        try {
+          const parsed = JSON.parse(data);
+          const content = parsed.choices[0].delta.content || '';
+          process.stdout.write(content);  // Real-time output
+        } catch (e) {
+          // Skip malformed chunks
+        }
+      }
+    }
+  }
+}
+```
+
 ## Request Parameters (Advanced Control)
 
-The `/v1/chat/completions` endpoint supports additional parameters beyond OpenAI compatibility to control caching and search behavior:
+The `/v1/chat/completions` endpoint supports additional parameters beyond OpenAI compatibility to control streaming, caching, and search behavior:
+
+### stream (Boolean, Optional)
+**Enables real-time streaming response.**
+
+- `false` (default): Returns complete response at once 
+- `true`: Streams response in real-time using Server-Sent Events
+
+**Use when:** You want real-time response generation for better UX.
+
+**Example:**
+```json
+{
+  "model": "rag-agent", 
+  "messages": [{"role": "user", "content": "Explain vector search"}],
+  "stream": true
+}
+```
+
+**Response Format:** Server-Sent Events with `[STREAM_END]` terminator
 
 ### force_web_search (Boolean, Optional)
 **Forces web-only search, bypassing the knowledge base.**
@@ -551,9 +705,51 @@ For production, consider:
 
 5. **Use a reverse proxy** - Nginx/Apache for load balancing
 
+### Streaming Support
+
+The API server supports both streaming and non-streaming responses:
+
+#### Non-Streaming (Default)
+```bash
+POST http://localhost:8000/v1/chat/completions
+```
+
+Standard chat completion with full response returned at once.
+
+#### Streaming 
+```bash
+POST http://localhost:8000/v1/chat/completions
+Content-Type: application/json
+
+{
+  "model": "rag-agent",
+  "messages": [{"role": "user", "content": "What is Milvus?"}],
+  "stream": true
+}
+```
+
+**Streaming Response Format:**
+- Server-Sent Events (SSE) format
+- Real-time token generation using `agent.stream_answer()`
+- Consistent system message sources in streaming and non-streaming modes  
+- Automatic termination with `[STREAM_END]` marker
+
+**Streaming Options:**
+- `stream: true` - Enable streaming response
+- `bypass_cache: true` - Stream from knowledge base only (skip cache)
+- `force_web_search: true` - Stream web search results only
+
+**Example Streaming Response:**
+```
+data: {"id":"chatcmpl-123","object":"chat.completion.chunk","choices":[{"delta":{"content":"Milvus is"}}]}
+
+data: {"id":"chatcmpl-123","object":"chat.completion.chunk","choices":[{"delta":{"content":" an open-source"}}]}
+
+data: [STREAM_END]
+```
+
 ## API Limitations
 
-- **No streaming** - Responses are returned as complete messages
 - **Single conversation** - No conversation history maintained
 - **Token limits** - Responses are limited by Ollama model context window
 - **RAG only** - Answers are grounded in loaded documents

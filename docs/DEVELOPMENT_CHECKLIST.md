@@ -72,7 +72,7 @@
 
 ```bash
 # Must pass BEFORE committing
-pytest tests/ -v
+pytest tes-v
 pytest --cov=src --cov-report=term-missing
 
 # Check for new errors

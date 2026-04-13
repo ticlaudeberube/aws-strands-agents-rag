@@ -1,15 +1,35 @@
 import React, { useState, useRef, useEffect } from 'react';
 import './App.css';
-import ChatMessage from './components/ChatMessage';
+import MessageContainer from './components/MessageContainer';
 import ChatInput from './components/ChatInput';
 import CachedResponsesList from './components/CachedResponsesList';
 
 // API Configuration from environment variables
 const API_HOST = process.env.REACT_APP_API_HOST || 'localhost';
-const API_PORT = process.env.REACT_APP_API_PORT || '8001';
+const API_PORT = process.env.REACT_APP_API_PORT || '8000';
 const API_BASE_URL = `http://${API_HOST}:${API_PORT}`;
 
+// Helper function to create consistent timing objects (DRY principle)
+const createTimingData = (totalTimeMs = 0, responseType = 'rag', isCached = false) => ({
+  total_time_ms: totalTimeMs,
+  is_cached: isCached,
+  response_type: responseType,
+  _populated: true
+});
+
 function App() {
+  const nextIdRef = useRef(2);
+
+  // Helper function to create consistent message objects (DRY principle)  
+  const createMessage = (text, role, options = {}) => ({
+    id: options.id || nextIdRef.current++,
+    text: typeof text === 'string' ? text : String(text || ''),
+    role: role,
+    isStreaming: options.isStreaming || false,
+    sources: options.sources || [],
+    timing: options.timing || createTimingData(),
+    timestamp: options.timestamp || new Date().toISOString(),
+  });
   const [messages, setMessages] = useState([
     {
       id: 1,
@@ -17,7 +37,8 @@ function App() {
       role: 'assistant',
       isStreaming: false,
       sources: [],
-      timing: {},
+      timing: createTimingData(0, 'system', false),
+      timestamp: new Date().toISOString(),
     },
   ]);
   const [isLoading, setIsLoading] = useState(false);
@@ -27,7 +48,6 @@ function App() {
   const [cachedResponses, setCachedResponses] = useState([]);
   const [cacheDrawerOpen, setCacheDrawerOpen] = useState(false);
   const messagesEndRef = useRef(null);
-  const nextIdRef = useRef(2);
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -77,27 +97,16 @@ function App() {
     if (!text.trim() || isLoading) return;
 
     // Add user message with timestamp (AgentCore compatibility)
-    const userMessage = {
-      id: nextIdRef.current++,
-      text: text,
-      role: 'user',
-      isStreaming: false,
-      timestamp: new Date().toISOString(),
-    };
+    const userMessage = createMessage(text, 'user');
     setMessages((prev) => [...prev, userMessage]);
     setIsLoading(true);
 
     // Add assistant message placeholder
     const assistantMessageId = nextIdRef.current++;
-    const assistantMessage = {
+    const assistantMessage = createMessage('', 'assistant', {
       id: assistantMessageId,
-      text: '',
-      role: 'assistant',
-      isStreaming: true,
-      sources: [],
-      timing: {},
-      timestamp: new Date().toISOString(),
-    };
+      isStreaming: true
+    });
     setMessages((prev) => [...prev, assistantMessage]);
 
     try {
@@ -151,6 +160,10 @@ function App() {
         throw new Error(`API error: ${response.status}`);
       }
 
+      console.log('🚀 Starting to read response stream...'); 
+      const contentType = response.headers.get('content-type') || '';
+      console.log('📊 Response content-type:', contentType);
+
       // Helper function to parse streaming chunks
       const parseStreamChunk = (line, fullText, setFullText, assistantMessageId, sourcesRef) => {
         // Skip empty lines and comment lines
@@ -160,32 +173,67 @@ function App() {
         if (line.startsWith('data: ')) {
           const jsonStr = line.substring(6).trim();
           if (!jsonStr) return fullText;
+          
+          if (jsonStr === '[STREAM_END]') {
+            console.log('✅ [STREAM_END] marker received, total accumulated text:', fullText.length, 'chars');
+            return fullText;
+          }
 
           try {
             const data = JSON.parse(jsonStr);
 
             // Extract sources if present in this chunk
-            if (data.sources && Array.isArray(data.sources)) {
-              console.log('📚 Sources received:', data.sources.length, 'sources');
-              sourcesRef.current = data.sources;
+            if (data.sources) {
+              console.log('📚 Sources field present:', { 
+                isArray: Array.isArray(data.sources), 
+                length: data.sources?.length, 
+                type: typeof data.sources,
+                sample: JSON.stringify(data.sources).substring(0, 200)
+              });
+              if (Array.isArray(data.sources)) {
+                console.log('📚 Sources received:', data.sources.length, 'sources');
+                console.log('📚 Sources content:', data.sources);
+                sourcesRef.current = data.sources;
+              } else {
+                console.warn('⚠️ Sources is not an array:', typeof data.sources);
+              }
             }
 
             // Extract text chunk from streaming response
             if (data.choices && data.choices[0]) {
               const delta = data.choices[0].delta || {};
-              if (delta.content) {
-                const newText = fullText + delta.content;
+              // Handle content chunks (may be empty string for final chunk, still needs update)
+              if ('content' in delta) {
+                // Ensure delta.content is always a string to prevent object concatenation
+                const safeContent = typeof delta.content === 'string' ? delta.content : 
+                  (delta.content && typeof delta.content === 'object') ? JSON.stringify(delta.content) : String(delta.content || '');
+                const newText = fullText + safeContent;
+                console.log(`📝 Chunk received (len=${safeContent.length}), total=${newText.length}`);
 
-                // Update message with new text while streaming
+                // Update message with new text while streaming (even if content is empty)
                 setMessages((prev) => {
                   const newMessages = [...prev];
                   const messageIndex = newMessages.findIndex(m => m.id === assistantMessageId);
                   if (messageIndex !== -1) {
-                    newMessages[messageIndex].text = newText;
+                    // Ensure text is always a string to prevent "[object Object]" errors
+                    const safeText = typeof newText === 'string' ? newText : 
+                      (newText && typeof newText === 'object') ? JSON.stringify(newText) : String(newText || '');
+                    newMessages[messageIndex].text = safeText || '(no content generated)';
                     newMessages[messageIndex].isStreaming = true;
-                    // Update sources if available
+                    
+                    // ALWAYS update sources if available (critical for system messages)
                     if (sourcesRef.current && sourcesRef.current.length > 0) {
-                      newMessages[messageIndex].sources = sourcesRef.current;
+                      newMessages[messageIndex].sources = [...sourcesRef.current]; // Use spread to ensure new array reference
+                      console.log('📚 Sources updated in message:', sourcesRef.current);
+                      
+                      // Special handling for system messages - don't show as text content if it's a system warning
+                      const hasSystemMessage = sourcesRef.current.some(s => s.source_type === 'system_message');
+                      console.log('🔍 System message check:', { hasSystemMessage, sources: sourcesRef.current.map(s => s.source_type) });
+                      if (hasSystemMessage) {
+                        // For system messages, the text should be empty since content comes from sources
+                        newMessages[messageIndex].text = '';
+                        console.log('🎯 System message detected - clearing text content, sources will handle display');
+                      }
                     }
                   }
                   return newMessages;
@@ -193,6 +241,9 @@ function App() {
 
                 return newText;
               }
+            } else {
+              // Log if format is unexpected
+              console.warn('⚠️ Unexpected SSE format:', data);
             }
           } catch (e) {
             console.error('Failed to parse SSE data:', jsonStr, e);
@@ -206,52 +257,127 @@ function App() {
       const decoder = new TextDecoder();
       let fullText = '';
       const sourcesRef = { current: [] };  // Use ref to track sources
+      const responseTypeRef = { current: 'rag' };  // Track response type from API
+      let chunkCount = 0;
 
       try {
         while (true) {
           const { done, value } = await reader.read();
-          if (done) break;
+          if (done) {
+            console.log(`✓ Stream ended. Total chunks read: ${chunkCount}, final text length: ${fullText.length}`);
+            break;
+          }
 
           const chunk = decoder.decode(value, { stream: true });
+          chunkCount++;
+          console.log(`📦 Raw chunk #${chunkCount} (${chunk.length} bytes):`, chunk.substring(0, 150).replace(/\n/g, '\\n'));
           const lines = chunk.split('\n');
+          console.log(`   Split into ${lines.length} lines`);
 
           for (const line of lines) {
+            if (line.trim().length === 0) continue;
+            
+            // Parse response_type and timing if present in this chunk
+            if (line.startsWith('data: ')) {
+              const jsonStr = line.substring(6).trim();
+              if (!jsonStr) continue;
+              try {
+                const data = JSON.parse(jsonStr);
+                // Check for timing data in the streaming response
+                if (data.timing?.response_type) {
+                  responseTypeRef.current = data.timing.response_type;
+                  console.log('📊 Response type from API timing:', data.timing.response_type, 
+                            'is_cached:', data.timing.is_cached);
+                }
+                // Fallback: check root level for backward compatibility
+                else if (data.response_type) {
+                  responseTypeRef.current = data.response_type;
+                  console.log('📊 Response type from API root:', data.response_type);
+                }
+              } catch (e) {
+                // Ignore parse errors, continue with chunk parsing
+              }
+            }
+            
             fullText = parseStreamChunk(line, fullText, setMessages, assistantMessageId, sourcesRef);
           }
         }
       } finally {
         reader.releaseLock();
+        console.log(`✅ Stream reader released. Final accumulated text: ${fullText.length} chars`);
       }
 
       const endTime = Date.now();
       const totalTime = (endTime - startTime) / 1000;
-      const isCached = totalTime < 0.2; // Cache hits typically <200ms
 
       // Finalize message when streaming completes
       setMessages((prev) => {
         const newMessages = [...prev];
         const messageIndex = newMessages.findIndex(m => m.id === assistantMessageId);
         if (messageIndex !== -1) {
-          newMessages[messageIndex].text = fullText || 'No response received';
-          newMessages[messageIndex].sources = sourcesRef.current;
-          console.log('✅ Message finalized with sources:', sourcesRef.current?.length || 0);
-          newMessages[messageIndex].timing = {
-            total_time_ms: Math.round(totalTime * 1000),
-            is_cached: isCached
-          };
+          // Use accumulated fullText; provide helpful diagnostic if empty
+          let finalText = fullText && fullText.trim() ? fullText : null;
+          
+          if (!finalText) {
+            console.warn('[EMPTY_RESPONSE] No content generated. Check server logs and Ollama status');
+            finalText = 
+              '❌ No response generated.\n\n' +
+              'This can happen if:\n' +
+              '1. Ollama model is not running\n' +
+              '2. Model is not loaded (try: ollama pull qwen2.5:0.5b)\n' +
+              '3. Model ran out of memory\n' +
+              '4. API server crashed\n\n' +
+              'Check the server logs for details.';
+          }
+          
+          // Ensure finalText is always a string to prevent "[object Object]" errors
+          const safeFinalText = typeof finalText === 'string' ? finalText : 
+            (finalText && typeof finalText === 'object') ? JSON.stringify(finalText) : String(finalText || '');
+          
+          // Set sources first, then determine if this is a system message
+          newMessages[messageIndex].sources = [...(sourcesRef.current || [])]; // Use spread for new reference
+          
+          // Check if this is a system message that should display via warning banner instead of text
+          const hasSystemMessage = sourcesRef.current && sourcesRef.current.some(s => s.source_type === 'system_message');
+          
+          if (hasSystemMessage) {
+            // For system messages, clear the text content - the warning banner will display the message
+            newMessages[messageIndex].text = '';
+            console.log('🎯 System message finalized - text cleared, warning banner will display');
+          } else {
+            // For regular messages, set the accumulated text
+            newMessages[messageIndex].text = safeFinalText;
+          }
+          console.log('✅ Message finalized:', {
+            sourcesLength: sourcesRef.current?.length || 0,
+            sourcesType: typeof sourcesRef.current,
+            sourcesIsArray: Array.isArray(sourcesRef.current),
+            textLength: finalText.length,
+            firstSource: sourcesRef.current?.[0]
+          });
+          
+          // Use response_type from API instead of guessing based on timing
+          const isCached = responseTypeRef.current === 'cached';
+          
+          newMessages[messageIndex].timing = createTimingData(
+            Math.round(totalTime * 1000),
+            responseTypeRef.current,
+            isCached
+          );
           newMessages[messageIndex].isStreaming = false;
 
-          // Add to cached responses if it's a cache hit
+          // Add to cached responses only if it's actually a cache hit (API says so)
           if (isCached && fullText) {
             const cachedResponse = {
               id: assistantMessageId,
               question: text,
               answer: fullText,
               sources: sourcesRef.current,
-              timing: {
-                total_time_ms: Math.round(totalTime * 1000),
-                is_cached: isCached
-              },
+              timing: createTimingData(
+                Math.round(totalTime * 1000),
+                responseTypeRef.current,
+                isCached
+              ),
               timestamp: new Date().toISOString(),
             };
             setCachedResponses((prev) => [cachedResponse, ...prev.slice(0, 19)]); // Keep last 20
@@ -265,9 +391,20 @@ function App() {
         const newMessages = [...prev];
         const messageIndex = newMessages.findIndex(m => m.id === assistantMessageId);
         if (messageIndex !== -1) {
-          newMessages[messageIndex].text = `❌ Error: ${error.message}`;
+          // Use the same generic error message as when no response is generated
+          console.warn('[NETWORK_ERROR] API request failed. Check server and Ollama status');
+          const genericErrorMessage = 
+            '❌ No response generated.\n\n' +
+            'This can happen if:\n' +
+            '1. Ollama model is not running\n' +
+            '2. Model is not loaded (try: ollama pull qwen2.5:0.5b)\n' +
+            '3. Model ran out of memory\n' +
+            '4. API server crashed\n\n' +
+            'Check the server logs for details.';
+          
+          newMessages[messageIndex].text = genericErrorMessage;
           newMessages[messageIndex].sources = [];
-          newMessages[messageIndex].timing = {};
+          newMessages[messageIndex].timing = createTimingData();
           newMessages[messageIndex].isStreaming = false;
         }
         return newMessages;
@@ -277,97 +414,65 @@ function App() {
     }
   };
 
-  const handleClearCache = async () => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/v1/cache/clear`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Cache clear failed: ${response.status}`);
-      }
-
-      const data = await response.json();
-      console.log('Cache cleared:', data);
-
-      // Add system message
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: nextIdRef.current++,
-          text: '✓ Cache cleared successfully!',
-          role: 'system',
-          isStreaming: false,
-          sources: [],
-          timing: {},
-        },
-      ]);
-    } catch (error) {
-      console.error('Error clearing cache:', error);
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: nextIdRef.current++,
-          text: `❌ Failed to clear cache: ${error.message}`,
-          role: 'system',
-          isStreaming: false,
-          sources: [],
-          timing: {},
-        },
-      ]);
-    }
-  };
-
   const handleClearChat = () => {
     setMessages([
-      {
-        id: nextIdRef.current++,
-        text: "Chat cleared! Ask me anything about Milvus.",
-        role: 'assistant',
-        isStreaming: false,
-        sources: [],
-        timing: {},
-      },
+      createMessage("Chat cleared! Ask me anything about Milvus.", 'assistant'),
     ]);
   };
 
   const handleSelectCachedResponse = async (response) => {
+    const questionText = String(response.question || '').trim();
     console.log('Selected cached question ID:', response.id);
+    console.log('Bypass cache active:', bypassCache);
+
+    // If bypass cache is enabled, send as fresh query instead of loading cached answer
+    if (bypassCache) {
+      console.log('🚫 Bypass cache enabled - sending as fresh query:', questionText);
+      handleSendMessage(questionText);
+      return;
+    }
 
     try {
-      // Fetch the answer text from backend endpoint
+      // Fetch the full response data from backend endpoint
       const fullResponseData = await fetch(`${API_BASE_URL}/v1/cache/responses/${response.id}`);
       if (!fullResponseData.ok) {
         throw new Error(`Failed to fetch response: ${fullResponseData.status}`);
       }
 
-      // Endpoint now returns just the answer text as a JSON string
-      const answerText = await fullResponseData.json();
-      console.log('Fetched answer text:', answerText);
+      // Endpoint now returns { answer, sources, response_type, metadata }
+      const responseData = await fullResponseData.json();
+      
+      // Handle empty cached answers - re-ask the question instead
+      if (!responseData.answer || responseData.answer.trim() === '') {
+        console.log('⚠️ Cached response has empty answer - re-asking question with web search fallback');
+        handleSendMessage(questionText);
+        return;
+      }
+      
+      const answerText = responseData.answer;
+      const sources = responseData.sources || [];
+      const responseType = responseData.response_type || 'cached';
+      
+      console.log('Fetched cached response:', { answerText, sources, responseType });
 
-      const userMessage = {
-        id: nextIdRef.current++,
-        text: String(response.question || '').trim(),
-        role: 'user',
-        isStreaming: false,
-        timestamp: new Date().toISOString(),
-      };
+      // Ensure answerText is always a string to prevent "[object Object]" errors
+      const safeAnswerText = typeof answerText === 'string' ? answerText : 
+        (answerText && typeof answerText === 'object') ? JSON.stringify(answerText) : String(answerText || '');
 
-      const assistantMessage = {
-        id: nextIdRef.current++,
-        text: String(answerText || '').trim(),
-        role: 'assistant',
-        isStreaming: false,
-        sources: [],
-        timing: {
-          total_time_ms: 0,
-          is_cached: true
-        },
-        timestamp: new Date().toISOString(),
-      };
+      const userMessage = createMessage(String(questionText || '').trim(), 'user');
+
+      const assistantMessage = createMessage(
+        safeAnswerText.trim() || '(No content available)',
+        'assistant',
+        {
+          sources: sources,
+          timing: createTimingData(
+            responseData.metadata?.response_time || 0,
+            "cached",
+            true
+          )
+        }
+      );
 
       console.log('User message:', userMessage);
       console.log('Assistant message:', assistantMessage);
@@ -375,22 +480,12 @@ function App() {
     } catch (error) {
       console.error('Error loading cached response:', error);
       // Fallback: try to use the question from the list
-      const userMessage = {
-        id: nextIdRef.current++,
-        text: String(response.question || '').trim(),
-        role: 'user',
-        isStreaming: false,
-        timestamp: new Date().toISOString(),
-      };
+      const userMessage = createMessage(questionText, 'user');
 
-      const assistantMessage = {
-        id: nextIdRef.current++,
-        text: `❌ Error loading cached response: ${error.message}`,
-        role: 'assistant',
-        isStreaming: false,
-        sources: [],
-        timing: {}
-      };
+      const assistantMessage = createMessage(
+        `❌ Error loading cached response: ${error.message}`,
+        'assistant'
+      );
 
       setMessages((prev) => [...prev, userMessage, assistantMessage]);
     }
@@ -421,7 +516,7 @@ function App() {
                 <button
                   className={`cache-toggle-btn ${bypassCache ? 'active' : ''}`}
                   onClick={() => setBypassCache(!bypassCache)}
-                  disabled={apiStatus !== 'connected'}
+                  disabled={apiStatus === 'error' || isLoading}
                   title={bypassCache ? 'Cache bypassed (direct KB query)' : 'Click to bypass cache'}
                 >
                   {bypassCache ? '🚫 No Cache' : '💾 Cache On'}
@@ -429,26 +524,12 @@ function App() {
               </div>
             </div>
 
-            <div className="messages-container">
-              {messages.map((message) => (
-                <ChatMessage key={message.id} message={message} />
-              ))}
-              {isLoading && (
-                <div className="typing-indicator">
-                  <span></span>
-                  <span></span>
-                  <span></span>
-                </div>
-              )}
-              <div ref={messagesEndRef} />
-              {messages.length > 1 && (
-                <div className="clear-chat-container">
-                  <button className="clear-btn" onClick={handleClearChat}>
-                    Clear Chat
-                  </button>
-                </div>
-              )}
-            </div>
+            <MessageContainer 
+              messages={messages}
+              isLoading={isLoading}
+              messagesEndRef={messagesEndRef}
+              onClearChat={handleClearChat}
+            />
 
             <div className={`cache-drawer ${cacheDrawerOpen ? 'open' : 'closed'}`}>
               <CachedResponsesList
@@ -471,10 +552,10 @@ function App() {
               </div>
               <ChatInput
                 onSendMessage={handleSendMessage}
-                disabled={isLoading || apiStatus !== 'connected'}
+                disabled={isLoading || apiStatus === 'error'}
                 webSearchEnabled={webSearchEnabled}
                 placeholder={
-                  apiStatus !== 'connected'
+                  apiStatus === 'error'
                     ? 'API not available - start the API server'
                     : 'Ask about Milvus...'
                 }

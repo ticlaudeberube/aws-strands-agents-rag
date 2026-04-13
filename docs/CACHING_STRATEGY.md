@@ -50,11 +50,40 @@ See [ARCHITECTURE.md](ARCHITECTURE.md#three-tier-answer-architecture) for full s
 
 The Response Cache (`MilvusResponseCache`) stores question-answer pairs with their embeddings in a Milvus collection. When a new question arrives:
 
-1. **Generate embedding** for the incoming question
-2. **Search** the `response_cache` collection for similar questions
-3. **Check similarity threshold** (default: 0.99 = 99% match required)
-4. **Validate entity match** (prevents cross-product hallucinations)
-5. **Return cached answer** if both conditions met, otherwise proceed to Tier 2
+1. **Time-Sensitive Check** - Detect temporal keywords (latest, 2024, trending, etc.)
+   - If yes: Skip cache entirely → Go to fresh KB retrieval
+   - If no: Continue to cache lookup
+
+2. **Generate embedding** for the incoming question
+3. **Search** the `response_cache` collection for similar questions
+4. **Check similarity threshold** (default: 0.99 = 99% match required)
+5. **Validate entity match** (prevents cross-product hallucinations)
+6. **Check if cached answer is empty**
+   - If empty: Trigger web search fallback (automatic)
+   - If content exists: Return cached answer
+7. Continue to Tier 2 (KB retrieval) if cache miss or empty
+
+### Empty Cache Fallback Mechanism (NEW)
+
+When a cached response exists but the answer field is empty or blank:
+- The system sets an `enable_web_search_fallback` flag
+- Proceeds to graph execution with web search enabled
+- Automatically queries Tavily API to find relevant web results
+- Combines web results with original question for synthesis
+
+**Log Example**:
+```
+Cache hit with similarity: 0.992
+⚠ Cache hit but answer is EMPTY - triggering web search fallback for: What are latest trends...
+[WEB_SEARCH_FALLBACK] Searching Tavily for: What are latest trends...
+Found 5 web results
+✓ Web search fallback completed successfully
+```
+
+**Use Cases**:
+- Cached question exists but answer was never populated
+- Time-sensitive questions cached without content
+- Stale cached entries that need refreshing
 
 ### Entity Validation
 

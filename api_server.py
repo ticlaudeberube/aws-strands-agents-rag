@@ -1,36 +1,40 @@
 #!/usr/bin/env python3
-"""OpenAI-compatible API server for RAG Agent with Graph-based Architecture.
+"""OpenAI-compatible API server for RAG Agent with Strands Framework Integration.
 
 Exposes the RAG agent as an OpenAI-compatible API endpoint.
 Can be used with Ollama GUI and other compatible clients.
 
-Uses StrandsGraphRAGAgent (Graph-based) with:
-- 3-node waterfall architecture (topic check → security check → RAG worker)
-- Early exit on invalid/unsafe queries (saves 60-70% cost)
+Uses StrandsGraphRAGAgent with Strands agents:
+- Node 1: TopicChecker agent (fast model, ~100ms) - validates scope
+- Node 2: SecurityChecker agent (fast model, ~100ms) - validates safety
+- Node 3: RAGWorker agent (powerful model, ~1500ms) - retrieval & generation
+- Conditional routing: early exit if validation fails (saves 60-70% cost)
 - Multi-layer caching and semantic response caching
-- MCP support and Strands framework integration
+- MCP server for tool exposure to external agents
 """
 
+import json
 import logging
 import sys
-import json
 import time
-import uvicorn
-from pathlib import Path
-from datetime import datetime
-from typing import List, Optional, Dict, Any
 from contextlib import asynccontextmanager
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+import uvicorn
+
+# Load environment variables from .env file (required for TAVILY_API_KEY and other secrets)
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from src.config.settings import get_settings, Settings
+
 from src.agents.strands_graph_agent import StrandsGraphRAGAgent as StrandsRAGAgent
+from src.config.settings import Settings, get_settings
 from src.mcp.mcp_server import RAGAgentMCPServer
 from src.tools.tool_registry import get_registry
-
-# Load environment variables from .env file (required for TAVILY_API_KEY and other secrets)
-from dotenv import load_dotenv
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent))
@@ -42,23 +46,90 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
+# ============================================================================
+# DRY Helper Functions
+# ============================================================================
+
+def _determine_response_type(sources: List[Dict]) -> tuple[str, bool]:
+    """Determine response type and caching status from sources (DRY helper)."""
+    has_cached_sources = any(s.get("source_type") == "cached" for s in sources)
+    has_web_sources = any(s.get("source_type") == "web_search" for s in sources)
+    
+    if has_cached_sources:
+        return "cached", True
+    elif has_web_sources:
+        return "web_search", False
+    else:
+        return "rag", False
+
+
+def _create_timing_data(total_time_ms: float = 0, response_type: str = "rag", is_cached: bool = False) -> Dict:
+    """Create consistent timing metadata (DRY helper)."""
+    return {
+        "total_time_ms": round(total_time_ms, 2),
+        "response_type": response_type,
+        "is_cached": is_cached,
+        "_populated": True
+    }
+
+
+def _create_chat_response(content: str, sources: List[Dict], timing_data: Dict, model: str = "rag-agent") -> Dict:
+    """Create consistent chat completion response structure (DRY helper)."""
+    # Ensure content is always a string to prevent "[object Object]" errors
+    safe_content = str(content) if content is not None else ""
+    
+    return {
+        "id": f"chatcmpl-{datetime.now().timestamp()}",
+        "object": "chat.completion", 
+        "created": int(datetime.now().timestamp()),
+        "model": model,
+        "choices": [
+            {
+                "index": 0,
+                "message": {
+                    "role": "assistant",
+                    "content": safe_content,
+                    "timing": timing_data,
+                    "sources": sources,
+                },
+                "finish_reason": "stop",
+            }
+        ],
+        "usage": {
+            "prompt_tokens": len(safe_content.split()) if safe_content else 0,
+            "completion_tokens": len(safe_content.split()) if safe_content else 0, 
+            "total_tokens": len(safe_content.split()) * 2 if safe_content else 0,
+        },
+        "sources": sources,  # Backward compatibility
+        "timing": timing_data,  # Backward compatibility
+        "response_type": timing_data["response_type"],  # Backward compatibility
+    }
+
+
+def _create_stream_chunk(content: str = "") -> str:
+    """Create consistent stream chunk format (DRY helper)."""
+    return f"data: {json.dumps({'choices': [{'delta': {'content': content}}]})}\n\n"
+
+
+def _handle_api_error(e: Exception, context: str = "API") -> HTTPException:
+    """Create consistent error responses (DRY helper)."""
+    logger.error(f"{context} error: {e}")
+    return HTTPException(status_code=500, detail=str(e))
+
+
 # ============================================================================
 # Pydantic Models
 # ============================================================================
 
 
 class Message(BaseModel):
-    """Chat message - Strands Agent standard format with optional timestamp.
+    """Chat message - Strands Agent standard format with timestamp.
 
-    Matches Strands Agent/AgentCore message signature:
+    Matches Strands Agent message signature:
+    - role: "user" or "assistant"
     - content: List of ContentBlocks (text, toolUse, toolResult, etc.)
-    - timestamp: ISO 8601 for message ordering in AgentCore Memory
-
-    MIGRATION NOTES FOR AGENTCORE:
-    - This structure is AgentCore-native and requires NO code changes
-    - AgentCore's SessionManager expects exactly this format
-    - Timestamp field will be used by AgentCoreMemorySessionManager for chronological ordering
-    - Keep this model as-is when migrating to AgentCore (no backwards compatibility needed)
+    - timestamp: ISO 8601 for message ordering in conversation history
 
     Example:
     {
@@ -208,6 +279,7 @@ async def lifespan(app: FastAPI):
         logger.info("=" * 70 + "\n")
 
     except Exception as e:
+        # Store initialization error but try to continue for graceful degradation
         initialization_error = str(e)
 
         # Check if it's a Milvus connection error - show user-friendly message but allow graceful degradation
@@ -216,8 +288,9 @@ async def lifespan(app: FastAPI):
             logger.error("⚠️  Warning: Milvus vector database is not running")
             logger.error("=" * 70)
             logger.error("\nServer starting in DEGRADED MODE:")
-            logger.error("  ✓ Validation nodes (topic/security check) will work")
-            logger.error("  ✗ RAG search and answer generation will fail")
+            logger.error("  ✓ Validation and security checks will work")
+            logger.error("  ⚠️  Knowledge base search will be unavailable")
+            logger.error("  ✓ Web search will still work if enabled")
             logger.error("\nTo enable full functionality, start Milvus:")
             logger.error("  1. Make sure Docker is running")
             logger.error("  2. cd docker")
@@ -225,9 +298,10 @@ async def lifespan(app: FastAPI):
             logger.error("\nTo check Milvus status:")
             logger.error("  docker-compose ps")
             logger.error("=" * 70 + "\n")
-            # Don't raise - allow the API to start in degraded mode (must yield for context manager)
+            # Don't set strands_agent to None - let it continue in degraded mode
+            # initialization_error remains set so handlers can check for degraded mode
         else:
-            # For other errors, show full trace and re-raise
+            # For other errors  (like Ollama not running), show full trace and re-raise
             logger.error(f"✗ Initialization failed: {e}", exc_info=True)
             raise
 
@@ -263,14 +337,14 @@ async def get_or_init_agent():
     """Get existing StrandsRAGAgent (assumes it's already initialized on startup)."""
     global strands_agent, settings, initialization_error
 
-    if initialization_error:
-        raise HTTPException(status_code=503, detail=initialization_error)
-
     if strands_agent is None:
+        if initialization_error:
+            raise HTTPException(status_code=503, detail=initialization_error)
         raise HTTPException(
             status_code=503, detail="Agent not initialized. Check server startup logs."
         )
 
+    # Agent exists - it may have initialization_error internally but still functional for validation
     return strands_agent
 
 
@@ -505,7 +579,7 @@ async def health():
             "model": "rag-agent",
             "ollama": s.ollama_host,
             "milvus": f"{s.milvus_host}:{s.milvus_port}",
-            "web_search_enabled": s.enable_web_search_supplement,
+            "web_search_enabled": bool(s.tavily_api_key and s.tavily_api_key.strip()),
         }
     except Exception as e:
         return {"status": "error", "detail": str(e)}
@@ -673,8 +747,7 @@ async def get_cache_stats():
 
         return cache_stats
     except Exception as e:
-        logger.error(f"Failed to get cache stats: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise _handle_api_error(e, "cache stats")
 
 
 # ============================================================================
@@ -696,8 +769,7 @@ async def get_mcp_server_info():
     try:
         return mcp_server.get_server_info()
     except Exception as e:
-        logger.error(f"Failed to get MCP server info: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise _handle_api_error(e, "MCP server info")
 
 
 @app.get("/api/mcp/tools", tags=["mcp"])
@@ -719,8 +791,7 @@ async def list_mcp_tools():
             "tools": tools,
         }
     except Exception as e:
-        logger.error(f"Failed to list MCP tools: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise _handle_api_error(e, "MCP tools listing")
 
 
 @app.get("/api/mcp/skills", tags=["mcp"])
@@ -744,8 +815,7 @@ async def list_mcp_skills():
             "total_tools": len(registry.list_tools()),
         }
     except Exception as e:
-        logger.error(f"Failed to list MCP skills: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise _handle_api_error(e, "MCP skills listing")
 
 
 @app.get("/api/mcp/skills/{skill_name}", tags=["mcp"])
@@ -853,7 +923,20 @@ def _stream_chat_completions(
 
     async def stream_generator():
         """Generator for streaming response with SSE format."""
+        chunk_count = 0
+        error_occurred = False
+        
         try:
+            # Check if agent has unrecoverable initialization error
+            if agent.initialization_error and "Milvus connection failed" not in agent.initialization_error:
+                # Unrecoverable error - return error message through stream
+                error_msg = f"Service error: {agent.initialization_error}"
+                logger.error(f"[STREAM] Cannot process request due to: {error_msg}")
+                yield f"data: {json.dumps({'choices': [{'delta': {'content': error_msg}}]})}\n\n"
+                yield "data: [STREAM_END]\n\n"
+                error_occurred = True
+                return
+
             # Use request parameters or defaults
             retrieval_top_k = request.top_k or 5
             temperature = request.temperature if request.temperature is not None else 0.1
@@ -867,15 +950,82 @@ def _stream_chat_completions(
             # This yields text chunks as they're generated by the LLM
             if force_web_search:
                 # 🌐 FORCE WEB SEARCH: Only web search, no knowledge base
+                
+                # CRITICAL: Check competitor queries even in force web search mode for streaming
+                from src.agents.strands_graph_agent import (
+                    _create_web_search_unavailable_message,
+                    _is_competitor_database_query,
+                )
+                
+                is_competitor_query = _is_competitor_database_query(user_message)
+                if is_competitor_query:
+                    logger.info(f"[STREAMING_FORCE_WEB_SEARCH] Competitor query detected: {user_message[:50]}...")
+                    # Return same error message format as normal competitor detection  
+                    if not agent.web_search:
+                        logger.warning("[STREAMING_FORCE_WEB_SEARCH] Web search unavailable for competitor query")
+                        error_dict = _create_web_search_unavailable_message()
+                        # Send text content first
+                        yield f"data: {json.dumps({'choices': [{'delta': {'content': error_dict['text']}}]})}\n\n"
+                        # Send sources information in final chunk to match frontend expectations
+                        final_data = {
+                            "choices": [{"delta": {"content": ""}}],
+                            "sources": [error_dict],  # Include system message as source
+                            "timing": {"total_time_ms": 0, "response_type": "rag", "is_cached": False, "_populated": True}
+                        }
+                        yield f"data: {json.dumps(final_data)}\n\n"
+                        yield "data: [STREAM_END]\n\n"
+                        return
+                    else:
+                        # Test web search availability
+                        try:
+                            test_query = agent._generate_web_search_query(user_message)
+                            test_results, test_status = agent.web_search.search(query=test_query, max_results=1)
+                            if test_status == 'api_unavailable':
+                                logger.warning("[STREAMING_FORCE_WEB_SEARCH] Web search API unavailable for competitor query")
+                                error_dict = _create_web_search_unavailable_message()
+                                # Send text content first
+                                yield f"data: {json.dumps({'choices': [{'delta': {'content': error_dict['text']}}]})}\n\n"
+                                # Send sources information in final chunk 
+                                final_data = {
+                                    "choices": [{"delta": {"content": ""}}],
+                                    "sources": [error_dict],  # Include system message as source
+                                    "timing": {"total_time_ms": 0, "response_type": "rag", "is_cached": False, "_populated": True}
+                                }
+                                yield f"data: {json.dumps(final_data)}\n\n"
+                                yield "data: [STREAM_END]\n\n"
+                                return
+                            else:
+                                # Web search available - continue with force web search streaming
+                                logger.info("[STREAMING_FORCE_WEB_SEARCH] Web search available for competitor query - continuing")
+                                # Continue to normal streaming below
+                        except Exception as e:
+                            logger.warning(f"[STREAMING_FORCE_WEB_SEARCH] Web search test failed for competitor query: {e}")  
+                            error_dict = _create_web_search_unavailable_message()
+                            # Send text content first
+                            yield f"data: {json.dumps({'choices': [{'delta': {'content': error_dict['text']}}]})}\n\n"
+                            # Send sources information in final chunk 
+                            final_data = {
+                                "choices": [{"delta": {"content": ""}}],
+                                "sources": [error_dict],  # Include system message as source
+                                "timing": {"total_time_ms": 0, "response_type": "rag", "is_cached": False, "_populated": True}
+                            }
+                            yield f"data: {json.dumps(final_data)}\n\n"
+                            yield "data: [STREAM_END]\n\n"
+                            return
+                
+                # Proceed with force web search (competitor or non-competitor that passed tests)
                 logger.info(f"🌐 [STREAMING] FORCE WEB SEARCH: {user_message[:100]}...")
                 async for chunk in agent.stream_answer_web_search_only(
                     question=user_message,
                     temperature=temperature,
                     max_tokens=max_tokens,
                 ):
+                    chunk_count += 1
+                    # Ensure chunk is always a string to prevent frontend "[object Object]" errors
+                    safe_chunk = str(chunk) if chunk is not None else ""
                     # All chunks are strings now - wrap in SSE format
                     # Format: data: {json}\n\n
-                    yield f"data: {json.dumps({'choices': [{'delta': {'content': chunk}}]})}\n\n"
+                    yield f"data: {json.dumps({'choices': [{'delta': {'content': safe_chunk}}]})}\n\n"
             elif bypass_cache:
                 # Bypass all caches and query LLM directly (knowledge base only, no web search)
                 logger.info(f"[STREAMING_NO_CACHE] Cache bypassed: {user_message[:100]}...")
@@ -886,7 +1036,10 @@ def _stream_chat_completions(
                     temperature=temperature,
                     max_tokens=max_tokens,
                 ):
-                    yield f"data: {json.dumps({'choices': [{'delta': {'content': chunk}}]})}\n\n"
+                    chunk_count += 1
+                    # Ensure chunk is always a string to prevent frontend "[object Object]" errors
+                    safe_chunk = str(chunk) if chunk is not None else ""
+                    yield f"data: {json.dumps({'choices': [{'delta': {'content': safe_chunk}}]})}\n\n"
             else:
                 # Use normal path with caching
                 logger.info(f"[STREAMING] Normal streaming: {user_message[:100]}...")
@@ -897,27 +1050,65 @@ def _stream_chat_completions(
                     temperature=temperature,
                     max_tokens=max_tokens,
                 ):
-                    yield f"data: {json.dumps({'choices': [{'delta': {'content': chunk}}]})}\n\n"
+                    chunk_count += 1
+                    # Ensure chunk is always a string to prevent frontend "[object Object]" errors
+                    safe_chunk = str(chunk) if chunk is not None else ""
+                    yield f"data: {json.dumps({'choices': [{'delta': {'content': safe_chunk}}]})}\n\n"
 
-            # After streaming completes, send sources as final chunk
-            sources = agent._last_stream_sources
-            if sources:
-                sources_data = {
+            # Log if we got no content chunks at all
+            if chunk_count == 0 and not error_occurred:
+                logger.warning(
+                    f"[STREAM_WARNING] No content chunks generated for: {user_message[:100]}... "
+                    f"This usually means: (1) Ollama model is offline, (2) Model is not loaded, "
+                    f"(3) Model is not generating output, or (4) All chunks were empty"
+                )
+                # Send empty response message as content chunk
+                empty_msg = (
+                    "❌ No response generated.\\n\\n"
+                    "This can happen if:\\n"
+                    "1. Ollama model is not running\\n"
+                    "2. Model is not loaded (try: ollama pull qwen2.5:0.5b)\\n"
+                    "3. Model ran out of memory\\n"
+                    "4. API server crashed\\n\\n"
+                    "Check the server logs for details."
+                )
+                yield f"data: {json.dumps({'choices': [{'delta': {'content': empty_msg}}]})}\n\n"
+
+            # Only send final metadata and completion if no errors occurred
+            if not error_occurred:
+                # After streaming completes, send sources and timing as final chunk  
+                sources = agent._last_stream_sources or []
+                
+                # Use DRY helper to determine response type and create timing
+                response_type, is_cached = _determine_response_type(sources)
+                timing_data = _create_timing_data(0, response_type, is_cached)  # Streaming doesn't track total time easily
+
+                # Send final chunk with sources and timing metadata
+                final_data = {
                     "choices": [
                         {
                             "delta": {"content": ""},  # Empty content to signal end
                         }
                     ],
                     "sources": sources,  # Include sources in this chunk
+                    "timing": timing_data,  # Include timing for badges
                 }
-                yield f"data: {json.dumps(sources_data)}\n\n"
+                yield f"data: {json.dumps(final_data)}\n\n"
 
-            # Signal successful completion
-            yield "data: [STREAM_END]\n\n"
+                # Signal successful completion
+                yield "data: [STREAM_END]\n\n"
+                logger.info(f"[STREAM_COMPLETE] Streamed {chunk_count} chunks for: {user_message[:50]}...")
 
         except Exception as e:
+            error_occurred = True
             logger.error(f"Stream generation error: {e}")
-            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+            
+            # Format error message consistently with other chunks
+            error_msg = f"Error generating response: {str(e)}"
+            yield f"data: {json.dumps({'choices': [{'delta': {'content': error_msg}}]})}\n\n"
+            
+            # Always send STREAM_END marker even for errors
+            yield "data: [STREAM_END]\n\n"
 
     return StreamingResponse(stream_generator(), media_type="text/event-stream")
 
@@ -926,9 +1117,7 @@ def _stream_chat_completions(
 async def chat_completions(request: ChatCompletionRequest, bypass_cache: bool = False):
     """OpenAI-compatible chat completions endpoint.
 
-    Accepts full conversation history for context-aware responses.
-    Designed for AgentCore compatibility: conversation history can be used
-    by the agent for clarification detection and context understanding.
+    Accepts full conversation history for context-aware responses using Strands agents.
 
     Supports both streaming and non-streaming responses:
     - stream: false (default) - Returns complete response as JSON
@@ -970,16 +1159,8 @@ async def chat_completions(request: ChatCompletionRequest, bypass_cache: bool = 
             )
 
         # Build conversation history (Strands Agent standard format)
-        # Preserves full conversation context for future context-aware features
+        # Preserves full conversation context for context-aware features
         # Content is already in Strands format: List[ContentBlock]
-        #
-        # MIGRATION TO AGENTCORE:
-        # When integrating AgentCoreMemorySessionManager:
-        # 1. The session_manager will auto-load: agent.messages = session_manager.list_messages(session_id)
-        # 2. You can DELETE the conversation_history building code below (this block)
-        # 3. Keep the ChatCompletionRequest structure - no API changes needed
-        # 4. The message format here matches SessionMessage.to_message() output exactly
-        # 5. Timestamps will be used for event ordering in AgentCore Memory
         conversation_history = [
             {
                 "role": msg.role,
@@ -1014,20 +1195,74 @@ async def chat_completions(request: ChatCompletionRequest, bypass_cache: bool = 
         try:
             if force_web_search:
                 # 🌐 FORCE WEB SEARCH: Only web search, no knowledge base
-                logger.info(
-                    f"🌐 [CHAT_ENDPOINT] FORCE WEB SEARCH SELECTED: {user_message[:100]}..."
+                
+                # CRITICAL: Check competitor queries even in force web search mode
+                # Must use same detection logic and return same error message format  
+                from src.agents.strands_graph_agent import (
+                    _create_web_search_unavailable_message,
+                    _is_competitor_database_query,
                 )
-                answer, sources = current_agent.answer_question_web_search_only(
-                    question=user_message,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                )
+                
+                is_competitor_query = _is_competitor_database_query(user_message)
+                if is_competitor_query:
+                    logger.info(f"[FORCE_WEB_SEARCH] Competitor query detected: {user_message[:50]}...")
+                    # Return same error message format as normal competitor detection
+                    if not current_agent.web_search:
+                        logger.warning("[FORCE_WEB_SEARCH] Web search unavailable for competitor query")
+                        error_dict = _create_web_search_unavailable_message()
+                        answer = error_dict['text']
+                        sources = [error_dict]
+                    else:
+                        # Test web search availability 
+                        try:
+                            test_query = current_agent._generate_web_search_query(user_message)
+                            test_results, test_status = current_agent.web_search.search(query=test_query, max_results=1)
+                            if test_status == 'api_unavailable':
+                                logger.warning("[FORCE_WEB_SEARCH] Web search API unavailable for competitor query")
+                                error_dict = _create_web_search_unavailable_message()
+                                answer = error_dict['text']  
+                                sources = [error_dict]
+                            else:
+                                # Web search available - continue with force web search
+                                logger.info("[FORCE_WEB_SEARCH] Web search available for competitor query - continuing")
+                                answer_chunks = []
+                                async for chunk in current_agent.stream_answer_web_search_only(
+                                    question=user_message,
+                                    temperature=temperature,
+                                    max_tokens=max_tokens,
+                                ):
+                                    if chunk and chunk.strip():  # Only collect non-empty chunks
+                                        answer_chunks.append(str(chunk))
+                                
+                                answer = "".join(answer_chunks).strip()
+                                sources = current_agent._last_stream_sources if hasattr(current_agent, '_last_stream_sources') else []
+                        except Exception as e:
+                            logger.warning(f"[FORCE_WEB_SEARCH] Web search test failed for competitor query: {e}")
+                            error_dict = _create_web_search_unavailable_message()
+                            answer = error_dict['text']
+                            sources = [error_dict]
+                else:
+                    # Non-competitor query - proceed with normal force web search
+                    logger.info(f"🌐 [CHAT_ENDPOINT] FORCE WEB SEARCH SELECTED: {user_message[:100]}...")
+                    # Use the working streaming method and collect all chunks
+                    answer_chunks = []
+                    async for chunk in current_agent.stream_answer_web_search_only(
+                        question=user_message,
+                        temperature=temperature,
+                        max_tokens=max_tokens,
+                    ):
+                        if chunk and chunk.strip():  # Only collect non-empty chunks
+                            answer_chunks.append(str(chunk))
+                    
+                    answer = "".join(answer_chunks).strip()
+                    sources = current_agent._last_stream_sources if hasattr(current_agent, '_last_stream_sources') else []
+                
                 logger.info(
                     f"[CHAT_ENDPOINT] Web search response: {len(sources)} sources, {len(answer)} chars"
                 )
             elif bypass_cache:
                 # Bypass all caches and query LLM directly (knowledge base only, no web search)
-                answer, sources = current_agent.answer_question_no_cache(
+                answer, sources = await current_agent.answer_question_no_cache(
                     collection_name=current_settings.ollama_collection_name,
                     question=user_message,
                     top_k=retrieval_top_k,
@@ -1036,13 +1271,20 @@ async def chat_completions(request: ChatCompletionRequest, bypass_cache: bool = 
                 )
             else:
                 # Use normal path with caching
-                answer, sources = current_agent.answer_question(
+                result = await current_agent.answer_question(
                     collection_name=current_settings.ollama_collection_name,
                     question=user_message,
                     top_k=retrieval_top_k,
                     temperature=temperature,
                     max_tokens=max_tokens,
                 )
+                
+                # Handle both tuple and dictionary return formats
+                if isinstance(result, dict):
+                    answer = result["answer"]
+                    sources = result["sources"]
+                else:
+                    answer, sources = result
         except Exception as e:
             logger.error(f"RAG error: {e}")
             answer = f"Error: {str(e)}"
@@ -1071,53 +1313,30 @@ async def chat_completions(request: ChatCompletionRequest, bypass_cache: bool = 
             sources = unique_sources
             logger.info(f"[API_RESPONSE] After deduplication: {len(sources)} sources")
 
-        # Calculate total query time
+        # Calculate total query time and create response using DRY helpers
         total_time = time.time() - total_start_time
-        timing_data["total_time_ms"] = round(total_time * 1000, 2)
-
-        return {
-            "id": f"chatcmpl-{datetime.now().timestamp()}",
-            "object": "chat.completion",
-            "created": int(datetime.now().timestamp()),
-            "model": request.model or "rag-agent",
-            "choices": [
-                {
-                    "index": 0,
-                    "message": {"role": "assistant", "content": answer},
-                    "finish_reason": "stop",
-                }
-            ],
-            "usage": {
-                "prompt_tokens": len(user_message.split()),
-                "completion_tokens": len(answer.split()),
-                "total_tokens": len(user_message.split()) + len(answer.split()),
-            },
-            "sources": sources,  # Include sources in response (deduplicated)
-            "timing": timing_data,  # Include timing metrics
-        }
+        response_type, is_cached = _determine_response_type(sources)
+        timing_data = _create_timing_data(total_time * 1000, response_type, is_cached)
+        
+        # Ensure answer is always a string to prevent "[object Object]" errors
+        safe_answer = str(answer) if answer is not None else ""
+        
+        return _create_chat_response(safe_answer, sources, timing_data, request.model or "rag-agent")
     except Exception as e:
-        logger.error(f"Chat completions error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise _handle_api_error(e, "chat completions")
 
 
 @app.post("/v1/chat/completions/stream", tags=["chat"])
 async def chat_completions_stream(request: ChatCompletionRequest):
     """Stream chat completions endpoint for real-time response streaming.
 
-    Accepts full conversation history for AgentCore-compatible context awareness.
+    Accepts full conversation history for context-aware responses using Strands agents.
     Returns Server-Sent Events (SSE) stream with answer chunks as they are generated.
     This provides a perceived immediate response while the full answer is being
     generated in the background.
 
     The stream yields chunks in the format: data: {chunk}\n\n
     Client can consume with JavaScript fetch() and EventSource API.
-
-    MIGRATION NOTES FOR AGENTCORE:
-    - Same message handling as non-streaming endpoint
-    - Timestamp field is preserved in the request
-    - This endpoint signature is fully AgentCore-compatible
-    - When integrating AgentCore Runtime, the request contract stays the same
-    - No API signature changes needed for migration
     """
     try:
         current_agent = await get_or_init_agent()
@@ -1138,9 +1357,6 @@ async def chat_completions_stream(request: ChatCompletionRequest):
             raise HTTPException(status_code=400, detail="No user message found")
 
         # Build conversation history (Strands Agent standard format)
-        # MIGRATION NOTE: Same as non-streaming endpoint
-        # When integrating AgentCore, delete this conversation_history building block
-        # AgentCore's SessionManager will auto-load: agent.messages = session_manager.list_messages(...)
         conversation_history = [
             {
                 "role": msg.role,
@@ -1199,8 +1415,20 @@ async def chat_completions_stream(request: ChatCompletionRequest):
                     ):
                         yield f"data: {json.dumps({'choices': [{'delta': {'content': chunk}}]})}\n\n"
 
-                # After streaming completes, send sources as final chunk
+                # After streaming completes, send sources and response_type as final chunk
                 sources = current_agent._last_stream_sources
+                
+                # Determine response type from sources
+                has_cached_sources = any(s.get("source_type") == "cached" for s in sources) if sources else False
+                has_web_sources = any(s.get("source_type") == "web_search" for s in sources) if sources else False
+                
+                if has_cached_sources:
+                    response_type = "cached"
+                elif has_web_sources:
+                    response_type = "web_search"
+                else:
+                    response_type = "rag"
+                
                 if sources:
                     sources_data = {
                         "choices": [
@@ -1209,6 +1437,7 @@ async def chat_completions_stream(request: ChatCompletionRequest):
                             }
                         ],
                         "sources": sources,  # Include sources in this chunk
+                        "response_type": response_type,  # Include response type indicator
                     }
                     yield f"data: {json.dumps(sources_data)}\n\n"
 
@@ -1221,8 +1450,7 @@ async def chat_completions_stream(request: ChatCompletionRequest):
         return StreamingResponse(stream_generator(), media_type="text/event-stream")
 
     except Exception as e:
-        logger.error(f"Stream endpoint error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise _handle_api_error(e, "stream endpoint")
 
 
 @app.post("/v1/cache/clear", tags=["cache"])
@@ -1338,60 +1566,6 @@ async def get_cached_responses(limit: int = 20):
         return {"cached_responses": []}
 
 
-@app.get("/v1/cache/questions", tags=["cache"])
-async def get_cached_questions_list():
-    """Get lightweight list of cached questions without answers.
-
-    Returns just question titles for quick loading in the UI,
-    then user can fetch individual answers on demand.
-    """
-    current_agent = await get_or_init_agent()
-    if not current_agent:
-        raise HTTPException(status_code=503, detail="Agent not initialized")
-
-    try:
-        response_cache = current_agent.response_cache
-        if not response_cache:
-            logger.info("Response cache not available on agent")
-            return {"questions": [], "count": 0}
-
-        logger.info("Fetching cached questions list (without answers)...")
-        results = response_cache.vector_db.client.query(
-            collection_name=response_cache.cache_collection_name,
-            db_name=response_cache.vector_db.db_name,
-            output_fields=["metadata", "id"],
-            limit=100,
-        )
-
-        if results:
-            results = list(results)
-
-        cached_questions = []
-        if results:
-            for idx, entity in enumerate(results):
-                try:
-                    # Get entity ID from Milvus
-                    entity_id = str(entity.get("id", idx))
-
-                    metadata = entity.get("metadata", {})
-                    if isinstance(metadata, str):
-                        metadata = json.loads(metadata)
-
-                    question = metadata.get("question", "")
-                    if question:
-                        cached_questions.append({"id": entity_id, "question": question})
-                except Exception as e:
-                    logger.warning(f"Error processing question {idx}: {e}")
-                    continue
-
-        logger.info(f"Returning {len(cached_questions)} cached questions")
-        return {"questions": cached_questions, "count": len(cached_questions)}
-
-    except Exception as e:
-        logger.error(f"Error retrieving cached questions: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
-
-
 @app.get("/v1/cache/responses/{cache_id}", tags=["cache"])
 async def get_cached_response(cache_id: str):
     """Get a specific cached response by ID.
@@ -1440,9 +1614,44 @@ async def get_cached_response(cache_id: str):
             metadata = json.loads(metadata)
 
         answer = target_response.get("text", "")
+        sources = metadata.get("sources", [])
 
-        logger.info(f"Returning cached response {cache_id}")
-        return answer
+        # Ensure sources is a list and handle both dict and string sources
+        if not isinstance(sources, list):
+            sources = []
+        
+        # Determine response type based on sources (defensive coding)
+        has_cached_sources = False
+        has_web_sources = False
+        
+        for s in sources:
+            if isinstance(s, dict):
+                source_type = s.get("source_type", "")
+                if source_type == "cached":
+                    has_cached_sources = True
+                elif source_type == "web_search":
+                    has_web_sources = True
+            # Skip string sources or malformed entries
+        
+        if has_cached_sources and not has_web_sources:
+            response_type = "cached"
+        elif has_web_sources:
+            response_type = "web_search"
+        else:
+            response_type = "rag"
+
+        logger.info(f"Returning cached response {cache_id} (response_type={response_type})")
+        return {
+            "answer": answer,
+            "sources": sources,
+            "response_type": response_type,
+            "metadata": {
+                "collection": metadata.get("collection", "unknown"),
+                "response_time": metadata.get("response_time"),
+                "confidence": metadata.get("confidence"),
+                "execution_path": metadata.get("execution_path"),
+            }
+        }
 
     except HTTPException:
         raise
@@ -1458,12 +1667,14 @@ async def get_cached_response(cache_id: str):
 
 @app.get("/v1/cache/questions", tags=["cache"])
 async def get_cached_questions_v1():
-    """Retrieve lightweight list of cached questions.
+    """Retrieve lightweight list of cached questions with deduplication.
 
     Returns:
         JSON with questions array, each containing:
         - id: Question ID (Milvus entity ID as string)
         - question: The question text
+        
+    Note: Deduplicates identical questions, returning only the latest cached entry.
     """
     current_agent = await get_or_init_agent()
     if not current_agent:
@@ -1486,9 +1697,11 @@ async def get_cached_questions_v1():
         )
 
         questions = []
+        seen_questions = {}  # Track unique questions by text
+        
         if results:
             results_list = list(results) if not isinstance(results, list) else results
-            logger.info(f"Got {len(results_list)} results from cache")
+            logger.info(f"Got {len(results_list)} results from cache (before dedup)")
 
             for idx, entity in enumerate(results_list):
                 try:
@@ -1499,40 +1712,38 @@ async def get_cached_questions_v1():
                     if isinstance(metadata, str):
                         metadata = json.loads(metadata)
 
-                    question = metadata.get("question", "")
+                    question = metadata.get("question", "").strip()
                     if question:
-                        questions.append({"id": entity_id, "question": question})
-                        logger.info(f"Added question {entity_id}: {question[:50]}...")
+                        # Deduplicate: keep first occurrence of each unique question
+                        # (Milvus returns results in insertion order, so first = most recent)
+                        if question not in seen_questions:
+                            seen_questions[question] = True
+                            questions.append({"id": entity_id, "question": question})
+                            logger.info(f"Added question {entity_id}: {question[:50]}...")
+                        else:
+                            logger.info(f"Skipped duplicate: {question[:50]}...")
                 except Exception as e:
                     logger.warning(f"Error processing question {idx}: {e}")
                     continue
 
-        logger.info(f"Returning {len(questions)} cached questions")
+        logger.info(f"Returning {len(questions)} unique cached questions (deduplicated from {len(results_list) if results else 0})")
         return {"questions": questions, "count": len(questions)}
 
     except Exception as e:
         logger.error(f"Error retrieving cached questions: {e}", exc_info=True)
         return {"questions": [], "count": 0}
 
-
 def main():
-    """Start the API server with lifespan context manager handling initialization."""
-    global settings, initialization_error, common_questions
-
-    logger.info("=" * 70)
-    logger.info("RAG Agent API Server Starting")
-    logger.info("=" * 70)
-
-    settings = get_settings()
-    logger.info(f"Server: http://0.0.0.0:{settings.api_port}")
-    logger.info(f"Docs: http://localhost:{settings.api_port}/docs")
     logger.info("Press Ctrl+C to shutdown gracefully")
     logger.info("=" * 70)
 
     try:
+        # Load settings  
+        settings = get_settings()
+        
         # Load common questions for cache endpoints
         logger.info("Loading common questions...")
-        common_questions = load_common_questions()
+        # common_questions = load_common_questions()
 
         logger.info("=" * 70)
         logger.info("Server Ready - Accepting Requests")

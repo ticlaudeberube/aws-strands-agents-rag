@@ -4,11 +4,13 @@ Supports multiple search providers:
 - Tavily: AI-optimized search (recommended, requires API key)
 """
 
-import requests
-import logging
-from typing import List, Dict, Optional
 import json
+import logging
 import os
+from typing import Dict, List, Optional, Tuple
+
+import requests
+
 from src.config.settings import get_settings
 
 logger = logging.getLogger(__name__)
@@ -48,7 +50,7 @@ class TavilySearchClient:
         max_results: int = 5,
         search_depth: str = "basic",
         include_answer: bool = False,
-    ) -> List[Dict[str, str]]:
+    ) -> Tuple[List[Dict[str, str]], str]:
         """Search using Tavily API.
 
         Args:
@@ -58,11 +60,11 @@ class TavilySearchClient:
             include_answer: Whether to include LLM-generated answer
 
         Returns:
-            List of search results with title, snippet, url, and score
+            Tuple of (results, status) where status is 'success', 'api_unavailable', or 'no_results'
         """
         if not self.api_key:
             logger.warning("[TAVILY] API key not available, skipping Tavily search")
-            return []
+            return [], 'api_unavailable'
 
         try:
             logger.info(f"[TAVILY] Web search for: {query}")
@@ -81,13 +83,28 @@ class TavilySearchClient:
                 json=payload,
                 timeout=self.timeout,
             )
+            
+            # Check for specific Tavily error codes  
+            if response.status_code == 401:
+                logger.error("[TAVILY] Authentication failed - invalid API key")
+                return [], 'api_unavailable'
+            elif response.status_code == 429:
+                logger.error("[TAVILY] Rate limit exceeded - too many requests")
+                return [], 'api_unavailable'
+            elif response.status_code == 432:
+                logger.error("[TAVILY] Quota exceeded or API key invalid")
+                return [], 'api_unavailable'
+            elif not response.ok:
+                logger.error(f"[TAVILY] API error: {response.status_code} - {response.text}")
+                return [], 'api_unavailable'
+                
             response.raise_for_status()
 
             data = response.json()
 
             if "results" not in data:
                 logger.warning(f"[TAVILY] No results field in response: {list(data.keys())}")
-                return []
+                return [], 'no_results'
 
             results = []
             for result in data.get("results", []):
@@ -104,14 +121,15 @@ class TavilySearchClient:
             logger.info(
                 f"[TAVILY] Found {len(results)} results (score: {data.get('response_time', 'N/A')}s)"
             )
-            return results
+            status = 'success' if results else 'no_results'
+            return results, status
 
         except requests.exceptions.RequestException as e:
             logger.error(f"[TAVILY] Search error: {type(e).__name__}: {e}")
-            return []
+            return [], 'api_unavailable'
         except (KeyError, json.JSONDecodeError) as e:
             logger.error(f"[TAVILY] Response parsing error: {e}")
-            return []
+            return [], 'api_unavailable'
 
 
 class WebSearchClient:
@@ -150,7 +168,7 @@ class WebSearchClient:
         query: str,
         max_results: int = 5,
         safe_search: bool = False,
-    ) -> List[Dict[str, str]]:
+    ) -> Tuple[List[Dict[str, str]], str]:
         """Search using Tavily API.
 
         Args:
@@ -159,15 +177,15 @@ class WebSearchClient:
             safe_search: Enable safe search filtering (unused, kept for API compatibility)
 
         Returns:
-            List of search results with title, snippet, and URL
+            Tuple of (results, status) where status is 'success', 'api_unavailable', or 'no_results'
         """
         if not self.tavily.api_key:
             logger.warning("[WEB_SEARCH] Tavily API key not available. Web search will not work.")
-            return []
+            return [], 'api_unavailable'
 
-        results = self.tavily.search(query, max_results=max_results)
-        logger.info(f"[WEB_SEARCH] Got {len(results)} results from Tavily")
-        return results
+        results, status = self.tavily.search(query, max_results=max_results)
+        logger.info(f"[WEB_SEARCH] Got {len(results)} results from Tavily (status: {status})")
+        return results, status
 
     def search_comparison(
         self,
@@ -193,11 +211,12 @@ class WebSearchClient:
         logger.info(f"[COMPARISON_SEARCH] Searching for comparison: {product1} vs {product2}")
 
         # Try direct comparison query first
-        combined_results = []
+        combined_results: List[Dict[str, str]] = []
         if self.tavily.api_key:
             comparison_query = f"{product1} vs {product2} comparison features advantages"
-            combined_results = self.tavily.search(comparison_query, max_results=max_results)
-            if combined_results:
+            search_results, search_status = self.tavily.search(comparison_query, max_results=max_results)
+            if search_status == 'success' and search_results:
+                combined_results = search_results
                 logger.info(
                     f"[COMPARISON_SEARCH] Got {len(combined_results)} results from direct comparison query"
                 )

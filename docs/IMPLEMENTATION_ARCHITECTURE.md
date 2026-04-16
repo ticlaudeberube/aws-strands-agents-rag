@@ -725,7 +725,7 @@ src/
 │   ├── node_metrics.py         # Performance metrics & monitoring
 │   ├── tool_registry.py        # Tool management & registration
 │   ├── strands_graph_agent.py  # Main 3-node RAG agent
-│   ├── strands_core_agent.py   # Alternative core agent
+│   ├── strands_graph_agent.py    # Production 3-node RAG agent
 │   └── skills/                 # Modular skill implementations
 ├── config/
 │   └── settings.py             # Configuration management

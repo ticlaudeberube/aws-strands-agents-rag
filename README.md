@@ -11,6 +11,7 @@ A high-performance Retrieval-Augmented Generation (RAG) system using AWS Strands
 | **🚀 Quick Start** | [Implementation Status](IMPLEMENTATION_STATUS.md) • [Setup Guide](docs/GETTING_STARTED.md) • [Developer Guide](docs/DEVELOPER_GUIDE.md) • [Infrastructure Status](docs/INFRASTRUCTURE_IMPLEMENTATION_STATUS.md) |
 | **🏗️ Architecture** | [Complete Implementation](docs/IMPLEMENTATION_ARCHITECTURE.md) • [System Design](docs/ARCHITECTURE.md) • [Query Routing](docs/QUERY_ROUTING.md) |
 | **👩‍💻 Development** | [API Reference](docs/DEVELOPER_GUIDE.md) • [Code Examples](docs/DEVELOPMENT.md) • [Strands Reference](docs/STRANDS_QUICK_REFERENCE.md) |
+| **🛠️ Dev Tools** | [StrandsCoreAgent Overview](dev_tools/AGENT_OVERVIEW.md) • [Architecture & Integration](dev_tools/README.md) • [Technical Reference](dev_tools/DOCUMENTATION.md) |
 | **⚡ Performance** | [Optimization Guide](docs/LATENCY_OPTIMIZATION.md) • [Model Comparison](docs/MODEL_PERFORMANCE_COMPARISON.md) • [Caching Strategy](docs/CACHING_STRATEGY.md) |
 | **🚀 Deployment** | [Production Readiness](docs/PRODUCTION_READINESS.md) • [React UI](docs/REACT_DEPLOYMENT.md) • [AWS Architecture](docs/AWS_ARCHITECTURE.md) |
 | **📋 Complete Index** | [All Documentation](docs/INDEX.md) |
@@ -190,6 +191,7 @@ aws-strands-agents-rag/
 ├── src/agents/              # StrandsRAGAgent implementation
 ├── src/tools/               # Ollama & Milvus clients
 ├── src/config/              # Configuration management
+├── dev_tools/               # StrandsCoreAgent for code/docs analysis
 ├── document-loaders/        # Document loading utilities
 ├── docker/                  # Docker Compose setup
 ├── tests/                   # Test suite

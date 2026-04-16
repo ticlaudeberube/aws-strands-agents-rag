@@ -14,7 +14,7 @@ Quick navigation for committed documentation in this project.
 
 **Infrastructure Status Analysis (Apr 12, 2026)**: Added comprehensive analysis of actual implementation status vs documentation claims. Verified that core monitoring, retry logic, and health checks are actively working in production, while advanced features (circuit breakers, tracing) are production-ready frameworks. See [INFRASTRUCTURE_IMPLEMENTATION_STATUS.md](INFRASTRUCTURE_IMPLEMENTATION_STATUS.md).
 
-**Strands Core Agent (Apr 12, 2026)**: Added specialized Strands agent for documentation and programming assistance with 3-node architecture (TaskValidator → TaskRouter → SpecializedWorkers). Includes 9 tools across 2 skills for comprehensive code analysis and documentation management. See [STRANDS_CORE_AGENT.md](STRANDS_CORE_AGENT.md).
+**Strands Core Agent (Apr 16, 2026)**: Moved specialized Strands agent and all related components (skills, MCP server, demo, documentation) from production directories to `dev_tools/` to establish clear architectural separation. The complete development utility suite now includes StrandsCoreAgent, DocumentationSkill, ProgrammingSkill, CoreAgentMCPServer, and comprehensive examples. See `dev_tools/README.md` and `dev_tools/DOCUMENTATION.md`.
 
 **Graph Agent Architecture (Mar 5, 2026)**: Migrated to 3-node graph-based `StrandsGraphRAGAgent` with pattern-matching security detection. All 77 tests passing. See [ARCHITECTURE.md](ARCHITECTURE.md) and [tests/README.md](../tests/README.md) for details.
 
@@ -34,7 +34,8 @@ Quick navigation for committed documentation in this project.
 - **[QUERY_ROUTING.md](QUERY_ROUTING.md)** - Complete query routing paths, validation layers, and decision logic
 - **[AWS_ARCHITECTURE.md](AWS_ARCHITECTURE.md)** - AWS deployment architectures (ECS/Fargate, Lambda + AgentCore)
 - **[DEVELOPMENT.md](DEVELOPMENT.md)** - Development guidelines and patterns
-- **[STRANDS_CORE_AGENT.md](STRANDS_CORE_AGENT.md)** - Specialized agent for documentation and programming assistance
+- **[dev_tools/AGENT_OVERVIEW.md](../dev_tools/AGENT_OVERVIEW.md)** - Complete guide: StrandsCoreAgent purpose, capabilities, and benefits over standard GitHub Copilot
+- **[dev_tools/README.md](../dev_tools/README.md)** - Development utility suite architecture and integration guide
 - **[CACHING_STRATEGY.md](CACHING_STRATEGY.md)** - Current semantic response cache implementation (single-layer Milvus)
 - **[CACHING_STRATEGY_IMPROVEMENTS.md](CACHING_STRATEGY_IMPROVEMENTS.md)** - 11 caching improvements for container-based deployment
 - **[AGENTCORE_CACHING_STRATEGY.md](AGENTCORE_CACHING_STRATEGY.md)** - Caching strategy for serverless AgentCore deployment

@@ -93,7 +93,7 @@ def risky_operation():
 **Module**: `tests/test_strands_graph_nodes.py`
 - 35 unit tests covering:
   - GraphContext validation and execution paths (8 tests)
-  - NodeMetrics tracking (5 tests)  
+  - NodeMetrics tracking (5 tests)
   - GraphMetrics aggregation (3 tests)
   - NodeConfig validation and runtime updates (5 tests)
   - RateLimiter functionality (3 tests)
@@ -139,7 +139,7 @@ def risky_operation():
 - Enable `await` calls to external services
 - Prepare for parallel execution framework
 
-### Parallel TopicChecker + SecurityChecker Execution  
+### Parallel TopicChecker + SecurityChecker Execution
 - Use `asyncio.gather()` to run both checkers concurrently
 - Potential 50% latency reduction in validation phase
 - Eliminates false dependency between checkers
@@ -221,7 +221,7 @@ def risky_operation():
 - Type hints on all functions
 - Dataclass validation with `validate()` methods
 
-### Testability  
+### Testability
 - Comprehensive unit test suite (35 tests)
 - Mock-friendly design with dependency injection
 - Isolated component testing

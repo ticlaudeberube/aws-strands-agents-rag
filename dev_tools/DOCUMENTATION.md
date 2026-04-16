@@ -1,3 +1,19 @@
+
+## Using dev_tools via Copilot Chat
+
+You can use dev_tools capabilities interactively through GitHub Copilot Chat in VS Code:
+
+- Simply ask Copilot Chat to perform a dev_tools action (e.g., "Analyze documentation in the docs/ folder using dev_tools").
+- Copilot will import and run the relevant dev_tools function and return the result in the chat.
+
+**Example prompts:**
+
+- "Analyze documentation in docs/ using dev_tools."
+- "Generate API documentation for dev_tools/strands_core_agent.py using dev_tools."
+- "Assess project quality with dev_tools."
+
+No code changes are required—just request the action in Copilot Chat and the result will be provided interactively.
+
 # Strands Core Agent for Documentation and Programming Assistance
 
 The Strands Core Agent is a specialized AI agent designed to assist with documentation management and programming tasks. It follows the established 3-node Strands architecture pattern for optimal performance and cost efficiency.
@@ -221,7 +237,7 @@ result = await server.invoke_tool(
 ### Integrated Server (RAG + Core)
 
 ```python
-from src.mcp.core_agent_server import IntegratedMCPServer
+from dev_tools.mcp_server import IntegratedMCPServer
 
 # Combined capabilities
 integrated = IntegratedMCPServer(settings)

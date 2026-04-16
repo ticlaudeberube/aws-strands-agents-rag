@@ -43,18 +43,18 @@ log_error() {
 
 run_dev() {
     log_info "Starting React development server..."
-    
+
     cd "$REACT_DIR"
-    
+
     # Check if node_modules exists
     if [ ! -d "node_modules" ]; then
         log_info "Installing dependencies..."
         npm install
     fi
-    
+
     log_success "Starting development server on http://localhost:3000"
     log_info "Press Ctrl+C to stop"
-    
+
     npm start
 }
 
@@ -64,23 +64,23 @@ run_dev() {
 
 build_production() {
     log_info "Building React app for production..."
-    
+
     cd "$REACT_DIR"
-    
+
     # Install dependencies if needed
     if [ ! -d "node_modules" ]; then
         log_info "Installing dependencies..."
         npm install
     fi
-    
+
     # Build
     log_info "Building optimized production bundle..."
     npm run build
-    
+
     log_success "Production build complete!"
     log_info "Output location: $REACT_DIR/build"
     log_info "Build size: $(du -sh "$REACT_DIR/build" | cut -f1)"
-    
+
     # Show recommended next steps
     echo ""
     echo "Next steps:"
@@ -95,26 +95,26 @@ build_production() {
 
 build_docker() {
     log_info "Building React Docker image..."
-    
+
     cd "$(dirname "$APP_DIR")"  # Go to project root
-    
+
     docker build \
         -f docker/Dockerfile.react \
         -t rag-react:latest \
         -t rag-react:prod \
         .
-    
+
     log_success "Docker image built: rag-react:latest"
 }
 
 run_docker_standalone() {
     log_info "Running React container (standalone)..."
-    
+
     # Build if not exists
     if ! docker images | grep -q "rag-react"; then
         build_docker
     fi
-    
+
     docker run \
         --name rag-react \
         -p 3000:3000 \
@@ -122,26 +122,26 @@ run_docker_standalone() {
         -e REACT_APP_API_HOST=host.docker.internal \
         --rm \
         rag-react:latest
-    
+
     log_success "React app running on http://localhost:3000"
 }
 
 run_docker_compose() {
     log_info "Starting all services with Docker Compose..."
-    
+
     cd "$(dirname "$APP_DIR")/docker"
-    
+
     if ! docker compose config > /dev/null 2>&1; then
         log_error "docker-compose.yml is invalid or docker compose not available"
         return 1
     fi
-    
+
     log_info "Building React service..."
     docker compose build react-chatbot
-    
+
     log_info "Starting all services..."
     docker compose up -d
-    
+
     log_success "Services started!"
     echo ""
     echo "  React:       http://localhost:3000"
@@ -160,7 +160,7 @@ run_docker_compose() {
 
 check_api() {
     log_info "Checking API server health..."
-    
+
     if curl -s http://localhost:8000/health > /dev/null 2>&1; then
         log_success "API is healthy ✓"
         curl -s http://localhost:8000/health | python3 -m json.tool
@@ -175,7 +175,7 @@ check_api() {
 
 check_react() {
     log_info "Checking React app..."
-    
+
     if curl -s http://localhost:3000 > /dev/null 2>&1; then
         log_success "React app is running ✓"
         return 0
@@ -188,7 +188,7 @@ check_react() {
 health_check() {
     log_info "Running health checks..."
     echo ""
-    
+
     check_api || true
     echo ""
     check_react || true
@@ -196,14 +196,14 @@ health_check() {
 
 cleanup_docker() {
     log_info "Cleaning up Docker resources..."
-    
+
     # Stop containers
     docker compose down 2>/dev/null || true
-    
+
     # Remove React image
     docker rmi rag-react:latest 2>/dev/null || true
     docker rmi rag-react:prod 2>/dev/null || true
-    
+
     log_success "Cleanup complete"
 }
 
@@ -254,7 +254,7 @@ EOF
 main() {
     # Default to help if no argument
     COMMAND="${1:-help}"
-    
+
     case "$COMMAND" in
         dev)
             run_dev

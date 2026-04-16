@@ -255,7 +255,6 @@ Input Query
 The primary agent class implementing **real Strands agent instances** with RAG capabilities.
 
 **Structure:**
-```python
 # Real Strands Agent instantiation
 topic_agent = Agent(
     name="TopicChecker",
@@ -282,6 +281,87 @@ def answer_question(self, question: str):
     security_response = security_agent.invoke(context={"user_query": question})
     if security_response.is_threat:
         return rejection_response("security_risk")
+
+---
+
+# AgentCore Serverless Implementation (Bedrock/Lambda)
+
+This section summarizes how to deploy the Strands RAG agent using **AWS Bedrock AgentCore** on Lambda, with distributed caching and analytics for production-grade, cost-optimized serverless operation.
+
+## Key Differences from Container-Based Deployment
+
+- **Stateless execution**: No in-memory caches; all state must be externalized
+- **Distributed cache**: Use ElastiCache Redis (recommended) or DynamoDB for embedding/search caches
+- **Session analytics**: Use DynamoDB (AgentCore SessionManager) for question tracking and analytics
+- **CloudWatch**: All metrics/logs routed to CloudWatch for observability
+
+## Distributed Caching Patterns
+
+- **ElastiCache Redis**:
+    - Shared across all Lambda invocations
+    - 1-3ms lookup, 1hr TTL for embeddings, 24hr TTL for search results
+    - See [AGENTCORE_CACHING_STRATEGY.md](AGENTCORE_CACHING_STRATEGY.md#12-elasticache-redis-for-distributed-caching)
+- **DynamoDB (alternative)**:
+    - Lower cost, higher latency (5-15ms)
+    - Use for dev/staging or low-traffic prod
+    - See [AGENTCORE_CACHING_STRATEGY.md](AGENTCORE_CACHING_STRATEGY.md#14-dynamodb-alternative-to-elasticache-cost-optimization)
+
+## Session Analytics with DynamoDB
+
+- All user queries and agent responses are stored in the AgentCore session table
+- Popular question analytics are computed via DynamoDB GSI queries
+- See [AGENTCORE_CACHING_STRATEGY.md](AGENTCORE_CACHING_STRATEGY.md#13-dynamodb-analytics-for-question-tracking)
+
+## Configuration & Environment Variables
+
+Add the following to your `.env` for Lambda/AgentCore:
+
+```bash
+# Distributed Cache (choose one)
+REDIS_CACHE_ENABLED=true
+REDIS_HOST=rag-agent-cache.abc123.use1.cache.amazonaws.com
+REDIS_PORT=6379
+REDIS_DB=0
+EMBEDDING_CACHE_TTL_HOURS=1
+SEARCH_CACHE_TTL_HOURS=24
+# OR
+USE_DYNAMODB_CACHE=true
+DYNAMODB_CACHE_TABLE=rag-agent-cache
+
+# Session Analytics
+AGENTCORE_SESSION_TABLE=agentcore-sessions
+ENABLE_QUESTION_ANALYTICS=true
+```
+
+See [AGENTCORE_CACHING_STRATEGY.md](AGENTCORE_CACHING_STRATEGY.md#recommended-configuration-agentcore--lambda) for full details.
+
+## Integration Points in the Codebase
+
+- `src/tools/redis_cache.py` and `src/tools/dynamodb_cache.py`: Distributed cache clients
+- `src/agents/strands_graph_agent.py`: Use `self.redis_cache` or `self.dynamodb_cache` for embedding/search caching
+- `src/tools/dynamodb_analytics.py`: Popular question analytics
+- `src/config/settings.py`: All cache/session config
+
+## Implementation Roadmap & Best Practices
+
+1. **Provision ElastiCache Redis or DynamoDB** (see [AGENTCORE_CACHING_STRATEGY.md](AGENTCORE_CACHING_STRATEGY.md#implementation-roadmap-agentcore-specific))
+2. **Implement distributed cache classes** (`RedisDistributedCache`, `DynamoDBCache`)
+3. **Integrate cache into agent** (replace in-memory caches)
+4. **Enable session analytics** (DynamoDB GSI, API endpoint)
+5. **Monitor with CloudWatch** (metrics, logs, cache hit rates)
+
+**Best Practices:**
+- Use Redis for high-traffic/low-latency, DynamoDB for cost-sensitive workloads
+- Always externalize all state (no local file writes, no in-memory cache)
+- Use TTLs to prevent stale cache entries
+- Use CloudWatch for all metrics/logs
+- See [AGENTCORE_CACHING_STRATEGY.md](AGENTCORE_CACHING_STRATEGY.md) for code samples and infrastructure YAML
+
+---
+**For detailed code, infrastructure, and analytics examples, see:**
+- [AGENTCORE_CACHING_STRATEGY.md](AGENTCORE_CACHING_STRATEGY.md)
+- [AWS_ARCHITECTURE.md](AWS_ARCHITECTURE.md)
+- [DEVELOPMENT.md](DEVELOPMENT.md#agentcore-serverless-implementation)
 
     # Node 3: RAG (only reached if above passed)
     rag_response = rag_agent.invoke(

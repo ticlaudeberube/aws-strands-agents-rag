@@ -57,7 +57,7 @@ Copilot excels when paired with XP workflows:
 2.  **Generate Logic:** Switch to your source file. Copilot will read the open test file and suggest the exact implementation needed to pass.
 
 ### Pair Programming
-Treat Copilot as your "Navigator." 
+Treat Copilot as your "Navigator."
 *   Use the Chat to ask: *"Are there any edge cases I'm missing in this function?"*
 *   Use it for code reviews: *"Explain this block of code and check for security vulnerabilities."*
 

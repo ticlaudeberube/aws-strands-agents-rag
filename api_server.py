@@ -1308,6 +1308,14 @@ async def chat_completions(request: ChatCompletionRequest, bypass_cache: bool = 
         if not user_message:
             raise HTTPException(status_code=400, detail="No user message found")
 
+        # TODO: Implement structured GlobalErrorResponse format
+        # Currently returns generic HTTPException. Should return:
+        # - error_code: Machine-readable code (VALIDATION_MIN_LENGTH, SECURITY_SCRIPT_INJECTION, etc.)
+        # - category: validation_error, security_error, service_error, or system_error
+        # - details: Field-level validation information
+        # - suggestion: Recovery hint for user
+        # See docs/ERROR_HANDLING.md for full schema
+        
         # Sanitize and validate user input
         sanitized_message = sanitize_user_input(user_message, current_settings)
         is_valid, error_message = validate_user_input(sanitized_message, current_settings)

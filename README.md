@@ -13,9 +13,11 @@ A high-performance Retrieval-Augmented Generation (RAG) system using AWS Strands
 | **👩‍💻 Development** | [API Reference](docs/DEVELOPER_GUIDE.md) • [Code Examples](docs/DEVELOPMENT.md) • [Strands Reference](docs/STRANDS_QUICK_REFERENCE.md) |
 | **🛠️ Dev Tools** | [StrandsCoreAgent Overview](dev_tools/AGENT_OVERVIEW.md) • [Architecture & Integration](dev_tools/README.md) • [Technical Reference](dev_tools/DOCUMENTATION.md) |
 | **⚡ Performance** | [Optimization Guide](docs/LATENCY_OPTIMIZATION.md) • [Model Comparison](docs/MODEL_PERFORMANCE_COMPARISON.md) • [Caching Strategy](docs/CACHING_STRATEGY.md) |
-| **🚀 Deployment** | [Production Readiness](docs/PRODUCTION_READINESS.md) • [React UI](docs/REACT_DEPLOYMENT.md) • [AWS Architecture](docs/AWS_ARCHITECTURE.md) |
+| **🚀 Deployment** | [Production Readiness](docs/PRODUCTION_READINESS.md) • [⚠️ Production Gaps](docs/PRODUCTION_READINESS_GAPS.md) • [React UI](docs/REACT_DEPLOYMENT.md) • [AWS Architecture](docs/AWS_ARCHITECTURE.md) |
 | **📋 Complete Index** | [All Documentation](docs/INDEX.md) |
 
+
+> **⚠️ Before Production:** Review [Production Readiness Gaps](docs/PRODUCTION_READINESS_GAPS.md) - identifies critical missing features (config validation, rate limiting, authentication, error responses, etc.)
 
 > **Supports Dual-Mode Deployment:**
 > - Strands (local/container) and AgentCore (cloud/serverless)

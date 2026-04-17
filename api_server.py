@@ -15,6 +15,7 @@ Uses StrandsGraphRAGAgent with Strands agents:
 
 import json
 import logging
+import re
 import sys
 import time
 from contextlib import asynccontextmanager
@@ -22,6 +23,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import bleach
 import uvicorn
 
 # Load environment variables from .env file (required for TAVILY_API_KEY and other secrets)
@@ -440,6 +442,95 @@ def extract_text_from_content(content: Any) -> str:
 
     # Fallback
     return str(content)
+
+
+def sanitize_user_input(text: str, settings) -> str:
+    """Sanitize user input using bleach library (Python's DOMPurify equivalent).
+    
+    Args:
+        text: Raw user input text
+        settings: Application settings with configuration
+        
+    Returns:
+        Sanitized text string
+    """
+    if not text or not isinstance(text, str):
+        return ""
+    
+    # Use bleach library for HTML sanitization (Python's DOMPurify equivalent)
+    if settings.enable_html_sanitization:
+        # Configure bleach similar to DOMPurify settings:
+        # - No HTML tags allowed (ALLOWED_TAGS = [])
+        # - No attributes allowed (ALLOWED_ATTRIBUTES = {})
+        # - Keep text content, remove tags (strip=True)
+        sanitized = bleach.clean(
+            text,
+            tags=[],  # No HTML tags allowed (equivalent to ALLOWED_TAGS: [])
+            attributes={},  # No attributes allowed (equivalent to ALLOWED_ATTR: [])
+            strip=True,  # Remove tags but keep content (equivalent to KEEP_CONTENT: true)
+            strip_comments=True,  # Remove HTML comments
+        )
+    else:
+        sanitized = text
+    
+    # Remove excessive whitespace and normalize
+    sanitized = re.sub(r'\s+', ' ', sanitized).strip()
+    
+    # Remove non-printable control characters but keep Unicode content (emojis, etc.)
+    # Remove ASCII control chars (0x00-0x1F, 0x7F) except common whitespace
+    sanitized = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '', sanitized)
+    
+    # Length limit for DoS protection - configurable
+    max_length = settings.max_message_length
+    if len(sanitized) > max_length:
+        logger.warning(f"Input truncated from {len(sanitized)} to {max_length} characters")
+        sanitized = sanitized[:max_length]
+    
+    return sanitized
+
+
+def validate_user_input(text: str, settings) -> tuple[bool, str | None]:
+    """Validate user input for security and content policy.
+    
+    Args:
+        text: User input text to validate
+        settings: Application settings with configuration
+        
+    Returns:
+        Tuple of (is_valid, error_message)
+    """
+    if not text or not isinstance(text, str):
+        return False, "Invalid input: empty or non-text content"
+    
+    # Basic length checks - configurable minimum
+    if len(text.strip()) < 1:
+        return False, "Message cannot be empty"
+    
+    min_length = settings.min_message_length
+    if len(text.strip()) < min_length:
+        return False, f"Message too short (minimum {min_length} characters)"
+    
+    # Check for potential injection attacks
+    suspicious_patterns = [
+        (r'<script[^>]*>', 'Script injection detected'),
+        (r'javascript:', 'JavaScript protocol detected'),
+        (r'on\w+\s*=', 'Event handler detected'),
+        (r'<iframe[^>]*>', 'Iframe injection detected'),
+        (r'<object[^>]*>', 'Object injection detected'),
+        (r'<embed[^>]*>', 'Embed injection detected'),
+    ]
+    
+    for pattern, message in suspicious_patterns:
+        if re.search(pattern, text, re.IGNORECASE):
+            logger.warning(f"Suspicious input detected: {message} in text: {text[:100]}...")
+            return False, f"Invalid input detected: {message}"
+    
+    # Check for excessive repetition (spam/DoS)
+    # Looking for patterns like "aaaaaaa" or "123123123"
+    if re.search(r'(.{2,})\1{4,}', text):
+        return False, "Invalid input: excessive repetition detected"
+    
+    return True, None
 
 
 def warm_response_cache(agent: StrandsRAGAgent, settings) -> None:
@@ -1216,6 +1307,17 @@ async def chat_completions(request: ChatCompletionRequest, bypass_cache: bool = 
 
         if not user_message:
             raise HTTPException(status_code=400, detail="No user message found")
+
+        # Sanitize and validate user input
+        sanitized_message = sanitize_user_input(user_message, current_settings)
+        is_valid, error_message = validate_user_input(sanitized_message, current_settings)
+        
+        if not is_valid:
+            logger.warning(f"Invalid input rejected: {error_message}")
+            raise HTTPException(status_code=400, detail=f"Invalid input: {error_message}")
+        
+        # Use sanitized message for processing
+        user_message = sanitized_message
 
         # Check if streaming is requested
         if request.stream:

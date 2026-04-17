@@ -357,6 +357,24 @@ All agents use actual `agent.invoke()` calls with real conditional routing based
 
 ## Documentation Organization
 
+### 🚨 Critical Rule: Document Placement
+**ALL new documentation must go in the `docs/` folder** — never create documentation files in the root directory except for `README.md`.
+
+**Allowed in root:**
+- ✅ `README.md` (high-level overview, doc index, quick start only)
+
+**Must go in `docs/`:**
+- ✅ `docs/GETTING_STARTED.md`
+- ✅ `docs/DEVELOPMENT.md`
+- ✅ `docs/FEATURE_NAME.md`
+- ✅ Any other documentation files
+
+**NOT allowed in root:**
+- ❌ SETUP.md, INSTALLATION.md, TUTORIAL.md, GUIDE.md, etc. (move to `docs/`)
+- ❌ Multiple markdown files (consolidate or move to `docs/`)
+
+This keeps the root directory clean and documentation organized.
+
 ### Structure (DRY - Single Source of Truth)
 - **README.md** (root): High-level overview, architecture diagrams, quick start, doc index **ONLY**
 - **docs/GETTING_STARTED.md**: Complete setup, configuration, troubleshooting

@@ -26,6 +26,7 @@ dependencies = [
     "tqdm>=4.65.0",
     "fastapi>=0.100.0",
     "uvicorn>=0.23.0",
+    "bleach>=6.3.0",
 ]
 
 [project.optional-dependencies]
@@ -61,6 +62,13 @@ warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = false
 exclude = []
+
+# Ignore missing type stubs for libraries without types-* packages
+[[tool.mypy.overrides]]
+module = [
+    "bleach",
+]
+ignore_missing_imports = true
 
 [dependency-groups]
 dev = [

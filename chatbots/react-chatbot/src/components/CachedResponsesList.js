@@ -1,12 +1,7 @@
-import React, { useState } from 'react';
+import React from 'react';
 import './CachedResponsesList.css';
 
 function CachedResponsesList({ cachedResponses, onSelectResponse, isCollapsed, onToggleCollapse }) {
-  const [expandedId, setExpandedId] = useState(null);
-
-  const toggleExpand = (id) => {
-    setExpandedId(expandedId === id ? null : id);
-  };
 
   const getTimingLabel = (timing) => {
     if (!timing || !timing.total_time_ms) return '';
@@ -26,13 +21,12 @@ function CachedResponsesList({ cachedResponses, onSelectResponse, isCollapsed, o
         ) : (
           cachedResponses.map((response) => {
             const questionText = String(response.question || '').trim();
-            const answerText = String(response.answer || '').trim();
             const displayQuestion = questionText.substring(0, 40);
 
             return (
             <div
               key={response.id}
-              className={`response-item ${expandedId === response.id ? 'expanded' : ''}`}
+              className="response-item"
             >
               <button
                 className="response-button"
@@ -47,7 +41,6 @@ function CachedResponsesList({ cachedResponses, onSelectResponse, isCollapsed, o
                   console.log('All keys in response:', Object.keys(response));
                   console.log('=============================');
                   onSelectResponse(response);
-                  toggleExpand(response.id);
                   onToggleCollapse();
                 }}
                 title={questionText}
@@ -62,16 +55,6 @@ function CachedResponsesList({ cachedResponses, onSelectResponse, isCollapsed, o
                   </span>
                 </div>
               </button>
-
-              {expandedId === response.id && answerText && (
-                <div className="response-preview">
-                  {response.sources && response.sources.length > 0 && (
-                    <div className="preview-sources">
-                      <strong>Sources: {response.sources.length}</strong>
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
             );
           })

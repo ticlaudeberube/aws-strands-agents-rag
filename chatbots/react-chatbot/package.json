@@ -4,9 +4,11 @@
   "description": "React chatbot for Milvus RAG with streaming responses",
   "private": true,
   "dependencies": {
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "react-scripts": "5.0.1"
+  "@types/dompurify": "^3.0.5",
+  "dompurify": "^3.4.0",
+  "react": "^18.2.0",
+  "react-dom": "^18.2.0",
+  "react-scripts": "5.0.1"
   },
   "devDependencies": {
     "@playwright/test": "^1.48.0",
@@ -18,14 +20,12 @@
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
-
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:debug": "playwright test --debug",
     "test:e2e:report": "playwright show-report",
     "test:e2e:watch": "playwright test --watch",
-
     "test:e2e:basic": "playwright test e2e/chatbot-basic.spec.ts",
     "test:e2e:cache": "playwright test e2e/chatbot-cache.spec.ts",
     "test:e2e:mobile": "playwright test --project=mobile-chrome --project=mobile-safari",
@@ -33,11 +33,9 @@
     "test:e2e:sources": "playwright test e2e/chatbot-sources.spec.ts",
     "test:e2e:search": "playwright test e2e/chatbot-search.spec.ts",
     "test:e2e:status": "playwright test e2e/chatbot-status.spec.ts",
-
     "test:e2e:chromium": "playwright test --project=chromium",
     "test:e2e:firefox": "playwright test --project=firefox",
     "test:e2e:webkit": "playwright test --project=webkit",
-
     "eject": "react-scripts eject"
   },
   "eslintConfig": {

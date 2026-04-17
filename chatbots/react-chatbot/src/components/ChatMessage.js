@@ -66,7 +66,10 @@ function ChatMessage({ message }) {
   }
 
   return (
-    <div className={`chat-message ${isUser ? 'user' : 'assistant'}`}>
+    <div 
+      className={`chat-message ${isUser ? 'user' : 'assistant'}`}
+      data-testid={isUser ? 'user-message' : 'assistant-message'}
+    >
       <div className="message-avatar">
         {isUser ? '👤' : '🤖'}
       </div>
@@ -84,7 +87,7 @@ function ChatMessage({ message }) {
 
         {/* Main message content - show error messages in original style, hide only for system warnings */}
         {!shouldHideContent && (
-          <p className="message-text">
+          <p className="message-text" data-testid="message-text">
             {(() => {
               // Defensive programming: ensure message.text is always rendered as string
               let displayText = message.text;

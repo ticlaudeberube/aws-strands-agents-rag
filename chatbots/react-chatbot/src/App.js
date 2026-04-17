@@ -387,6 +387,13 @@ function App() {
       });
     } catch (error) {
       console.error('Error:', error);
+      // TODO: Implement structured GlobalErrorResponse parsing
+      // Currently shows generic errors. Should parse and display:
+      // - error_code: VALIDATION_MIN_LENGTH, SECURITY_SCRIPT_INJECTION, etc.
+      // - category: validation_error, security_error, service_error, system_error
+      // - details: Field-level validation info
+      // - suggestion: User-friendly recovery hint
+      // See docs/ERROR_HANDLING.md for full schema
       setMessages((prev) => {
         const newMessages = [...prev];
         const messageIndex = newMessages.findIndex(m => m.id === assistantMessageId);

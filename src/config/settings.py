@@ -150,6 +150,23 @@ class Settings(BaseSettings):
     user_agent: str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
     api_port: int = 8000  # API server port (reads API_PORT from .env, defaults to 8000)
     enable_cache_warmup: bool = False  # Enable/disable response cache warmup on startup (reads ENABLE_CACHE_WARMUP from .env)
+    
+    # Input Validation Configuration
+    min_message_length: int = Field(
+        default=2,
+        validation_alias="MIN_MESSAGE_LENGTH",
+        description="Minimum message length in characters (configurable)",
+    )
+    max_message_length: int = Field(
+        default=5000,
+        validation_alias="MAX_MESSAGE_LENGTH", 
+        description="Maximum message length in characters (API DoS protection)",
+    )
+    enable_html_sanitization: bool = Field(
+        default=True,
+        validation_alias="ENABLE_HTML_SANITIZATION",
+        description="Enable HTML sanitization using bleach library",
+    )
     web_search_timeout: int = 10  # Web search request timeout in seconds
     enable_web_search_supplement: bool = Field(
         default=False,

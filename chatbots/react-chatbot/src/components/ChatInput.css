@@ -2,6 +2,28 @@
   display: flex;
   gap: 10px;
   align-items: flex-end;
+  flex-direction: column;
+  padding: 16px;
+  background: white;
+  border-top: 1px solid #e5e7eb;
+}
+
+.input-error {
+  background: #fef2f2;
+  color: #dc2626;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  border: 1px solid #fecaca;
+  align-self: stretch;
+  margin-bottom: 8px;
+}
+
+.chat-input-controls {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+  width: 100%;
 }
 
 .chat-input {
@@ -18,10 +40,20 @@
   color: #1f2937;
 }
 
+.chat-input.error {
+  border-color: #dc2626;
+  background-color: #fef2f2;
+}
+
 .chat-input:focus {
   outline: none;
   border-color: #667eea;
   box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.chat-input.error:focus {
+  border-color: #dc2626;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
 }
 
 .chat-input:disabled {

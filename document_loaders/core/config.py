@@ -2,7 +2,6 @@
 
 import os
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass
@@ -15,8 +14,8 @@ class MilvusConfig:
 @dataclass
 class EmbeddingConfig:
     provider: str = "huggingface"
-    hf_model: Optional[str] = None
-    ollama_model: Optional[str] = None
+    hf_model: str | None = None
+    ollama_model: str | None = None
 
 
 def get_milvus_config() -> MilvusConfig:

@@ -4,14 +4,14 @@ import './SourcesList.css';
 function SourcesList({ sources, timing }) {
   // Debug logging
   console.log('SourcesList received:', { type: typeof sources, isArray: Array.isArray(sources), length: sources?.length, sources });
-  
+
   if (!sources || !Array.isArray(sources) || sources.length === 0) {
     return null;
   }
 
   // Safety: ensure sources is an array of objects
   const sanitizedSources = sources.filter(s => s && typeof s === 'object');
-  
+
   if (sanitizedSources.length === 0) {
     return null;
   }

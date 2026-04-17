@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any
 
 """Milvus-based persistent response cache for RAG agent.
 
@@ -14,7 +14,6 @@ import json
 import logging
 import re
 from datetime import datetime
-from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -56,8 +55,8 @@ class MilvusResponseCache:
     def __init__(
         self,
         vector_db,
-        embedding_dim: Optional[int] = None,
-        distance_threshold: Optional[float] = None,
+        embedding_dim: int | None = None,
+        distance_threshold: float | None = None,
     ):
         """Initialize response cache.
 
@@ -78,7 +77,7 @@ class MilvusResponseCache:
         self.cache_collection_name = settings.response_cache_collection_name
         self._ensure_collection()
 
-    def _extract_main_entity(self, text: str) -> Optional[str]:
+    def _extract_main_entity(self, text: str) -> str | None:
         """Extract the main product/entity being asked about.
 
         For questions like "What is Milvus?", extracts "Milvus".
@@ -190,10 +189,10 @@ class MilvusResponseCache:
     def search_cache(
         self,
         question: str,
-        question_embedding: List[float],
+        question_embedding: list[float],
         similarity_threshold: float = SIMILARITY_THRESHOLD,
         limit: int = 1,
-    ) -> Optional[Dict]:
+    ) -> dict | None:
         """Search for cached responses similar to the question.
 
         Args:
@@ -305,9 +304,9 @@ class MilvusResponseCache:
     def store_response(
         self,
         question: str,
-        question_embedding: List[float],
+        question_embedding: list[float],
         response: str,
-        metadata: Optional[Dict[Any, Any]] = None,
+        metadata: dict[Any, Any] | None = None,
     ) -> bool:
         """Store question + response in cache.
 
@@ -357,7 +356,7 @@ class MilvusResponseCache:
             logger.warning(f"Failed to store response in cache: {e}", exc_info=True)
             return False
 
-    def increment_hit_count(self, cached_entry: Dict):
+    def increment_hit_count(self, cached_entry: dict):
         """Track cache hit statistics (optional enhancement)."""
         # This is a placeholder for future analytics
         # In production, you might track hit counts in a separate metrics collection
@@ -378,7 +377,7 @@ class MilvusResponseCache:
             logger.error(f"Failed to clear cache: {e}")
             return False
 
-    def get_cache_stats(self) -> Dict:
+    def get_cache_stats(self) -> dict:
         """Get cache statistics.
 
         Returns:

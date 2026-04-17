@@ -6,6 +6,6 @@ from src.agents.skills.retrieval_skill import RetreivalSkill
 
 __all__ = [
     "RetreivalSkill",
-    "AnswerGenerationSkill", 
+    "AnswerGenerationSkill",
     "KnowledgeBaseSkill",
 ]

@@ -50,7 +50,7 @@ def load_responses_cache():
     Always runs to sync responses into the cache.
     """
     try:
-        with open("./data/responses.json", "r", encoding="utf-8") as f:
+        with open("./data/responses.json", encoding="utf-8") as f:
             data = json.load(f)
     except FileNotFoundError:
         print("❌ Error: ./data/responses.json not found")
@@ -109,7 +109,7 @@ def load_responses_cache():
 
         # Only require non-empty question (empty answers are intentional - trigger web search)
         if not question:
-            logger.warning(f"Skipping Q&A pair with no question")
+            logger.warning("Skipping Q&A pair with no question")
             skipped_count += 1
             continue
 

@@ -14,7 +14,7 @@ Run: python test_integration_comprehensive.py
 
 import time
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, TypedDict
+from typing import Any, TypedDict
 
 import requests
 
@@ -30,7 +30,7 @@ class Result:
     passed: bool
     message: str
     elapsed_time: float = 0.0
-    details: Optional[Dict[str, Any]] = None
+    details: dict[str, Any] | None = None
 
 
 class TestCase(TypedDict):
@@ -49,7 +49,7 @@ class IntegrationTestSuite:
         self.total_tests = 0
         self.passed_tests = 0
 
-    def api_call(self, question: str, force_web_search: bool = False) -> Dict[str, Any]:
+    def api_call(self, question: str, force_web_search: bool = False) -> dict[str, Any]:
         """Make an API call and return full response."""
         start = time.time()
         response = requests.post(
@@ -131,7 +131,7 @@ class IntegrationTestSuite:
             return Result(
                 name="Entity Validation - Prevents Hallucination",
                 passed=False,
-                message=f"❌ Invalid answers returned",
+                message="❌ Invalid answers returned",
                 details={"answer1_len": len(answer1), "answer2_len": len(answer2)},
             )
         except Exception as e:
@@ -196,7 +196,7 @@ class IntegrationTestSuite:
                 return Result(
                     name="Force Web Search - Slower than Cache",
                     passed=True,
-                    message=f"✅ force_web_search parameter accepted, got response",
+                    message="✅ force_web_search parameter accepted, got response",
                     elapsed_time=web_time,
                     details={"regular": regular_time, "web_search": web_time},
                 )
@@ -204,7 +204,7 @@ class IntegrationTestSuite:
             return Result(
                 name="Force Web Search - Slower than Cache",
                 passed=False,
-                message=f"❌ Failed to get response with force_web_search=true",
+                message="❌ Failed to get response with force_web_search=true",
                 elapsed_time=web_time,
                 details={"status": r2["status"]},
             )
@@ -361,68 +361,70 @@ class IntegrationTestSuite:
         """Test that all responses include proper response_type field for badge display."""
         self.total_tests += 1
         start_time = time.time()
-        
+
         try:
             # Test different query types and verify response_type
             test_cases: list[TestCase] = [
                 {
                     "question": "What is Milvus?",  # Should be cache or rag
                     "expected_types": ["cache", "rag"],
-                    "description": "cached or knowledge base query"
+                    "description": "cached or knowledge base query",
                 },
                 {
                     "question": "Tell me latest AI trends?",  # Should trigger web search
-                    "expected_types": ["web_search"], 
-                    "description": "web search query"
+                    "expected_types": ["web_search"],
+                    "description": "web search query",
                 },
                 {
                     "question": "What's the weather today?",  # Should be rejected
                     "expected_types": ["validation_error", "cache"],
-                    "description": "out-of-scope query"
-                }
+                    "description": "out-of-scope query",
+                },
             ]
-            
+
             failed_cases = []
-            
+
             for case in test_cases:
-                result = self.api_call(case["question"], force_web_search="web_search" in case["expected_types"])
-                
+                result = self.api_call(
+                    case["question"], force_web_search="web_search" in case["expected_types"]
+                )
+
                 if "response_type" not in result:
                     failed_cases.append(f"Missing response_type for {case['description']}")
                     continue
-                    
+
                 response_type = result["response_type"]
                 if response_type not in case["expected_types"]:
                     failed_cases.append(
                         f"{case['description']} returned response_type='{response_type}', "
                         f"expected one of {case['expected_types']}"
                     )
-            
+
             elapsed = time.time() - start_time
-            
+
             if failed_cases:
                 return Result(
                     name="Response Type Field Validation",
                     passed=False,
                     message=f"Response type validation failed: {'; '.join(failed_cases)}",
-                    elapsed_time=elapsed
+                    elapsed_time=elapsed,
                 )
-            
+
             self.passed_tests += 1
             return Result(
-                name="Response Type Field Validation", 
+                name="Response Type Field Validation",
                 passed=True,
                 message="✅ All responses include proper response_type field",
-                elapsed_time=elapsed
+                elapsed_time=elapsed,
             )
-            
+
         except Exception as e:
             elapsed = time.time() - start_time
             return Result(
                 name="Response Type Field Validation",
-                passed=False, 
+                passed=False,
                 message=f"❌ Test execution failed: {str(e)}",
-                elapsed_time=elapsed
+                elapsed_time=elapsed,
             )
 
     def run_all_tests(self):

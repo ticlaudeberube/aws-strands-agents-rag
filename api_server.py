@@ -20,7 +20,7 @@ import time
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import uvicorn
 
@@ -49,14 +49,12 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-
-
 # ============================================================================
 # DRY Helper Functions
 # ============================================================================
 
 
-def _determine_response_type(sources: List[Dict]) -> tuple[str, bool]:
+def _determine_response_type(sources: list[dict]) -> tuple[str, bool]:
     """Determine response type and caching status from sources (DRY helper)."""
     has_cached_sources = any(s.get("source_type") == "cached" for s in sources)
     has_web_sources = any(s.get("source_type") == "web_search" for s in sources)
@@ -71,7 +69,7 @@ def _determine_response_type(sources: List[Dict]) -> tuple[str, bool]:
 
 def _create_timing_data(
     total_time_ms: float = 0, response_type: str = "rag", is_cached: bool = False
-) -> Dict:
+) -> dict:
     """Create consistent timing metadata (DRY helper)."""
     return {
         "total_time_ms": round(total_time_ms, 2),
@@ -82,8 +80,8 @@ def _create_timing_data(
 
 
 def _create_chat_response(
-    content: str, sources: List[Dict], timing_data: Dict, model: str = "rag-agent"
-) -> Dict:
+    content: str, sources: list[dict], timing_data: dict, model: str = "rag-agent"
+) -> dict:
     """Create consistent chat completion response structure (DRY helper)."""
     # Ensure content is always a string to prevent "[object Object]" errors
     safe_content = str(content) if content is not None else ""
@@ -149,23 +147,23 @@ class Message(BaseModel):
     """
 
     role: str
-    content: List[
-        Dict[str, Any]
+    content: list[
+        dict[str, Any]
     ]  # Strands standard: list of ContentBlocks [{"text": "..."}, {"toolUse": ...}, etc.]
-    timestamp: Optional[str] = None  # ISO 8601 format for message ordering
+    timestamp: str | None = None  # ISO 8601 format for message ordering
 
 
 class ChatCompletionRequest(BaseModel):
     """OpenAI-compatible chat completion request."""
 
-    messages: List[Message]
-    model: Optional[str] = "rag-agent"
-    temperature: Optional[float] = 0.1  # Low temperature for factual RAG answers
-    top_p: Optional[float] = 0.9
-    max_tokens: Optional[int] = None  # None means use settings.max_tokens
-    top_k: Optional[int] = None  # None means use default of 5 for retrieval
-    stream: Optional[bool] = False
-    force_web_search: Optional[bool] = False  # NEW: Force web search (skip cache)
+    messages: list[Message]
+    model: str | None = "rag-agent"
+    temperature: float | None = 0.1  # Low temperature for factual RAG answers
+    top_p: float | None = 0.9
+    max_tokens: int | None = None  # None means use settings.max_tokens
+    top_k: int | None = None  # None means use default of 5 for retrieval
+    stream: bool | None = False
+    force_web_search: bool | None = False  # NEW: Force web search (skip cache)
 
 
 class ChatCompletionChoice(BaseModel):
@@ -183,7 +181,7 @@ class ChatCompletionResponse(BaseModel):
     object: str = "chat.completion"
     created: int
     model: str
-    choices: List[ChatCompletionChoice]
+    choices: list[ChatCompletionChoice]
     usage: dict
 
 
@@ -192,11 +190,11 @@ class ChatCompletionResponse(BaseModel):
 # ============================================================================
 
 # Global state
-strands_agent: Optional[StrandsRAGAgent] = None
-mcp_server: Optional[RAGAgentMCPServer] = None
-settings: Optional[Settings] = None
-initialization_error: Optional[str] = None
-common_questions: List[str] = []
+strands_agent: StrandsRAGAgent | None = None
+mcp_server: RAGAgentMCPServer | None = None
+settings: Settings | None = None
+initialization_error: str | None = None
+common_questions: list[str] = []
 graph_metrics: GraphMetrics = GraphMetrics()
 
 
@@ -260,7 +258,7 @@ async def lifespan(app: FastAPI):
         try:
             questions_file = Path(__file__).parent / "config" / "common_questions.json"
             if questions_file.exists():
-                with open(questions_file, "r") as f:
+                with open(questions_file) as f:
                     common_questions = json.load(f)
                 logger.info(f"✓ Loaded {len(common_questions)} common questions")
         except Exception as e:
@@ -391,7 +389,7 @@ def cleanup_resources() -> None:
     logger.info("=" * 60)
 
 
-def load_common_questions() -> List[str]:
+def load_common_questions() -> list[str]:
     """Load common questions from config file for pre-warming cache.
 
     Returns:
@@ -399,7 +397,7 @@ def load_common_questions() -> List[str]:
     """
     try:
         config_path = Path(__file__).parent / "config" / "common_questions.json"
-        with open(config_path, "r", encoding="utf-8") as f:
+        with open(config_path, encoding="utf-8") as f:
             data = json.load(f)
             questions = data.get("common_questions", [])
             logger.info(f"✓ Loaded {len(questions)} common questions from config")
@@ -467,7 +465,7 @@ def warm_response_cache(agent: StrandsRAGAgent, settings) -> None:
             logger.debug(f"responses.json not found at {responses_path}, skipping cache warming")
             return
 
-        with open(responses_path, "r", encoding="utf-8") as f:
+        with open(responses_path, encoding="utf-8") as f:
             data = json.load(f)
 
         qa_pairs = data.get("qa_pairs", [])

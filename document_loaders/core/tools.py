@@ -12,7 +12,7 @@ import os
 import random
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import requests
 from pymilvus import MilvusClient  # type: ignore[import-untyped]
@@ -37,13 +37,13 @@ class MilvusVectorDB:
 
     def __init__(
         self,
-        host: Optional[str] = None,
-        port: Optional[int] = None,
-        db_name: Optional[str] = None,
-        user: Optional[str] = None,
-        password: Optional[str] = None,
-        timeout: Optional[int] = None,
-        pool_size: Optional[int] = None,
+        host: str | None = None,
+        port: int | None = None,
+        db_name: str | None = None,
+        user: str | None = None,
+        password: str | None = None,
+        timeout: int | None = None,
+        pool_size: int | None = None,
     ):
         self.host = host or os.getenv("MILVUS_HOST", "localhost")
         self.port = port or _get_env_int("MILVUS_PORT", 19530)
@@ -93,9 +93,9 @@ class MilvusVectorDB:
     def create_collection(
         self,
         collection_name: str,
-        embedding_dim: Optional[int] = None,
-        index_type: Optional[str] = None,
-        metric_type: Optional[str] = None,
+        embedding_dim: int | None = None,
+        index_type: str | None = None,
+        metric_type: str | None = None,
     ) -> bool:
         dimension = embedding_dim or _get_env_int("EMBEDDING_DIM", 768)
         resolved_index_type = index_type or os.getenv("MILVUS_INDEX_TYPE", "HNSW")
@@ -105,7 +105,7 @@ class MilvusVectorDB:
             logger.info("Collection %s already exists", collection_name)
             return False
 
-        index_params: Dict[str, Any] = {
+        index_params: dict[str, Any] = {
             "metric_type": resolved_metric_type,
             "index_type": resolved_index_type,
         }
@@ -136,10 +136,10 @@ class MilvusVectorDB:
     def insert_embeddings(
         self,
         collection_name: str,
-        embeddings: List[List[float]],
-        texts: List[str],
-        metadata: Optional[List[Dict[str, Any]]] = None,
-    ) -> List[int]:
+        embeddings: list[list[float]],
+        texts: list[str],
+        metadata: list[dict[str, Any]] | None = None,
+    ) -> list[int]:
         if metadata is None:
             metadata = [{"source": "unknown"} for _ in texts]
 
@@ -167,7 +167,9 @@ class MilvusVectorDB:
                 }
             )
 
-        logger.info(f"[LOADER_INSERT] Inserting {len(data)} documents into {collection_name} (db: {self.db_name})")
+        logger.info(
+            f"[LOADER_INSERT] Inserting {len(data)} documents into {collection_name} (db: {self.db_name})"
+        )
         result = self.client.insert(
             collection_name=collection_name, data=data, db_name=self.db_name
         )
@@ -188,7 +190,7 @@ class MilvusVectorDB:
         self.client.drop_collection(collection_name=collection_name, db_name=self.db_name)
         return True
 
-    def list_collections(self) -> List[str]:
+    def list_collections(self) -> list[str]:
         return self.client.list_collections(db_name=self.db_name)  # type: ignore[no-any-return]
 
 
@@ -197,9 +199,9 @@ class OllamaClient:
 
     def __init__(
         self,
-        host: Optional[str] = None,
-        timeout: Optional[int] = None,
-        pool_size: Optional[int] = None,
+        host: str | None = None,
+        timeout: int | None = None,
+        pool_size: int | None = None,
     ):
         self.host = host or os.getenv("OLLAMA_HOST", "http://localhost:11434")
         self.timeout = timeout or _get_env_int("OLLAMA_TIMEOUT", 30)
@@ -223,7 +225,7 @@ class OllamaClient:
         self.session.mount("http://", adapter)
         self.session.mount("https://", adapter)
 
-    def is_available(self, timeout: Optional[int] = None) -> bool:
+    def is_available(self, timeout: int | None = None) -> bool:
         request_timeout = timeout if timeout is not None else self.timeout
         try:
             response = self.session.get(self.tags_endpoint, timeout=request_timeout)
@@ -231,7 +233,7 @@ class OllamaClient:
         except Exception:
             return False
 
-    def get_available_models(self, timeout: Optional[int] = None) -> List[str]:
+    def get_available_models(self, timeout: int | None = None) -> list[str]:
         request_timeout = timeout if timeout is not None else self.timeout
         try:
             response = self.session.get(self.tags_endpoint, timeout=request_timeout)
@@ -245,9 +247,9 @@ class OllamaClient:
     def embed_text(
         self,
         text: str,
-        model: Optional[str] = None,
-        timeout: Optional[int] = None,
-    ) -> List[float]:
+        model: str | None = None,
+        timeout: int | None = None,
+    ) -> list[float]:
         resolved_model = model or os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text:v1.5")
         request_timeout = timeout if timeout is not None else self.timeout
 
@@ -277,18 +279,18 @@ class OllamaClient:
 
     def embed_texts(
         self,
-        texts: List[str],
-        model: Optional[str] = None,
+        texts: list[str],
+        model: str | None = None,
         batch_size: int = 32,
-        max_workers: Optional[int] = None,
-    ) -> List[Optional[List[float]]]:
+        max_workers: int | None = None,
+    ) -> list[list[float] | None]:
         del batch_size
 
         if not texts:
             return []
 
         workers = max_workers or 4
-        embeddings: List[Optional[List[float]]] = [None] * len(texts)
+        embeddings: list[list[float] | None] = [None] * len(texts)
 
         with ThreadPoolExecutor(max_workers=workers) as executor:
             future_to_index = {

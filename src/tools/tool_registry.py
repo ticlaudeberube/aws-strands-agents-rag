@@ -1,7 +1,8 @@
 """Tool registry and management for MCP integration."""
 
 import logging
-from typing import Dict, Callable, Any, List
+from typing import Any
+from collections.abc import Callable
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
@@ -14,7 +15,7 @@ class ToolDefinition:
     name: str
     description: str
     function: Callable
-    parameters: Dict[str, Any]
+    parameters: dict[str, Any]
     skill_category: str = "general"
     requires_auth: bool = False
 
@@ -24,8 +25,8 @@ class ToolRegistry:
 
     def __init__(self) -> None:
         """Initialize tool registry."""
-        self._tools: Dict[str, ToolDefinition] = {}
-        self._skills: Dict[str, List[str]] = {}
+        self._tools: dict[str, ToolDefinition] = {}
+        self._skills: dict[str, list[str]] = {}
 
     def register_tool(
         self,
@@ -69,7 +70,7 @@ class ToolRegistry:
         tool_names = self._skills.get(skill_category, [])
         return [self._tools[name] for name in tool_names]
 
-    def list_skills(self) -> Dict[str, int]:
+    def list_skills(self) -> dict[str, int]:
         """List all skill categories and tool counts.
 
         Returns:
@@ -77,7 +78,7 @@ class ToolRegistry:
         """
         return {skill: len(tools) for skill, tools in self._skills.items()}
 
-    def list_tools(self) -> Dict[str, str]:
+    def list_tools(self) -> dict[str, str]:
         """List all registered tools with descriptions.
 
         Returns:
@@ -93,7 +94,7 @@ class ToolRegistry:
         """
         return list(self._tools.keys())
 
-    def get_tools_dict(self) -> Dict[str, ToolDefinition]:
+    def get_tools_dict(self) -> dict[str, ToolDefinition]:
         """Get all tools as dictionary.
 
         Returns:

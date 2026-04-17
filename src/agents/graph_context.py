@@ -3,7 +3,7 @@
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +19,7 @@ class NodeTiming:
     output_tokens: int = 0
     model_used: str = ""
     success: bool = True
-    error_message: Optional[str] = None
+    error_message: str | None = None
 
     @property
     def duration_ms(self) -> float:
@@ -31,12 +31,12 @@ class NodeTiming:
 class ExecutionTrace:
     """Complete execution trace for a graph run."""
 
-    timings: Dict[str, NodeTiming] = field(default_factory=dict)
-    decisions: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    timings: dict[str, NodeTiming] = field(default_factory=dict)
+    decisions: dict[str, dict[str, Any]] = field(default_factory=dict)
     start_time: float = field(default_factory=time.time)
-    end_time: Optional[float] = None
+    end_time: float | None = None
     early_exit: bool = False
-    early_exit_reason: Optional[str] = None
+    early_exit_reason: str | None = None
 
     def record_node_timing(self, node_timing: NodeTiming) -> None:
         """Record timing for a node execution."""
@@ -46,7 +46,7 @@ class ExecutionTrace:
             f"success={node_timing.success}"
         )
 
-    def record_decision(self, node_name: str, decision_data: Dict[str, Any]) -> None:
+    def record_decision(self, node_name: str, decision_data: dict[str, Any]) -> None:
         """Record decision-making data for a node."""
         self.decisions[node_name] = decision_data
         logger.debug(f"[DECISION] {node_name}: {decision_data}")
@@ -67,7 +67,7 @@ class ExecutionTrace:
             f"early_exit={self.early_exit}, nodes={len(self.timings)}"
         )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert trace to dictionary for API responses."""
         return {
             "total_duration_ms": (self.end_time or time.time() - self.start_time) * 1000,
@@ -95,7 +95,7 @@ class GraphContext:
 
     # Knowledge base configuration
     collection_name: str = "milvus_docs"
-    collections: List[str] = field(default_factory=lambda: ["milvus_docs"])
+    collections: list[str] = field(default_factory=lambda: ["milvus_docs"])
     top_k: int = 5
 
     # Execution flags
@@ -106,15 +106,15 @@ class GraphContext:
     execution_trace: ExecutionTrace = field(default_factory=ExecutionTrace)
 
     # Node results (populated during execution)
-    topic_result: Optional[Any] = None
-    security_result: Optional[Any] = None
-    retrieval_result: Optional[Dict[str, Any]] = None
-    final_answer: Optional[str] = None
-    final_sources: Optional[List[Dict[str, Any]]] = None
-    confidence_score: Optional[float] = None
+    topic_result: Any | None = None
+    security_result: Any | None = None
+    retrieval_result: dict[str, Any] | None = None
+    final_answer: str | None = None
+    final_sources: list[dict[str, Any]] | None = None
+    confidence_score: float | None = None
 
     # Additional data
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     def validate_for_rag_worker(self) -> bool:
         """Validate context has required fields for RAG worker."""
@@ -133,7 +133,7 @@ class GraphContext:
             return True
         return False
 
-    def get_rejection_reason(self) -> Optional[str]:
+    def get_rejection_reason(self) -> str | None:
         """Get the reason for early rejection, if applicable."""
         if self.topic_result and not getattr(self.topic_result, "is_valid", True):
             return f"Topic rejected: {getattr(self.topic_result, 'reason', 'unknown')}"
@@ -148,7 +148,7 @@ class GraphContext:
             reason = self.get_rejection_reason() or "Unknown"
             self.execution_trace.mark_early_exit(reason)
 
-    def to_response_dict(self) -> Dict[str, Any]:
+    def to_response_dict(self) -> dict[str, Any]:
         """Convert context to API response format."""
         return {
             "answer": self.final_answer or "",

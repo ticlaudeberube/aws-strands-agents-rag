@@ -104,6 +104,6 @@ The `readyPage` fixture provides a "ready to interact" page:
 
 If servers fail to start:
 1. Check ports 3000 and 8000 are not in use: `lsof -i :3000 :8000`
-2. Kill existing processes: `kill -9 $(lsof -t -i :3000)` 
+2. Kill existing processes: `kill -9 $(lsof -t -i :3000)`
 3. Clear node_modules and reinstall: `rm -rf node_modules && npm install`
 4. Check API server health: `curl http://localhost:8000/health`

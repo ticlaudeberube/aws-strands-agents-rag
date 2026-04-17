@@ -19,7 +19,7 @@ This directory contains development utilities and helper tools that support the 
 A specialized Strands agent for documentation and programming assistance. This agent is designed for development workflows, not production RAG operations.
 
 **Capabilities:**
-- Documentation analysis, generation, and improvement  
+- Documentation analysis, generation, and improvement
 - Code analysis, review, and suggestions
 - Project structure analysis and recommendations
 - Integration with existing codebase patterns
@@ -39,7 +39,7 @@ Model Context Protocol server that exposes StrandsCoreAgent tools to external sy
 - **CoreAgentMCPServer**: Basic MCP interface for development tools
 - **IntegratedMCPServer**: Combined interface with both RAG and development tools
 
-#### Demo (`demo.py`)  
+#### Demo (`demo.py`)
 Example usage patterns and integration demonstrations for the StrandsCoreAgent.
 
 #### Documentation (`DOCUMENTATION.md`)
@@ -64,7 +64,7 @@ agent = StrandsCoreAgent(settings)
 # Analyze documentation
 docs = await agent.analyze_documentation("docs/")
 
-# Review code 
+# Review code
 review = await agent.review_code("src/agents/")
 
 # Generate documentation
@@ -78,7 +78,7 @@ docs = await agent.generate_documentation("api_server.py")
 # Production RAG (user queries about Milvus/databases)
 from src.agents import StrandsGraphRAGAgent
 
-# Development utilities (code/docs analysis) 
+# Development utilities (code/docs analysis)
 from dev_tools import StrandsCoreAgent
 ```
 

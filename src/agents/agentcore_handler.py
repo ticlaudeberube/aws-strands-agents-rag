@@ -13,6 +13,7 @@ from src.config.settings import get_settings
 # Placeholder for AgentCore agent import (to be implemented)
 # from src.agents.agentcore import AgentCoreRAGAgent
 
+
 def lambda_handler(event, context):
     """AWS Lambda entrypoint for AgentCore RAG agent."""
     settings = get_settings()
@@ -23,5 +24,5 @@ def lambda_handler(event, context):
     #     return agent.answer_question(event['question'], ...)
     return {
         "status": "not_implemented",
-        "message": "AgentCore Lambda handler is a placeholder. Implement AgentCore agent and routing."
+        "message": "AgentCore Lambda handler is a placeholder. Implement AgentCore agent and routing.",
     }

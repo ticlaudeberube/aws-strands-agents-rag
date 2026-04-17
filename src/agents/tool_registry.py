@@ -2,7 +2,8 @@
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any
+from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +18,7 @@ class ToolDefinition:
     skill_name: str = "core"
     version: str = "1.0"
     enabled: bool = True
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     def invoke(self, *args: Any, **kwargs: Any) -> Any:
         """Invoke the tool function."""
@@ -35,7 +36,7 @@ class ToolDefinition:
         self.enabled = True
         logger.info(f"[TOOL_REGISTRY] Tool enabled: {self.name}")
 
-    def get_metadata(self) -> Dict[str, Any]:
+    def get_metadata(self) -> dict[str, Any]:
         """Get tool metadata."""
         return {
             "name": self.name,
@@ -52,13 +53,13 @@ class ToolRegistry:
 
     def __init__(self) -> None:
         """Initialize tool registry."""
-        self._tools: Dict[str, ToolDefinition] = {}
-        self._node_tools: Dict[str, List[str]] = {}  # node_name -> [tool_names]
+        self._tools: dict[str, ToolDefinition] = {}
+        self._node_tools: dict[str, list[str]] = {}  # node_name -> [tool_names]
 
     def register_tool(
         self,
         tool: ToolDefinition,
-        node_names: Optional[List[str]] = None,
+        node_names: list[str] | None = None,
     ) -> bool:
         """Register a tool globally and optionally assign to nodes.
 
@@ -108,7 +109,7 @@ class ToolRegistry:
 
         return True
 
-    def get_tool(self, tool_name: str) -> Optional[ToolDefinition]:
+    def get_tool(self, tool_name: str) -> ToolDefinition | None:
         """Get a tool by name.
 
         Args:
@@ -119,7 +120,7 @@ class ToolRegistry:
         """
         return self._tools.get(tool_name)
 
-    def get_tools_for_node(self, node_name: str) -> List[ToolDefinition]:
+    def get_tools_for_node(self, node_name: str) -> list[ToolDefinition]:
         """Get all tools available to a node.
 
         Args:
@@ -132,7 +133,7 @@ class ToolRegistry:
         tools = [self._tools[name] for name in tool_names if name in self._tools]
         return [t for t in tools if t.enabled]
 
-    def list_tools(self, skill_name: Optional[str] = None) -> List[ToolDefinition]:
+    def list_tools(self, skill_name: str | None = None) -> list[ToolDefinition]:
         """List all registered tools, optionally filtered by skill.
 
         Args:
@@ -146,13 +147,13 @@ class ToolRegistry:
             tools = [t for t in tools if t.skill_name == skill_name]
         return sorted(tools, key=lambda t: t.name)
 
-    def list_skills(self) -> Dict[str, int]:
+    def list_skills(self) -> dict[str, int]:
         """Get count of tools per skill.
 
         Returns:
             Dictionary of skill_name -> tool_count
         """
-        skills: Dict[str, int] = {}
+        skills: dict[str, int] = {}
         for tool in self._tools.values():
             skills[tool.skill_name] = skills.get(tool.skill_name, 0) + 1
         return skills
@@ -209,7 +210,7 @@ class ToolRegistry:
         logger.info(f"[TOOL_REGISTRY] Tool removed: {tool_name}")
         return True
 
-    def get_registry_info(self) -> Dict[str, Any]:
+    def get_registry_info(self) -> dict[str, Any]:
         """Get comprehensive registry information.
 
         Returns:

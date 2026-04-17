@@ -27,7 +27,7 @@ const createMessage = (text, role, options = {}) => ({
 });
 
 // NEW: MessageContainer component for consistent rendering
-<MessageContainer 
+<MessageContainer
   messages={messages}
   isLoading={isLoading}
   messagesEndRef={messagesEndRef}
@@ -39,7 +39,7 @@ const createMessage = (text, role, options = {}) => ({
 
 **Query Routing & UI Fixes**:
 - **Topic Validation Fix**: TopicChecker agent now correctly parses "YES/NO" responses instead of "true/false", ensuring proper out-of-scope query rejection
-- **Query Routing Order**: Time-sensitive query detection moved to happen AFTER topic validation, preventing off-topic weather queries from reaching web search logic 
+- **Query Routing Order**: Time-sensitive query detection moved to happen AFTER topic validation, preventing off-topic weather queries from reaching web search logic
 - **Web Search Button Fix**: Health endpoint now correctly reports `web_search_enabled` based on Tavily API key availability, restoring web search button visibility in React UI
 - **Consolidated Error Messages**: Implemented DRY principles with centralized error message utilities, eliminating 13+ duplicate error messages
 

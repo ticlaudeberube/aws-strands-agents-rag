@@ -1,16 +1,13 @@
 """Embedding providers for text vectorization."""
 
 import os
-from typing import Optional, Union, List
 import ollama
 from .exceptions import EmbeddingError
 
 
 class EmbeddingProvider:
     @staticmethod
-    def embed_text(
-        text: Union[str, List[str]], provider: str = "ollama", model: Optional[str] = None
-    ):
+    def embed_text(text: str | list[str], provider: str = "ollama", model: str | None = None):
         """Unified embedding method supporting Ollama provider."""
         if provider == "ollama":
             return EmbeddingProvider._embed_ollama(text, model)
@@ -20,7 +17,7 @@ class EmbeddingProvider:
             )
 
     @staticmethod
-    def _embed_ollama(text: Union[str, List[str]], model: Optional[str] = None):
+    def _embed_ollama(text: str | list[str], model: str | None = None):
         """Embed text using Ollama."""
         # Ensure OLLAMA_NUM_THREADS is always set
         if not os.getenv("OLLAMA_NUM_THREADS"):

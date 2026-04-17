@@ -32,7 +32,7 @@ function ChatMessage({ message }) {
 
   // System messages take priority over error messages - show only warning banner
   const shouldShowWarningOnly = !isUser && systemMessages.length > 0;
-    
+
   // Hide content only if we have system messages (not for error messages)
   const shouldHideContent = shouldShowWarningOnly || (!message.text?.trim() && !isUser);
 
@@ -40,7 +40,7 @@ function ChatMessage({ message }) {
   const responseType = message.timing?.response_type;
   const isWebSearch = message.sources && message.sources.length > 0 &&
     message.sources.some(s => s.source_type === 'web_search');
-  
+
   const determineBadge = () => {
     if (responseType === 'cached') {
       return <span className="cached-badge">⚡ CACHED</span>;
@@ -81,14 +81,14 @@ function ChatMessage({ message }) {
             )}
           </div>
         )}
-        
+
         {/* Main message content - show error messages in original style, hide only for system warnings */}
         {!shouldHideContent && (
           <p className="message-text">
             {(() => {
               // Defensive programming: ensure message.text is always rendered as string
               let displayText = message.text;
-              
+
               // Handle case where message.text might be an object (prevents "[object Object]")
               if (typeof displayText === 'object' && displayText !== null) {
                 console.warn('ChatMessage: message.text is an object, converting to string:', displayText);
@@ -98,7 +98,7 @@ function ChatMessage({ message }) {
               } else {
                 displayText = String(displayText);
               }
-              
+
               // Render HTML links safely if text contains HTML
               if (displayText && displayText.includes('<a')) {
                 return <span dangerouslySetInnerHTML={{ __html: displayText }} />;
@@ -115,7 +115,7 @@ function ChatMessage({ message }) {
             )}
           </p>
         )}
-        
+
         {/* System warning banners - only for system messages, not error messages */}
         {shouldShowWarningOnly && (
           <div className="system-warning-banner">
@@ -127,7 +127,7 @@ function ChatMessage({ message }) {
             ))}
           </div>
         )}
-        
+
         {/* Regular sources (excluding system messages) - show when content is visible */}
         {!isUser && !shouldHideContent && nonSystemSources && nonSystemSources.length > 0 && (
           <SourcesList sources={nonSystemSources} timing={message.timing} />

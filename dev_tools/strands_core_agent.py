@@ -32,7 +32,6 @@ import logging
 import re
 import time
 from pathlib import Path
-from typing import Dict, List, Optional
 
 from pydantic import BaseModel, Field
 from strands import Agent
@@ -54,19 +53,19 @@ class TaskValidationResult(BaseModel):
     is_valid: bool = Field(..., description="Whether the task is supported")
     task_type: str = Field(..., description="Identified task type")
     reason: str = Field(..., description="Explanation for the validation result")
-    suggested_approach: Optional[str] = Field(None, description="Suggested approach if valid")
+    suggested_approach: str | None = Field(None, description="Suggested approach if valid")
 
 
 class DocumentationAnalysis(BaseModel):
     """Structured output for documentation analysis."""
 
     files_analyzed: int = Field(..., description="Number of files analyzed")
-    issues_found: List[Dict] = Field(default_factory=list, description="Issues identified")
-    recommendations: List[str] = Field(
+    issues_found: list[dict] = Field(default_factory=list, description="Issues identified")
+    recommendations: list[str] = Field(
         default_factory=list, description="Improvement recommendations"
     )
     quality_score: float = Field(default=0.5, ge=0.0, le=1.0, description="Overall quality score")
-    missing_docs: List[str] = Field(default_factory=list, description="Missing documentation files")
+    missing_docs: list[str] = Field(default_factory=list, description="Missing documentation files")
 
 
 class CodeAnalysis(BaseModel):
@@ -76,9 +75,9 @@ class CodeAnalysis(BaseModel):
     complexity_score: float = Field(
         default=0.5, ge=0.0, le=1.0, description="Code complexity score"
     )
-    issues: List[Dict] = Field(default_factory=list, description="Code issues found")
-    suggestions: List[str] = Field(default_factory=list, description="Improvement suggestions")
-    patterns_detected: List[str] = Field(
+    issues: list[dict] = Field(default_factory=list, description="Code issues found")
+    suggestions: list[str] = Field(default_factory=list, description="Improvement suggestions")
+    patterns_detected: list[str] = Field(
         default_factory=list, description="Design patterns detected"
     )
 
@@ -88,7 +87,7 @@ class GeneratedContent(BaseModel):
 
     content_type: str = Field(..., description="Type of content generated")
     content: str = Field(..., description="Generated content")
-    metadata: Dict = Field(default_factory=dict, description="Additional metadata")
+    metadata: dict = Field(default_factory=dict, description="Additional metadata")
     confidence: float = Field(default=0.8, ge=0.0, le=1.0, description="Generation confidence")
 
 
@@ -166,7 +165,6 @@ class StrandsCoreAgent:
             tools=[],
         )
 
-
         # Create tool instances for workers
         file_analysis_tool = self._create_file_analysis_tool()
         documentation_tool = self._create_documentation_generation_tool()
@@ -177,7 +175,6 @@ class StrandsCoreAgent:
 
         # Import AWS docs tool
         from dev_tools.skills import aws_docs_query
-
 
         # Node 3a: Documentation Worker (powerful model + tools)
         self.documentation_worker = Agent(
@@ -235,8 +232,8 @@ class StrandsCoreAgent:
 
         @tool
         def analyze_files(
-            path: str, file_pattern: Optional[str] = None, recursive: bool = True
-        ) -> Dict:
+            path: str, file_pattern: str | None = None, recursive: bool = True
+        ) -> dict:
             """Analyze files in a directory for documentation purposes.
 
             Args:
@@ -286,7 +283,7 @@ class StrandsCoreAgent:
                 file_analysis = []
                 for file_path in relevant_files[:20]:  # Limit to prevent overwhelming output
                     try:
-                        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                        with open(file_path, encoding="utf-8", errors="ignore") as f:
                             content = f.read()
 
                         analysis = {
@@ -323,7 +320,7 @@ class StrandsCoreAgent:
         @tool
         def generate_documentation(
             source_path: str, doc_type: str = "api", output_format: str = "markdown"
-        ) -> Dict:
+        ) -> dict:
             """Generate documentation for code files.
 
             Args:
@@ -342,7 +339,7 @@ class StrandsCoreAgent:
 
                 if source.is_file() and source.suffix == ".py":
                     # Generate API documentation for Python file
-                    with open(source, "r", encoding="utf-8") as f:
+                    with open(source, encoding="utf-8") as f:
                         content = f.read()
 
                     # Extract classes, functions, and docstrings
@@ -373,7 +370,7 @@ class StrandsCoreAgent:
         """Create tool for analyzing project structure."""
 
         @tool
-        def analyze_project_structure(root_path: str, max_depth: int = 3) -> Dict:
+        def analyze_project_structure(root_path: str, max_depth: int = 3) -> dict:
             """Analyze project directory structure and organization.
 
             Args:
@@ -443,7 +440,7 @@ class StrandsCoreAgent:
         """Create tool for analyzing code quality and structure."""
 
         @tool
-        def analyze_code_quality(file_path: str, analysis_type: str = "comprehensive") -> Dict:
+        def analyze_code_quality(file_path: str, analysis_type: str = "comprehensive") -> dict:
             """Analyze code quality, complexity, and structure.
 
             Args:
@@ -459,7 +456,7 @@ class StrandsCoreAgent:
                 if not path.exists():
                     return {"error": f"File does not exist: {file_path}", "analysis": {}}
 
-                with open(path, "r", encoding="utf-8", errors="ignore") as f:
+                with open(path, encoding="utf-8", errors="ignore") as f:
                     content = f.read()
 
                 analysis = {
@@ -500,7 +497,7 @@ class StrandsCoreAgent:
         """Create tool for detecting design patterns and architectures."""
 
         @tool
-        def detect_patterns(directory_path: str, pattern_types: Optional[List[str]] = None) -> Dict:
+        def detect_patterns(directory_path: str, pattern_types: list[str] | None = None) -> dict:
             """Detect design patterns and architectural patterns in codebase.
 
             Args:
@@ -524,7 +521,7 @@ class StrandsCoreAgent:
 
                 for py_file in python_files[:50]:  # Limit analysis
                     try:
-                        with open(py_file, "r", encoding="utf-8", errors="ignore") as f:
+                        with open(py_file, encoding="utf-8", errors="ignore") as f:
                             content = f.read()
 
                         # Check for common patterns
@@ -569,7 +566,7 @@ class StrandsCoreAgent:
         """Create tool for assessing overall code quality."""
 
         @tool
-        def assess_quality(project_path: str, focus_areas: Optional[List[str]] = None) -> Dict:
+        def assess_quality(project_path: str, focus_areas: list[str] | None = None) -> dict:
             """Assess overall code quality and provide recommendations.
 
             Args:
@@ -633,7 +630,7 @@ class StrandsCoreAgent:
                     total_score = 0.0
                     for py_file in python_files[:10]:  # Sample files
                         try:
-                            with open(py_file, "r", encoding="utf-8", errors="ignore") as f:
+                            with open(py_file, encoding="utf-8", errors="ignore") as f:
                                 content = f.read()
 
                             file_score = 0.0
@@ -725,7 +722,7 @@ class StrandsCoreAgent:
         }
         return lang_map.get(extension.lower(), "unknown")
 
-    def _analyze_python_code(self, content: str) -> Dict:
+    def _analyze_python_code(self, content: str) -> dict:
         """Perform Python-specific code analysis."""
         analysis = {}
 
@@ -746,7 +743,7 @@ class StrandsCoreAgent:
 
         return analysis
 
-    def _assess_complexity(self, content: str) -> Dict:
+    def _assess_complexity(self, content: str) -> dict:
         """Assess code complexity indicators."""
         lines = content.splitlines()
 
@@ -758,7 +755,7 @@ class StrandsCoreAgent:
             "nested_blocks": content.count("    "),  # Rough indentation measure
         }
 
-    def _assess_documentation_coverage(self, content: str, file_extension: str) -> Dict:
+    def _assess_documentation_coverage(self, content: str, file_extension: str) -> dict:
         """Assess documentation coverage in code."""
         if file_extension == ".py":
             docstring_count = content.count('"""') + content.count("'''")
@@ -779,7 +776,7 @@ class StrandsCoreAgent:
 
         return {"estimated_coverage": 0.0}
 
-    def _detect_code_issues(self, content: str, file_extension: str) -> List[str]:
+    def _detect_code_issues(self, content: str, file_extension: str) -> list[str]:
         """Detect potential code issues."""
         issues = []
 
@@ -846,7 +843,7 @@ class StrandsCoreAgent:
     # PUBLIC API METHODS
     # ============================================================================
 
-    async def process_request(self, request: str) -> Dict:
+    async def process_request(self, request: str) -> dict:
         """Process a documentation or programming assistance request.
 
         Args:
@@ -906,7 +903,7 @@ class StrandsCoreAgent:
                 "processing_time": time.time() - start_time if "start_time" in locals() else 0,
             }
 
-    async def _process_documentation_task(self, request: str) -> Dict:
+    async def _process_documentation_task(self, request: str) -> dict:
         """Process documentation-related tasks."""
         # Use documentation worker with its tools
         response = await self.documentation_worker.invoke_async(
@@ -914,7 +911,7 @@ class StrandsCoreAgent:
         )
         return {"documentation_result": str(response)}
 
-    async def _process_code_analysis_task(self, request: str) -> Dict:
+    async def _process_code_analysis_task(self, request: str) -> dict:
         """Process code analysis tasks."""
         # Use code analysis worker with its tools
         response = await self.code_worker.invoke_async(
@@ -922,7 +919,7 @@ class StrandsCoreAgent:
         )
         return {"analysis_result": str(response)}
 
-    async def _process_generation_task(self, request: str) -> Dict:
+    async def _process_generation_task(self, request: str) -> dict:
         """Process content generation tasks."""
         # Use documentation worker for generation
         response = await self.documentation_worker.invoke_async(
@@ -931,7 +928,7 @@ class StrandsCoreAgent:
         )
         return {"generated_content": str(response)}
 
-    async def _process_project_analysis_task(self, request: str) -> Dict:
+    async def _process_project_analysis_task(self, request: str) -> dict:
         """Process project-wide analysis tasks."""
         # Use both workers as needed
         code_response = await self.code_worker.invoke_async(

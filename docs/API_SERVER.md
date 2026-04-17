@@ -162,7 +162,7 @@ Combine streaming with other parameters:
 
 ```json
 {
-  "model": "rag-agent", 
+  "model": "rag-agent",
   "messages": [{"role": "user", "content": "Latest AI trends"}],
   "stream": true,
   "force_web_search": true
@@ -288,15 +288,15 @@ async function streamChat() {
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
-    
+
     const chunk = decoder.decode(value, { stream: true });
     const lines = chunk.split('\n');
-    
+
     for (const line of lines) {
       if (line.startsWith('data: ')) {
         const data = line.slice(6);
         if (data === '[STREAM_END]') return;
-        
+
         try {
           const parsed = JSON.parse(data);
           const content = parsed.choices[0].delta.content || '';
@@ -317,7 +317,7 @@ The `/v1/chat/completions` endpoint supports additional parameters beyond OpenAI
 ### stream (Boolean, Optional)
 **Enables real-time streaming response.**
 
-- `false` (default): Returns complete response at once 
+- `false` (default): Returns complete response at once
 - `true`: Streams response in real-time using Server-Sent Events
 
 **Use when:** You want real-time response generation for better UX.
@@ -325,7 +325,7 @@ The `/v1/chat/completions` endpoint supports additional parameters beyond OpenAI
 **Example:**
 ```json
 {
-  "model": "rag-agent", 
+  "model": "rag-agent",
   "messages": [{"role": "user", "content": "Explain vector search"}],
   "stream": true
 }
@@ -716,7 +716,7 @@ POST http://localhost:8000/v1/chat/completions
 
 Standard chat completion with full response returned at once.
 
-#### Streaming 
+#### Streaming
 ```bash
 POST http://localhost:8000/v1/chat/completions
 Content-Type: application/json
@@ -731,7 +731,7 @@ Content-Type: application/json
 **Streaming Response Format:**
 - Server-Sent Events (SSE) format
 - Real-time token generation using `agent.stream_answer()`
-- Consistent system message sources in streaming and non-streaming modes  
+- Consistent system message sources in streaming and non-streaming modes
 - Automatic termination with `[STREAM_END]` marker
 
 **Streaming Options:**

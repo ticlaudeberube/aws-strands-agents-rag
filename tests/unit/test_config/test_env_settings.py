@@ -8,7 +8,7 @@ from src.config.settings import get_settings
 def parse_env_file(filepath):
     """Parse .env.example file to extract variable names and descriptions."""
     variables = {}
-    with open(filepath, "r") as f:
+    with open(filepath) as f:
         for line in f:
             line = line.strip()
             if not line or line.startswith("#"):

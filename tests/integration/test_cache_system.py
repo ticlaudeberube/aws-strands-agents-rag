@@ -90,5 +90,5 @@ except Exception as e:
     traceback.print_exc()
 
 print("\n" + "=" * 70)
-print("CACHE THRESHOLD SETTING: {:.2f}".format(settings.response_cache_threshold))
+print(f"CACHE THRESHOLD SETTING: {settings.response_cache_threshold:.2f}")
 print("=" * 70)

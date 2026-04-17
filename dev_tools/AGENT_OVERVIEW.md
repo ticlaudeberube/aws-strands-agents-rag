@@ -23,7 +23,7 @@ result = await agent.process_request(
     "Analyze the documentation in docs/ and suggest improvements"
 )
 
-# 3. Review code quality  
+# 3. Review code quality
 code_review = await agent.process_request(
     "Review code quality in src/agents/ and provide recommendations"
 )
@@ -42,9 +42,9 @@ print(f"✅ Code issues found: {len(code_review.get('issues', []))}")
 ```python
 async def project_health_check():
     """Complete project assessment in one function."""
-    
+
     agent = StrandsCoreAgent(Settings())
-    
+
     # Comprehensive analysis
     tasks = [
         "Analyze documentation quality and completeness in docs/",
@@ -52,17 +52,17 @@ async def project_health_check():
         "Assess project structure and organization",
         "Generate missing API documentation for main modules"
     ]
-    
+
     results = {}
     for task in tasks:
         results[task] = await agent.process_request(task)
-    
+
     # Display summary
     print("🔍 Project Health Report:")
     for task, result in results.items():
         status = "✅" if result.get('status') == 'completed' else "❌"
         print(f"{status} {task}")
-    
+
     return results
 
 # Run it
@@ -96,17 +96,17 @@ User Request
 ┌─────────────────────────────────────────────┐
 │ 1. TASK VALIDATOR (Fast Model)             │ ← Validates scope & intent
 │    - Determines task type and feasibility   │   - Documentation vs code analysis
-│    - Routes to appropriate worker           │   - Rejects invalid requests  
-│    - Early validation and scope checking    │   
+│    - Routes to appropriate worker           │   - Rejects invalid requests
+│    - Early validation and scope checking    │
 └────────────┬────────────────────────────────┘
              ↓ (if valid)
 ┌─────────────────────────────────────────────┐
 │ 2. TASK ROUTER (Fast Model)                │ ← Routes to specialist
 │    - Documentation → DocumentationWorker    │   - Task-specific routing
 │    - Code Analysis → CodeAnalysisWorker     │   - Optimal tool selection
-│    - Generation → ContentGenerationWorker   │   
+│    - Generation → ContentGenerationWorker   │
 └────────────┬────────────────────────────────┘
-             ↓ 
+             ↓
 ┌─────────────────────────────────────────────┐
 │ 3. SPECIALIZED WORKERS (Powerful Model)    │ ← Execute with tools
 │    a) DocumentationWorker + 6 tools        │   - analyze_files()
@@ -158,7 +158,7 @@ docs = await agent.generate_documentation("src/agents/", doc_type="api")
 
 #### Deep Code Quality Analysis
 ```python
-# Comprehensive code quality assessment  
+# Comprehensive code quality assessment
 review = await agent.review_code("src/agents/strands_graph_agent.py")
 # Returns: complexity scores, issues, refactoring suggestions
 ```
@@ -192,7 +192,7 @@ All results use typed Pydantic models for consistent, parseable outputs:
 class DocumentationAnalysis(BaseModel):
     files_analyzed: int
     issues_found: List[Dict]
-    recommendations: List[str] 
+    recommendations: List[str]
     quality_score: float  # 0.0 - 1.0
     missing_docs: List[str]
 
@@ -235,7 +235,7 @@ agent = StrandsCoreAgent(settings)
 # Analyze specific files
 file_analysis = agent.file_analysis_tool(
     path="src/agents/",
-    file_pattern="*.py", 
+    file_pattern="*.py",
     recursive=True
 )
 
@@ -263,7 +263,7 @@ for directory in directories:
     analysis = await agent.process_request(
         f"Analyze code quality in {directory} and provide improvement recommendations"
     )
-    
+
     # Process structured results
     if analysis['status'] == 'completed':
         print(f"Directory: {directory}")
@@ -277,29 +277,29 @@ for directory in directories:
 # Pre-commit hook integration
 async def validate_changes(changed_files: List[str]) -> bool:
     """Validate code quality before commit."""
-    
+
     agent = StrandsCoreAgent(Settings())
-    
+
     for file_path in changed_files:
         if file_path.endswith('.py'):
             analysis = await agent.review_code(file_path)
-            
+
             # Block commit if critical issues found
             if analysis.complexity_score < 0.3:
                 print(f"❌ Code quality too low in {file_path}")
                 return False
-    
+
     return True
 
-# CI/CD pipeline integration  
+# CI/CD pipeline integration
 async def generate_docs_pipeline():
     """Generate documentation as part of CI pipeline."""
-    
+
     agent = StrandsCoreAgent(Settings())
-    
+
     # Generate API docs for all Python files
     docs = await agent.generate_documentation("src/", doc_type="api")
-    
+
     # Write to docs directory
     with open("docs/api.md", "w") as f:
         f.write(docs.content)
@@ -379,7 +379,7 @@ This project includes **two specialized agents** that work together for comprehe
 - **Usage**: `@strands-expert` in VS Code Copilot Chat
 - **Specialization**: Strands framework patterns, architecture advice, debugging help
 
-#### **2. StrandsCoreAgent** (`dev_tools/strands_core_agent.py`)  
+#### **2. StrandsCoreAgent** (`dev_tools/strands_core_agent.py`)
 - **Purpose**: Executable Strands agent for **automated analysis and generation**
 - **Usage**: Direct Python API or MCP server integration
 - **Specialization**: Code quality assessment, documentation generation, project analysis
@@ -391,7 +391,7 @@ This project includes **two specialized agents** that work together for comprehe
 # In VS Code Chat: "@strands-expert How should I structure a 3-node agent?"
 # Expert provides patterns and recommendations
 
-# Step 2: Implement your agent following expert guidance  
+# Step 2: Implement your agent following expert guidance
 class MyStrandsAgent:
     def __init__(self, settings):
         # Follow patterns suggested by @strands-expert
@@ -415,7 +415,7 @@ print(f"Improvements needed: {analysis['suggestions']}")
 | Development Phase | **Strands Expert Agent** | **StrandsCoreAgent** |
 |---|---|---|
 | **Planning** | ✅ Architecture guidance, pattern recommendations | ❌ |
-| **Implementation** | ✅ Real-time coding assistance, debugging help | ❌ | 
+| **Implementation** | ✅ Real-time coding assistance, debugging help | ❌ |
 | **Code Review** | ✅ Expert feedback on Strands patterns | ✅ **Automated quality analysis** |
 | **Documentation** | ✅ Writing guidance and structure advice | ✅ **Automated generation & analysis** |
 | **Optimization** | ✅ Performance and cost optimization guidance | ✅ **Quantified complexity assessment** |
@@ -440,7 +440,7 @@ analysis = await agent.process_request(
     'Analyze my document_classifier.py for Strands best practices'
 )
 
-# Generate missing documentation  
+# Generate missing documentation
 docs = await agent.process_request(
     'Generate API documentation for my agent implementation'
 )
@@ -452,7 +452,7 @@ print('Implementation validated and documented automatically!')
 ### **🚀 Why This Combination is Powerful**
 
 1. **Expert Guidance + Automated Validation**: Get human-like expertise during development, automated validation afterward
-2. **Interactive + Batch Processing**: Chat-based assistance for questions, automated analysis for large codebases  
+2. **Interactive + Batch Processing**: Chat-based assistance for questions, automated analysis for large codebases
 3. **Development + Operations**: Expert patterns for building agents, automated tools for maintaining quality
 4. **Learning + Enforcement**: Learn best practices from expert, enforce standards with automated analysis
 
@@ -481,7 +481,7 @@ StrandsCoreAgent is built on the **Model Context Protocol**, making it compatibl
 from dev_tools.mcp_server import CoreAgentMCPServer
 core_server = CoreAgentMCPServer(settings)
 
-# 2. RAG Agent Only (production Q&A) 
+# 2. RAG Agent Only (production Q&A)
 from src.mcp.mcp_server import RAGAgentMCPServer
 rag_server = RAGAgentMCPServer(settings)
 

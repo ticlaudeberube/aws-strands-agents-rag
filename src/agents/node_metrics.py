@@ -3,7 +3,7 @@
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +52,7 @@ class NodeMetrics:
             f"success={success}, tokens={tokens}",
         )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert metrics to dictionary for API responses."""
         return {
             "node_name": self.node_name,
@@ -82,7 +82,7 @@ class GraphMetrics:
     total_duration_ms: float = 0.0
     error_count: int = 0
     early_exit_count: int = 0
-    node_metrics: Dict[str, NodeMetrics] = field(default_factory=dict)
+    node_metrics: dict[str, NodeMetrics] = field(default_factory=dict)
 
     @property
     def average_request_duration_ms(self) -> float:
@@ -127,7 +127,7 @@ class GraphMetrics:
             f"duration={duration_ms:.1f}ms, success={success}, early_exit={early_exit}"
         )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert metrics to dictionary for API responses."""
         return {
             "requests_total": self.request_count,

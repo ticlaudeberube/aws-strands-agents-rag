@@ -44,7 +44,7 @@ import logging
 import re
 import time
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple, cast
+from typing import Any, cast
 
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
@@ -53,7 +53,6 @@ from strands.tools import tool
 
 from src.agents import prompts
 from src.agents.decorators import retry_with_backoff
-from src.agents.graph_context import NodeTiming
 from src.agents.node_config import NodeConfigManager
 from src.agents.node_metrics import GraphMetrics, NodeMetrics
 from src.config import Settings
@@ -76,7 +75,7 @@ class ValidationResult(BaseModel):
 
     is_valid: bool = Field(..., description="Whether the query passes validation")
     reason: str = Field(..., description="Explanation for the validation result")
-    category: Optional[str] = Field(
+    category: str | None = Field(
         None, description="Category of failure if invalid (security_risk, out_of_scope)"
     )
 
@@ -85,7 +84,7 @@ class RAGResult(BaseModel):
     """Structured output for RAG worker node."""
 
     answer: str = Field(..., description="Generated answer to the query")
-    sources: List[Dict] = Field(default_factory=list, description="Source documents used")
+    sources: list[dict] = Field(default_factory=list, description="Source documents used")
     confidence_score: float = Field(default=0.5, ge=0.0, le=1.0, description="Confidence score 0-1")
 
 
@@ -109,10 +108,10 @@ def create_milvus_retrieval_tool(
 
     def milvus_search(
         question: str,
-        collection_name: Optional[str] = None,
-        collections: Optional[List[str]] = None,
+        collection_name: str | None = None,
+        collections: list[str] | None = None,
         top_k: int = 5,
-    ) -> Dict:
+    ) -> dict:
         """Retrieve relevant documents from Milvus vector database.
 
         Args:
@@ -128,7 +127,7 @@ def create_milvus_retrieval_tool(
             start_time = time.time()
 
             # Determine which collections to search
-            search_collections: List[str] = []
+            search_collections: list[str] = []
             if collections:
                 search_collections = [c for c in collections if c is not None]
             elif collection_name:
@@ -223,9 +222,9 @@ def create_answer_generation_tool(ollama_client: OllamaClient, settings: Setting
     def generate_answer(
         question: str,
         context: str,
-        sources: List[Dict],
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
+        sources: list[dict],
+        temperature: float | None = None,
+        max_tokens: int | None = None,
     ) -> RAGResult:
         """Generate answer from context using language model.
 
@@ -244,7 +243,7 @@ def create_answer_generation_tool(ollama_client: OllamaClient, settings: Setting
 
             # Use provided temperature or settings default
             temp = temperature if temperature is not None else settings.ollama_temperature
-            tokens = max_tokens if max_tokens is not None else settings.ollama_max_tokens
+            tokens = max_tokens if max_tokens is not None else settings.max_tokens
 
             # Format the RAG prompt
             system_instructions = prompts.RAGPrompts.SYSTEM_INSTRUCTIONS.format(
@@ -258,7 +257,7 @@ def create_answer_generation_tool(ollama_client: OllamaClient, settings: Setting
             )
 
             # Generate answer with retry decorator
-            @retry_with_backoff(max_retries=3, base_delay=0.5)
+            @retry_with_backoff(max_attempts=3, base_delay=0.5)
             def generate_with_retry() -> str:
                 return ollama_client.generate(
                     prompt=prompt,
@@ -318,7 +317,7 @@ def convert_markdown_links_to_html(text: str) -> str:
     return converted
 
 
-def _calculate_confidence_score(sources: List[Dict], answer: str) -> float:
+def _calculate_confidence_score(sources: list[dict], answer: str) -> float:
     """Calculate confidence score for an answer based on retrieval and generation quality."""
     try:
         if not sources:
@@ -367,8 +366,8 @@ def _calculate_confidence_score(sources: List[Dict], answer: str) -> float:
 
 def _is_security_attack(
     question: str,
-    ollama_client: Optional[OllamaClient] = None,
-    settings: Optional[Settings] = None,
+    ollama_client: OllamaClient | None = None,
+    settings: Settings | None = None,
 ) -> bool:
     """Detect security attacks using fast pattern matching.
 
@@ -473,7 +472,7 @@ def _is_security_attack(
 
 
 def _is_web_result_relevant_to_milvus(
-    web_result: Dict[str, str],
+    web_result: dict[str, str],
 ) -> bool:
     """Check if a web search result is relevant to Milvus/vector databases.
 
@@ -647,7 +646,7 @@ def _is_competitor_database_query(question: str) -> bool:
     return False
 
 
-def _create_web_search_unavailable_message(message_type: str = "standard") -> Dict[str, str]:
+def _create_web_search_unavailable_message(message_type: str = "standard") -> dict[str, str]:
     """Create standardized web search unavailable messages.
 
     Args:
@@ -682,7 +681,7 @@ def _create_web_search_unavailable_message(message_type: str = "standard") -> Di
     }
 
 
-def _create_no_web_results_message(message_type: str) -> Dict[str, str]:
+def _create_no_web_results_message(message_type: str) -> dict[str, str]:
     """Create standardized no web results messages.
 
     Args:
@@ -787,9 +786,9 @@ def _is_question_in_scope(question: str, ollama_client: OllamaClient, settings: 
 
 def create_rag_graph(
     settings: Settings,
-    fast_model_id: Optional[str] = None,
-    rag_model_id: Optional[str] = None,
-    milvus_client: Optional[MilvusVectorDB] = None,
+    fast_model_id: str | None = None,
+    rag_model_id: str | None = None,
+    milvus_client: MilvusVectorDB | None = None,
 ):
     """Create a refactored Strands Graph-based RAG Agent.
 
@@ -842,13 +841,13 @@ def create_rag_graph(
     generation_tool = create_answer_generation_tool(ollama_client, settings)
 
     # NODE 1: Topic Checker
-    def topic_check_node(state: Dict) -> Dict:
+    def topic_check_node(state: dict) -> dict:
         """Check if query is in scope (about databases, RAG, vector search, etc.)."""
         question = state.get("question", "")
         logger.info(f"[TOPIC_CHECK] Processing: {question[:50]}...")
 
         # Record node execution start
-        node_timer = NodeTiming(node_name="topic_check")
+        start_time = time.time()
         node_metrics = NodeMetrics(node_name="topic_check")
 
         is_in_scope = _is_question_in_scope(question, ollama_client, settings)
@@ -864,21 +863,23 @@ def create_rag_graph(
         state["topic_result"] = result
 
         # Record metrics
-        node_metrics.record_success() if is_in_scope else node_metrics.record_failure()
-        graph_metrics.add_node_metrics("topic_check", node_metrics)
+        end_time = time.time()
+        duration_ms = (end_time - start_time) * 1000
+        node_metrics.record_execution(duration_ms, success=is_in_scope)
+        graph_metrics.node_metrics["topic_check"] = node_metrics
 
         logger.info(f"[TOPIC_CHECK] Result: is_valid={result.is_valid}")
 
         return state
 
     # NODE 2: Security Checker
-    def security_check_node(state: Dict) -> Dict:
+    def security_check_node(state: dict) -> dict:
         """Check for security attacks and malicious input using LLM classification."""
         question = state.get("question", "")
         logger.info(f"[SECURITY_CHECK] Processing: {question[:50]}...")
 
         # Record node execution start
-        node_timer = NodeTiming(node_name="security_check")
+        start_time = time.time()
         node_metrics = NodeMetrics(node_name="security_check")
 
         # Use LLM-based classification with pattern matching fallback
@@ -893,15 +894,17 @@ def create_rag_graph(
         state["security_result"] = result
 
         # Record metrics
-        node_metrics.record_success() if not is_attack else node_metrics.record_failure()
-        graph_metrics.add_node_metrics("security_check", node_metrics)
+        end_time = time.time()
+        duration_ms = (end_time - start_time) * 1000
+        node_metrics.record_execution(duration_ms, success=not is_attack)
+        graph_metrics.node_metrics["security_check"] = node_metrics
 
         logger.info(f"[SECURITY_CHECK] Result: is_valid={result.is_valid}")
 
         return state
 
     # NODE 3: RAG Worker
-    def rag_worker_node(state: Dict) -> Dict:
+    def rag_worker_node(state: dict) -> dict:
         """Retrieve context and generate answer."""
         question = state.get("question", "")
         collection_name = state.get("collection_name", "milvus_docs")
@@ -911,7 +914,7 @@ def create_rag_graph(
         logger.info(f"[RAG_WORKER] Processing: {question[:50]}...")
 
         # Record node execution start
-        node_timer = NodeTiming(node_name="rag_worker")
+        start_time = time.time()
         node_metrics = NodeMetrics(node_name="rag_worker")
 
         # Retrieve documents from knowledge base
@@ -1162,15 +1165,17 @@ def create_rag_graph(
         }
 
         # Record metrics
-        node_metrics.record_success()
-        graph_metrics.add_node_metrics("rag_worker", node_metrics)
+        end_time = time.time()
+        duration_ms = (end_time - start_time) * 1000
+        node_metrics.record_execution(duration_ms, success=True)
+        graph_metrics.node_metrics["rag_worker"] = node_metrics
 
         logger.info(f"[RAG_WORKER] Generated answer with {len(rag_result.sources)} total sources")
 
         return state
 
     # NODE 4: Failure Handlers
-    def reject_out_of_scope(state: Dict) -> Dict:
+    def reject_out_of_scope(state: dict) -> dict:
         """Handle out-of-scope queries."""
         # Use the same web search unavailable message for consistency
         # Many out-of-scope queries are legitimate questions that would benefit from web search
@@ -1181,7 +1186,7 @@ def create_rag_graph(
         logger.info("[REJECTION] Out-of-scope query → returning web search unavailable message")
         return state
 
-    def reject_security_risk(state: Dict) -> Dict:
+    def reject_security_risk(state: dict) -> dict:
         """Handle security risks."""
         state["final_answer"] = (
             "I detected a security concern with your query. "
@@ -1192,7 +1197,7 @@ def create_rag_graph(
         logger.info("[REJECTION] Query was a security risk")
         return state
 
-    def format_rag_result(state: Dict) -> Dict:
+    def format_rag_result(state: dict) -> dict:
         """Format RAG worker result as final output."""
         rag_result = state.get("rag_result")
         if rag_result:
@@ -1202,12 +1207,12 @@ def create_rag_graph(
         return state
 
     # Routing conditions
-    def check_topic_pass(state: Dict) -> bool:
+    def check_topic_pass(state: dict) -> bool:
         """Route: if topic check passed, continue to security check."""
         result = state.get("topic_result")
         return result.is_valid if result else False
 
-    def check_security_pass(state: Dict) -> bool:
+    def check_security_pass(state: dict) -> bool:
         """Route: if security check passed, continue to RAG worker."""
         result = state.get("security_result")
         return result.is_valid if result else False
@@ -1264,20 +1269,20 @@ def create_rag_graph(
     # AGENT 3: RAG Worker Agent with Tools
     @tool
     def search_knowledge_base(
-        question: str, collections: List[str], top_k: int = 5
-    ) -> Dict[str, Any]:
+        question: str, collections: list[str], top_k: int = 5
+    ) -> dict[str, Any]:
         """Search the knowledge base for relevant documents."""
         logger.info(f"Searching KB with: {question[:50]}...")
-        result: Dict[str, Any] = retrieval_tool(question, collections, top_k)  # type: ignore
+        result: dict[str, Any] = retrieval_tool(question, collections, top_k)  # type: ignore
         return result
 
     @tool
     def generate_response(
-        question: str, context: str, sources: List[Dict], temperature: Optional[float] = None
-    ) -> Dict[str, Any]:
+        question: str, context: str, sources: list[dict], temperature: float | None = None
+    ) -> dict[str, Any]:
         """Generate an answer based on context and sources."""
         logger.info(f"Generating answer for: {question[:50]}...")
-        result: Dict[str, Any] = generation_tool(question, context, sources, temperature)  # type: ignore
+        result: dict[str, Any] = generation_tool(question, context, sources, temperature)  # type: ignore
         return result
 
     rag_agent = Agent(
@@ -1331,10 +1336,10 @@ class GraphExecutionResult:
     """Result from graph execution."""
 
     answer: str
-    sources: List[Dict]
+    sources: list[dict]
     confidence_score: float
-    execution_path: List[str]
-    execution_times: Dict[str, float]
+    execution_path: list[str]
+    execution_times: dict[str, float]
 
     def __repr__(self) -> str:
         """Format result as string."""
@@ -1357,15 +1362,15 @@ class StrandsGraphRAGAgent:
         load_dotenv()
 
         self.settings = settings
-        self.graph_config: Optional[Dict[str, Any]] = None
-        self.graph_state: Dict[str, Any] = {}
-        self.initialization_error: Optional[str] = None
-        self._last_stream_sources: List[Dict] = []  # Track sources for streaming responses
+        self.graph_config: dict[str, Any] | None = None
+        self.graph_state: dict[str, Any] = {}
+        self.initialization_error: str | None = None
+        self._last_stream_sources: list[dict] = []  # Track sources for streaming responses
 
         # Type annotations for client attributes
-        self.vector_db: Optional[MilvusVectorDB] = None
-        self.web_search: Optional[WebSearchClient] = None
-        self.response_cache: Optional[MilvusResponseCache] = None
+        self.vector_db: MilvusVectorDB | None = None
+        self.web_search: WebSearchClient | None = None
+        self.response_cache: MilvusResponseCache | None = None
 
         # Initialize backend clients
         self.ollama_client = OllamaClient(
@@ -1421,7 +1426,7 @@ class StrandsGraphRAGAgent:
         collection_name: str,
         query: str,
         top_k: int = 5,
-    ) -> Tuple[List[str], List[Dict]]:
+    ) -> tuple[list[str], list[dict]]:
         """Retrieve relevant context from Milvus vector database.
 
         Args:
@@ -1511,8 +1516,8 @@ class StrandsGraphRAGAgent:
         collection_name: str,
         query: str,
         top_k: int = 5,
-        filter_source: Optional[str] = None,
-    ) -> List[Dict]:
+        filter_source: str | None = None,
+    ) -> list[dict]:
         """Retrieve relevant documents from vector database.
 
         This is a wrapper around retrieve_context for MCP tool compatibility.
@@ -1542,7 +1547,7 @@ class StrandsGraphRAGAgent:
         query: str,
         source: str,
         top_k: int = 5,
-    ) -> List[Dict]:
+    ) -> list[dict]:
         """Search documents filtered by source.
 
         Args:
@@ -1561,7 +1566,7 @@ class StrandsGraphRAGAgent:
         question: str,
         context: str,
         temperature: float = 0.1,
-        max_tokens: Optional[int] = None,
+        max_tokens: int | None = None,
     ) -> str:
         """Generate an answer based on question and context.
 
@@ -1577,7 +1582,7 @@ class StrandsGraphRAGAgent:
         try:
             # Use provided values or settings defaults
             temp = temperature
-            tokens = max_tokens if max_tokens is not None else self.settings.ollama_max_tokens
+            tokens = max_tokens if max_tokens is not None else self.settings.max_tokens
 
             # Format RAG prompt
             system_instructions = prompts.RAGPrompts.SYSTEM_INSTRUCTIONS.format(
@@ -1607,12 +1612,12 @@ class StrandsGraphRAGAgent:
     async def answer_question(
         self,
         question: str,
-        collection_name: Optional[str] = None,
-        collections: Optional[List[str]] = None,
+        collection_name: str | None = None,
+        collections: list[str] | None = None,
         top_k: int = 5,
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
-    ) -> Tuple[str, List[Dict]]:
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+    ) -> tuple[str, list[dict]]:
         """Answer a question using the RAG graph.
 
         This invokes the graph with proper input state and returns the answer.
@@ -1976,7 +1981,7 @@ class StrandsGraphRAGAgent:
 
                             rag_result = RAGResult(
                                 answer=answer_text or "Unable to generate answer",
-                                sources=cast(List[Dict[str, Any]], state.get("final_sources", [])),
+                                sources=cast(list[dict[str, Any]], state.get("final_sources", [])),
                                 confidence_score=0.85 if answer_text else 0.0,
                             )
                             state["rag_result"] = rag_result
@@ -2077,7 +2082,7 @@ class StrandsGraphRAGAgent:
 
             # DEBUG: Log final sources before returning
             final_answer: str = cast(str, state.get("final_answer", ""))
-            final_sources: List[Dict] = cast(List[Dict], state.get("final_sources", []))
+            final_sources: list[dict] = cast(list[dict], state.get("final_sources", []))
             logger.info(
                 f"[FINAL_RETURN] Answer length: {len(final_answer)}, Sources count: {len(final_sources)}"
             )
@@ -2139,7 +2144,7 @@ class StrandsGraphRAGAgent:
 
         return False
 
-    def _should_trigger_web_search_fallback(self, kb_sources: List[Dict]) -> bool:
+    def _should_trigger_web_search_fallback(self, kb_sources: list[dict]) -> bool:
         """Check if KB results are weak enough to trigger web search fallback.
 
         This should only trigger when KB truly has no useful content, not just
@@ -2291,11 +2296,11 @@ class StrandsGraphRAGAgent:
     async def stream_answer(
         self,
         question: str,
-        collection_name: Optional[str] = None,
-        collections: Optional[List[str]] = None,
-        top_k: Optional[int] = None,
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
+        collection_name: str | None = None,
+        collections: list[str] | None = None,
+        top_k: int | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
         skip_cache_for_generic: bool = False,
     ):
         """Stream answer text as it's being generated in real-time.
@@ -2308,7 +2313,7 @@ class StrandsGraphRAGAgent:
         """
         # Initialize sources at the start so it's always available
         self._last_stream_sources = []
-        sources: List[Dict] = []
+        sources: list[dict] = []
 
         # Check if in degraded mode due to Milvus unavailability
         if self.initialization_error:
@@ -2690,11 +2695,11 @@ class StrandsGraphRAGAgent:
     async def stream_answer_no_cache(
         self,
         question: str,
-        collection_name: Optional[str] = None,
-        collections: Optional[List[str]] = None,
-        top_k: Optional[int] = None,
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
+        collection_name: str | None = None,
+        collections: list[str] | None = None,
+        top_k: int | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
     ):
         """Stream answer bypassing all caches - queries LLM directly with fresh retrieval.
 
@@ -2705,7 +2710,7 @@ class StrandsGraphRAGAgent:
         """
         # Initialize sources at the start so it's always available
         self._last_stream_sources = []
-        sources: List[Dict] = []
+        sources: list[dict] = []
 
         try:
             # Use setting defaults if not provided
@@ -2944,8 +2949,8 @@ class StrandsGraphRAGAgent:
     async def stream_answer_web_search_only(
         self,
         question: str,
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
     ):
         """Stream answer using ONLY web search - no knowledge base retrieval.
 
@@ -2960,7 +2965,7 @@ class StrandsGraphRAGAgent:
         Yields:
             Chunks of the generated answer as they are produced
         """
-        sources: List[Dict[str, Any]] = []
+        sources: list[dict[str, Any]] = []
         self._last_stream_sources = []  # Initialize immediately so it's always set
 
         try:
@@ -3064,7 +3069,7 @@ class StrandsGraphRAGAgent:
             self._last_stream_sources = sources
             yield f"[Error: {str(e)}]"
 
-    def list_collections(self) -> List[str]:
+    def list_collections(self) -> list[str]:
         """List all available collections in the vector database.
 
         Returns:
@@ -3085,8 +3090,8 @@ class StrandsGraphRAGAgent:
     def add_documents(
         self,
         collection_name: str,
-        documents: List[Dict[str, Any]],
-    ) -> Dict[str, Any]:
+        documents: list[dict[str, Any]],
+    ) -> dict[str, Any]:
         """Add documents to the vector database.
 
         This is a placeholder implementation for MCP tool compatibility.
@@ -3109,11 +3114,11 @@ class StrandsGraphRAGAgent:
     async def answer_question_no_cache(
         self,
         question: str,
-        collection_name: Optional[str] = None,
+        collection_name: str | None = None,
         top_k: int = 5,
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
-    ) -> Tuple[str, List[Dict]]:
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+    ) -> tuple[str, list[dict]]:
         """Answer question bypassing response cache (for API server compatibility).
 
         This method provides backward compatibility with the old agent interface.
@@ -3144,9 +3149,9 @@ class StrandsGraphRAGAgent:
     def answer_question_web_search_only(
         self,
         question: str,
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
-    ) -> Tuple[str, List[Dict]]:
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+    ) -> tuple[str, list[dict]]:
         """Answer using only web search (for API server compatibility).
 
         This method provides backward compatibility with the old agent interface.

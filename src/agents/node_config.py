@@ -2,7 +2,7 @@
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +18,7 @@ class NodeConfig:
     enable_metrics: bool = True
     enable_circuit_breaker: bool = True
     max_concurrent_calls: int = 10
-    rate_limit_requests_per_minute: Optional[int] = None
+    rate_limit_requests_per_minute: int | None = None
     description: str = ""
 
     def validate(self) -> bool:
@@ -65,7 +65,7 @@ class NodeConfig:
         logger.info(f"{self.name}: Configuration updated: {kwargs}")
         return True
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert configuration to dictionary."""
         return {
             "name": self.name,
@@ -84,7 +84,7 @@ class NodeConfigManager:
 
     def __init__(self) -> None:
         """Initialize config manager."""
-        self.configs: Dict[str, NodeConfig] = {}
+        self.configs: dict[str, NodeConfig] = {}
 
     def register(self, config: NodeConfig) -> bool:
         """Register a node configuration."""
@@ -94,7 +94,7 @@ class NodeConfigManager:
         logger.info(f"Registered config for node: {config.name}")
         return True
 
-    def get(self, node_name: str) -> Optional[NodeConfig]:
+    def get(self, node_name: str) -> NodeConfig | None:
         """Get configuration for a node."""
         return self.configs.get(node_name)
 
@@ -106,7 +106,7 @@ class NodeConfigManager:
             return False
         return config.update(**kwargs)
 
-    def to_dict(self) -> Dict[str, Dict[str, Any]]:
+    def to_dict(self) -> dict[str, dict[str, Any]]:
         """Convert all configurations to dictionary."""
         return {name: config.to_dict() for name, config in self.configs.items()}
 

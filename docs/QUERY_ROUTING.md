@@ -29,7 +29,7 @@ def _is_time_sensitive_query(self, question: str) -> bool:
 - Require web search for current information
 - Early exit with warning if web search unavailable
 
-### Competitor Database Queries  
+### Competitor Database Queries
 **Detection**: Mentions of non-Milvus vector databases with typo tolerance and enhanced technical term matching
 ```python
 competitor_patterns = {
@@ -46,7 +46,7 @@ competitor_patterns = {
 
 **Behavior**:
 - Skip response cache (external service info shouldn't be cached as Milvus content)
-- Require web search for accurate external information  
+- Require web search for accurate external information
 - Early exit with warning if web search unavailable
 - Prevent hallucination from Milvus KB about competitor products
 - **Enhanced Coverage**: Now detects technical queries like "pinecone vector search" or "weaviate database features"
@@ -66,7 +66,7 @@ graph TD
     A[Query Received] --> B[Time-Sensitive Check]
     B -->|Yes + Web Unavailable| C[Return Warning & Exit]
     B -->|Yes + Web Available| D[Skip Cache]
-    B -->|No| E[Competitor Check] 
+    B -->|No| E[Competitor Check]
     E -->|Yes + Web Unavailable| C
     E -->|Yes + Web Available| D
     E -->|No| F[Cache Check]
@@ -86,12 +86,12 @@ graph TD
     O --> P[Stream Response]
 ```
 
-**Cache Behavior**: 
+**Cache Behavior**:
 - Checks response cache for similar questions
 - Skips cache for time-sensitive/competitor queries
 - Returns cached results for exact/similar matches
 
-**Web Search Integration**: 
+**Web Search Integration**:
 - Supplement mode: Adds web results to KB context
 - Fallback mode: Web search when KB confidence is low
 - Optional based on `ENABLE_WEB_SEARCH_SUPPLEMENT` setting
@@ -109,7 +109,7 @@ graph TD
 **Entry Point**: `stream_answer_web_search_only()` / `answer_question_web_search_only()`
 **Triggers**: `force_web_search=true` parameter
 
-**Flow**: 
+**Flow**:
 - Bypasses all KB operations
 - Performs only web search
 - No validation layers (security, scope, competitor detection)
@@ -137,7 +137,7 @@ if (is_time_sensitive or is_competitor_query) and not web_search_available:
 topic_response = await topic_agent.invoke_async(context={"user_query": question})
 is_valid = "yes" in topic_response.content.lower()  # Fixed: was "true"
 
-# SecurityChecker Agent  
+# SecurityChecker Agent
 security_response = await security_agent.invoke_async(context={"user_query": question})
 is_safe = ("safe" in response_text.lower() or "yes" in response_text.lower())
 ```
@@ -152,7 +152,7 @@ All error messages are centralized in utility functions to ensure consistency:
 ```python
 def _create_web_search_unavailable_message(message_type: str) -> Dict[str, str]:
     standard_message = "Web search features are currently unavailable due to API quota or authentication issues. Please try again later."
-    
+
     messages = {
         'standard': standard_message,    # Time-sensitive & competitor queries
         'competitor': standard_message,  # Same message for consistency (DRY)
@@ -268,7 +268,7 @@ curl -X POST "http://localhost:8000/v1/chat/completions" \
 **Cause**: Web search unavailable, falling back to KB
 **Solution**: Check Tavily API keys and quota limits
 
-**Issue**: Time-sensitive queries returning stale information  
+**Issue**: Time-sensitive queries returning stale information
 **Cause**: Web search supplement disabled or unavailable
 **Solution**: Enable `ENABLE_WEB_SEARCH_SUPPLEMENT=true` and verify web search availability
 
@@ -292,7 +292,7 @@ print(_is_competitor_database_query('Tell me about Milvus?'))    # Should be Fal
 ```
 
 **Test Time-Sensitive Detection**:
-```python  
+```python
 python -c "
 from src.agents.strands_graph_agent import StrandsGraphRAGAgent
 agent = StrandsGraphRAGAgent()
@@ -316,7 +316,7 @@ grep -r "TAVILY" .env
 TAVILY_API_KEY=your_tavily_api_key                    # Required for web search
 ENABLE_WEB_SEARCH_SUPPLEMENT=true                     # Enable web search supplements
 
-# Cache Configuration  
+# Cache Configuration
 ENABLE_RESPONSE_CACHE=true                             # Enable response caching
 MILVUS_COLLECTION_NAME=milvus_docs                     # Default KB collection
 
@@ -340,7 +340,7 @@ class Settings:
 ### Planned Improvements
 1. **Dynamic Route Selection**: ML-based routing decisions
 2. **Response Quality Scoring**: Automatic fallback triggers
-3. **Multi-Modal Queries**: Support for image/document queries  
+3. **Multi-Modal Queries**: Support for image/document queries
 4. **Streaming Improvements**: Better error handling in streaming responses
 5. **Cache Optimization**: Semantic similarity-based cache matching
 
@@ -352,7 +352,7 @@ class Settings:
 
 ## Related Documentation
 - [API Server Documentation](API_SERVER.md) - REST endpoint specifications
-- [Architecture Overview](ARCHITECTURE.md) - System design and components  
+- [Architecture Overview](ARCHITECTURE.md) - System design and components
 - [Web Search Integration](WEB_SEARCH_INTEGRATION.md) - Tavily integration details
 - [Caching Strategy](CACHING_STRATEGY.md) - Cache implementation details
 - [Development Guide](DEVELOPMENT.md) - Code examples and patterns

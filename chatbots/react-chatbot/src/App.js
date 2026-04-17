@@ -20,7 +20,7 @@ const createTimingData = (totalTimeMs = 0, responseType = 'rag', isCached = fals
 function App() {
   const nextIdRef = useRef(2);
 
-  // Helper function to create consistent message objects (DRY principle)  
+  // Helper function to create consistent message objects (DRY principle)
   const createMessage = (text, role, options = {}) => ({
     id: options.id || nextIdRef.current++,
     text: typeof text === 'string' ? text : String(text || ''),
@@ -160,7 +160,7 @@ function App() {
         throw new Error(`API error: ${response.status}`);
       }
 
-      console.log('🚀 Starting to read response stream...'); 
+      console.log('🚀 Starting to read response stream...');
       const contentType = response.headers.get('content-type') || '';
       console.log('📊 Response content-type:', contentType);
 
@@ -173,7 +173,7 @@ function App() {
         if (line.startsWith('data: ')) {
           const jsonStr = line.substring(6).trim();
           if (!jsonStr) return fullText;
-          
+
           if (jsonStr === '[STREAM_END]') {
             console.log('✅ [STREAM_END] marker received, total accumulated text:', fullText.length, 'chars');
             return fullText;
@@ -184,9 +184,9 @@ function App() {
 
             // Extract sources if present in this chunk
             if (data.sources) {
-              console.log('📚 Sources field present:', { 
-                isArray: Array.isArray(data.sources), 
-                length: data.sources?.length, 
+              console.log('📚 Sources field present:', {
+                isArray: Array.isArray(data.sources),
+                length: data.sources?.length,
                 type: typeof data.sources,
                 sample: JSON.stringify(data.sources).substring(0, 200)
               });
@@ -205,7 +205,7 @@ function App() {
               // Handle content chunks (may be empty string for final chunk, still needs update)
               if ('content' in delta) {
                 // Ensure delta.content is always a string to prevent object concatenation
-                const safeContent = typeof delta.content === 'string' ? delta.content : 
+                const safeContent = typeof delta.content === 'string' ? delta.content :
                   (delta.content && typeof delta.content === 'object') ? JSON.stringify(delta.content) : String(delta.content || '');
                 const newText = fullText + safeContent;
                 console.log(`📝 Chunk received (len=${safeContent.length}), total=${newText.length}`);
@@ -216,16 +216,16 @@ function App() {
                   const messageIndex = newMessages.findIndex(m => m.id === assistantMessageId);
                   if (messageIndex !== -1) {
                     // Ensure text is always a string to prevent "[object Object]" errors
-                    const safeText = typeof newText === 'string' ? newText : 
+                    const safeText = typeof newText === 'string' ? newText :
                       (newText && typeof newText === 'object') ? JSON.stringify(newText) : String(newText || '');
                     newMessages[messageIndex].text = safeText || '(no content generated)';
                     newMessages[messageIndex].isStreaming = true;
-                    
+
                     // ALWAYS update sources if available (critical for system messages)
                     if (sourcesRef.current && sourcesRef.current.length > 0) {
                       newMessages[messageIndex].sources = [...sourcesRef.current]; // Use spread to ensure new array reference
                       console.log('📚 Sources updated in message:', sourcesRef.current);
-                      
+
                       // Special handling for system messages - don't show as text content if it's a system warning
                       const hasSystemMessage = sourcesRef.current.some(s => s.source_type === 'system_message');
                       console.log('🔍 System message check:', { hasSystemMessage, sources: sourcesRef.current.map(s => s.source_type) });
@@ -276,7 +276,7 @@ function App() {
 
           for (const line of lines) {
             if (line.trim().length === 0) continue;
-            
+
             // Parse response_type and timing if present in this chunk
             if (line.startsWith('data: ')) {
               const jsonStr = line.substring(6).trim();
@@ -286,7 +286,7 @@ function App() {
                 // Check for timing data in the streaming response
                 if (data.timing?.response_type) {
                   responseTypeRef.current = data.timing.response_type;
-                  console.log('📊 Response type from API timing:', data.timing.response_type, 
+                  console.log('📊 Response type from API timing:', data.timing.response_type,
                             'is_cached:', data.timing.is_cached);
                 }
                 // Fallback: check root level for backward compatibility
@@ -298,7 +298,7 @@ function App() {
                 // Ignore parse errors, continue with chunk parsing
               }
             }
-            
+
             fullText = parseStreamChunk(line, fullText, setMessages, assistantMessageId, sourcesRef);
           }
         }
@@ -317,10 +317,10 @@ function App() {
         if (messageIndex !== -1) {
           // Use accumulated fullText; provide helpful diagnostic if empty
           let finalText = fullText && fullText.trim() ? fullText : null;
-          
+
           if (!finalText) {
             console.warn('[EMPTY_RESPONSE] No content generated. Check server logs and Ollama status');
-            finalText = 
+            finalText =
               '❌ No response generated.\n\n' +
               'This can happen if:\n' +
               '1. Ollama model is not running\n' +
@@ -329,17 +329,17 @@ function App() {
               '4. API server crashed\n\n' +
               'Check the server logs for details.';
           }
-          
+
           // Ensure finalText is always a string to prevent "[object Object]" errors
-          const safeFinalText = typeof finalText === 'string' ? finalText : 
+          const safeFinalText = typeof finalText === 'string' ? finalText :
             (finalText && typeof finalText === 'object') ? JSON.stringify(finalText) : String(finalText || '');
-          
+
           // Set sources first, then determine if this is a system message
           newMessages[messageIndex].sources = [...(sourcesRef.current || [])]; // Use spread for new reference
-          
+
           // Check if this is a system message that should display via warning banner instead of text
           const hasSystemMessage = sourcesRef.current && sourcesRef.current.some(s => s.source_type === 'system_message');
-          
+
           if (hasSystemMessage) {
             // For system messages, clear the text content - the warning banner will display the message
             newMessages[messageIndex].text = '';
@@ -355,10 +355,10 @@ function App() {
             textLength: finalText.length,
             firstSource: sourcesRef.current?.[0]
           });
-          
+
           // Use response_type from API instead of guessing based on timing
           const isCached = responseTypeRef.current === 'cached';
-          
+
           newMessages[messageIndex].timing = createTimingData(
             Math.round(totalTime * 1000),
             responseTypeRef.current,
@@ -393,7 +393,7 @@ function App() {
         if (messageIndex !== -1) {
           // Use the same generic error message as when no response is generated
           console.warn('[NETWORK_ERROR] API request failed. Check server and Ollama status');
-          const genericErrorMessage = 
+          const genericErrorMessage =
             '❌ No response generated.\n\n' +
             'This can happen if:\n' +
             '1. Ollama model is not running\n' +
@@ -401,7 +401,7 @@ function App() {
             '3. Model ran out of memory\n' +
             '4. API server crashed\n\n' +
             'Check the server logs for details.';
-          
+
           newMessages[messageIndex].text = genericErrorMessage;
           newMessages[messageIndex].sources = [];
           newMessages[messageIndex].timing = createTimingData();
@@ -441,22 +441,22 @@ function App() {
 
       // Endpoint now returns { answer, sources, response_type, metadata }
       const responseData = await fullResponseData.json();
-      
+
       // Handle empty cached answers - re-ask the question instead
       if (!responseData.answer || responseData.answer.trim() === '') {
         console.log('⚠️ Cached response has empty answer - re-asking question with web search fallback');
         handleSendMessage(questionText);
         return;
       }
-      
+
       const answerText = responseData.answer;
       const sources = responseData.sources || [];
       const responseType = responseData.response_type || 'cached';
-      
+
       console.log('Fetched cached response:', { answerText, sources, responseType });
 
       // Ensure answerText is always a string to prevent "[object Object]" errors
-      const safeAnswerText = typeof answerText === 'string' ? answerText : 
+      const safeAnswerText = typeof answerText === 'string' ? answerText :
         (answerText && typeof answerText === 'object') ? JSON.stringify(answerText) : String(answerText || '');
 
       const userMessage = createMessage(String(questionText || '').trim(), 'user');
@@ -524,7 +524,7 @@ function App() {
               </div>
             </div>
 
-            <MessageContainer 
+            <MessageContainer
               messages={messages}
               isLoading={isLoading}
               messagesEndRef={messagesEndRef}

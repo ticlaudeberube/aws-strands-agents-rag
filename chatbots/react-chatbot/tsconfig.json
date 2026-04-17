@@ -16,12 +16,10 @@
   "include": ["src/**/*"],
   "exclude": [
     "e2e/**/*",
-    "**/*.spec.ts", 
+    "**/*.spec.ts",
     "**/*.test.ts",
     "**/playwright.config.ts",
     "build/**/*",
     "node_modules/**/*"
   ]
 }
-
-

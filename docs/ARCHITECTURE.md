@@ -209,8 +209,8 @@ The system implements a clean three-tier approach to answering questions with in
 - Fast response time (1-2 seconds)
 - Local document sources
 
-### Tier 3: Web Search (3-15s) 
-**When triggered**: 
+### Tier 3: Web Search (3-15s)
+**When triggered**:
 - **Automatic Fallback**: Cache returns empty answer OR KB confidence is low
 - **User-Explicit**: User clicks globe icon (🌐) or sets `force_web_search=true`
 

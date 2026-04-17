@@ -1,12 +1,14 @@
 import sys
-from pymilvus import MilvusClient, DataType  # type: ignore[import-untyped]
+
 from dotenv import load_dotenv
+from pymilvus import DataType, MilvusClient  # type: ignore[import-untyped]
+
 from .. import get_client
 
 load_dotenv()
 
 
-def create_index(_collection_name="hello_world_collection"):
+def create_index(_collection_name: str = "hello_world_collection") -> None:
     # Constants
     COLLECTION_NAME: str = _collection_name
     VECTOR_DIM: int = 5

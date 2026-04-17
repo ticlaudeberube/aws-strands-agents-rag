@@ -1,7 +1,8 @@
 """Programming Assistance Skill - Handles code analysis, review, and development tasks."""
 
 import logging
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any
+from collections.abc import Callable
 
 from src.tools.tool_registry import ToolDefinition, ToolRegistry
 
@@ -185,12 +186,12 @@ class ProgrammingSkill:
         logger.info("ProgrammingSkill: Registered 5 programming assistance tools")
 
     @staticmethod
-    def _create_structure_review_tool() -> Callable[[str, str, bool], Dict[str, Any]]:
+    def _create_structure_review_tool() -> Callable[[str, str, bool], dict[str, Any]]:
         """Create a specialized tool for code structure review."""
 
         def review_code_structure(
             code_path: str, review_focus: str = "organization", suggest_refactoring: bool = True
-        ) -> Dict[str, Any]:
+        ) -> dict[str, Any]:
             """Review code structure and organization.
 
             Args:
@@ -201,6 +202,7 @@ class ProgrammingSkill:
             Returns:
                 Structure review with suggestions
             """
+
             def safe_int(val: Any, default: int = 0) -> int:
                 if isinstance(val, int):
                     return val
@@ -232,7 +234,7 @@ class ProgrammingSkill:
             if not path.exists():
                 return {"error": f"Path does not exist: {code_path}", "review": {}}
 
-            review_results: Dict[str, Any] = {
+            review_results: dict[str, Any] = {
                 "path_analyzed": str(path),
                 "review_focus": review_focus,
                 "structural_analysis": {},
@@ -243,7 +245,7 @@ class ProgrammingSkill:
             if path.is_file():
                 # Analyze single file structure
                 try:
-                    with open(path, "r", encoding="utf-8", errors="ignore") as f:
+                    with open(path, encoding="utf-8", errors="ignore") as f:
                         content = f.read()
 
                     lines = content.splitlines()
@@ -251,10 +253,18 @@ class ProgrammingSkill:
                     # Basic structural analysis
                     analysis = {
                         "total_lines": len(lines),
-                        "function_count": len([line for line in lines if line.strip().startswith("def ")]),
-                        "class_count": len([line for line in lines if line.strip().startswith("class ")]),
+                        "function_count": len(
+                            [line for line in lines if line.strip().startswith("def ")]
+                        ),
+                        "class_count": len(
+                            [line for line in lines if line.strip().startswith("class ")]
+                        ),
                         "import_count": len(
-                            [line for line in lines if line.strip().startswith(("import ", "from "))]
+                            [
+                                line
+                                for line in lines
+                                if line.strip().startswith(("import ", "from "))
+                            ]
                         ),
                         "max_line_length": max(len(line) for line in lines) if lines else 0,
                     }
@@ -304,12 +314,12 @@ class ProgrammingSkill:
                 dir_analysis = {
                     "total_files": len(python_files),
                     "avg_file_size": 0.0,  # float
-                    "largest_file": "",   # str
+                    "largest_file": "",  # str
                     "directory_depth": 0,
                 }
 
                 if python_files:
-                    file_sizes: List[float] = []
+                    file_sizes: list[float] = []
                     largest_size: float = 0.0
                     largest_file: str = ""
 
@@ -324,7 +334,9 @@ class ProgrammingSkill:
                         except Exception:
                             continue
 
-                    avg_file_size: float = float(sum(file_sizes)) / float(len(file_sizes)) if file_sizes else 0.0
+                    avg_file_size: float = (
+                        float(sum(file_sizes)) / float(len(file_sizes)) if file_sizes else 0.0
+                    )
                     dir_analysis["avg_file_size"] = avg_file_size
                     dir_analysis["largest_file"] = str(largest_file)
 
@@ -361,12 +373,14 @@ class ProgrammingSkill:
 
     @staticmethod
     @staticmethod
-    def _create_best_practices_validator() -> Callable[[str, str, Optional[List[str]]], Dict[str, Any]]:
+    def _create_best_practices_validator() -> Callable[
+        [str, str, list[str] | None], dict[str, Any]
+    ]:
         """Create a tool for validating coding best practices."""
 
         def validate_best_practices(
-            file_path: str, language: str = "auto", standards: Optional[List[str]] = None
-        ) -> Dict[str, Any]:
+            file_path: str, language: str = "auto", standards: list[str] | None = None
+        ) -> dict[str, Any]:
             """Validate code against best practices and standards.
 
             Args:
@@ -392,12 +406,12 @@ class ProgrammingSkill:
                 language = lang_map.get(extension, "unknown")
 
             try:
-                with open(path, "r", encoding="utf-8", errors="ignore") as f:
+                with open(path, encoding="utf-8", errors="ignore") as f:
                     content = f.read()
             except Exception as e:
                 return {"error": f"Could not read file: {e}", "validation": {}}
 
-            validation_results: Dict[str, Any] = {
+            validation_results: dict[str, Any] = {
                 "file": str(path),
                 "language": language,
                 "standards_checked": standards or ["general"],

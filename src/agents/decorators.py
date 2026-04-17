@@ -4,7 +4,8 @@ import asyncio
 import functools
 import logging
 import time
-from typing import Any, Callable, Optional, TypeVar, cast
+from typing import Any, TypeVar, cast
+from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +16,7 @@ def retry_with_backoff(
     max_attempts: int = 3,
     base_delay: float = 0.1,
     exponential: bool = True,
-    max_delay: Optional[float] = None,
+    max_delay: float | None = None,
 ) -> Callable[[F], F]:
     """Decorator for retrying functions with exponential backoff.
 
@@ -32,7 +33,7 @@ def retry_with_backoff(
     def decorator(func: F) -> F:
         @functools.wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
-            last_exception = None
+            last_exception: Exception | None = None
             for attempt in range(max_attempts):
                 try:
                     result = func(*args, **kwargs)
@@ -55,7 +56,9 @@ def retry_with_backoff(
                             f"[RETRY] {func.__name__} failed after {max_attempts} attempts: {str(e)}"
                         )
 
-            raise last_exception
+            if last_exception is not None:
+                raise last_exception
+            raise RuntimeError("No attempts were made")
 
         return cast(F, wrapper)
 
@@ -66,7 +69,7 @@ def retry_async(
     max_attempts: int = 3,
     base_delay: float = 0.1,
     exponential: bool = True,
-    max_delay: Optional[float] = None,
+    max_delay: float | None = None,
 ) -> Callable[[F], F]:
     """Async version of retry_with_backoff decorator.
 
@@ -83,7 +86,7 @@ def retry_async(
     def decorator(func: F) -> F:
         @functools.wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
-            last_exception = None
+            last_exception: Exception | None = None
             for attempt in range(max_attempts):
                 try:
                     result = await func(*args, **kwargs)
@@ -106,7 +109,9 @@ def retry_async(
                             f"[RETRY] {func.__name__} failed after {max_attempts} attempts: {str(e)}"
                         )
 
-            raise last_exception
+            if last_exception is not None:
+                raise last_exception
+            raise RuntimeError("No attempts were made")
 
         return cast(F, wrapper)
 

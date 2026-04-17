@@ -43,7 +43,7 @@ npx playwright install
 **NEW**: The `playwright.config.ts` is configured to **auto-start both services** before running tests:
 
 1. **React Chatbot** (port 3000) - `npm start`
-2. **Python API Server** (port 8001) - `python api_server.py` 
+2. **Python API Server** (port 8001) - `python api_server.py`
 
 **Manual Start** (optional, if auto-start fails):
 ```bash
@@ -61,7 +61,7 @@ python api_server.py
 ### Quick Commands (using npm scripts)
 
 ```bash
-# Run all E2E tests (auto-starts services)  
+# Run all E2E tests (auto-starts services)
 npm run test:e2e
 
 # Interactive UI mode
@@ -69,7 +69,7 @@ npm run test:e2e:ui
 
 # Specific test suites
 npm run test:e2e:basic        # Basic functionality
-npm run test:e2e:cache        # Cache management  
+npm run test:e2e:cache        # Cache management
 npm run test:e2e:mobile       # Mobile responsiveness
 npm run test:e2e:performance  # Performance testing
 npm run test:e2e:sources      # Source display
@@ -362,11 +362,11 @@ jobs:
       - uses: actions/setup-node@v3
         with:
           node-version: 18
-      
+
       # Install dependencies
       - run: npm ci
       - run: npx playwright install
-      
+
       # Start API and chatbot (or use docker-compose)
       - run: |
           cd chatbots/react-chatbot
@@ -375,10 +375,10 @@ jobs:
           cd ../..
           python api_server.py &
           sleep 3
-      
+
       # Run tests
       - run: npx playwright test e2e/
-      
+
       # Upload reports
       - uses: actions/upload-artifact@v3
         if: always()

@@ -6,8 +6,6 @@ hallucination by detecting queries about Pinecone, Weaviate, ChromaDB, etc.
 and properly routing them to web search or rejection messages.
 """
 
-from unittest.mock import Mock, patch
-
 import pytest
 
 from src.agents.strands_graph_agent import StrandsGraphRAGAgent, _is_competitor_database_query
@@ -76,7 +74,7 @@ class TestCompetitorDetection:
         assert _is_competitor_database_query("OpenSearch vector capabilities") is True
 
     # ======================================================================
-    # TECHNICAL TERM PATTERN TESTS  
+    # TECHNICAL TERM PATTERN TESTS
     # ======================================================================
 
     def test_pinecone_with_technical_terms(self, agent):
@@ -86,7 +84,7 @@ class TestCompetitorDetection:
             "Pinecone vector indexing",
             "Pinecone database API",
             "Pinecone search performance",
-            "Pinecone vector storage"
+            "Pinecone vector storage",
         ]
         for query in queries:
             assert _is_competitor_database_query(query) is True, f"Failed for: {query}"
@@ -96,7 +94,7 @@ class TestCompetitorDetection:
         queries = [
             "Weaviate vector database",
             "Weaviate vector search",
-            "Weaviate database indexing"
+            "Weaviate database indexing",
         ]
         for query in queries:
             assert _is_competitor_database_query(query) is True, f"Failed for: {query}"
@@ -105,9 +103,9 @@ class TestCompetitorDetection:
         """Test detection of competitor patterns without explicit names."""
         competitor_queries = [
             "Tell me more about Pinecone?",  # The exact query from debugging
-            "What is Pinecone database?",   # Direct info request
+            "What is Pinecone database?",  # Direct info request
             "Weaviate installation guide",  # Tech-specific query
-            "ChromaDB Python client tutorial"  # Tech-specific query
+            "ChromaDB Python client tutorial",  # Tech-specific query
         ]
         for query in competitor_queries:
             assert _is_competitor_database_query(query) is True, f"Failed for: {query}"
@@ -123,7 +121,7 @@ class TestCompetitorDetection:
             "How to use Milvus vector database?",
             "Milvus indexing performance",
             "Milvus vs other databases",  # Comparison allowed when Milvus is primary
-            "Milvus installation guide"
+            "Milvus installation guide",
         ]
         for query in milvus_queries:
             assert _is_competitor_database_query(query) is False, f"False positive for: {query}"
@@ -135,26 +133,28 @@ class TestCompetitorDetection:
             "How do embeddings work?",
             "Vector similarity search algorithms",
             "RAG architecture patterns",
-            "Information retrieval systems"
+            "Information retrieval systems",
         ]
         for query in general_queries:
             assert _is_competitor_database_query(query) is False, f"False positive for: {query}"
 
     def test_comparison_queries_not_detected_as_competitor(self, agent):
         """Test that comparison queries are not detected as competitor queries.
-        
+
         Comparison queries involving Milvus should be handled by the knowledge base,
         not treated as competitor-only queries requiring web search.
         """
         comparison_queries = [
             "How does Pinecone compare to other databases?",
-            "Pinecone vs Milvus comparison", 
+            "Pinecone vs Milvus comparison",
             "Compare Weaviate and Milvus features",
             "Qdrant vs other vector databases",
-            "Milvus compared to ChromaDB"
+            "Milvus compared to ChromaDB",
         ]
         for query in comparison_queries:
-            assert _is_competitor_database_query(query) is False, f"Should not detect comparison query: {query}"
+            assert _is_competitor_database_query(query) is False, (
+                f"Should not detect comparison query: {query}"
+            )
 
     def test_unrelated_queries_not_detected(self, agent):
         """Test that unrelated queries don't trigger competitor detection."""
@@ -162,7 +162,7 @@ class TestCompetitorDetection:
             "What is the weather today?",
             "How to cook pasta?",
             "Python programming basics",
-            "Machine learning algorithms"
+            "Machine learning algorithms",
         ]
         for query in unrelated_queries:
             assert _is_competitor_database_query(query) is False, f"False positive for: {query}"
@@ -177,7 +177,7 @@ class TestCompetitorDetection:
         typo_queries = [
             "What is Pincon?",  # Typo in Pinecone
             "Weaviat database",  # Typo in Weaviate
-            "ChromDB features"   # Typo in ChromaDB
+            "ChromDB features",  # Typo in ChromaDB
         ]
         # These might currently return False, but documenting the test case
         for query in typo_queries:
@@ -190,7 +190,7 @@ class TestCompetitorDetection:
         sentence_queries = [
             "I heard that Pinecone is a popular vector database, what do you think?",
             "My team is considering Weaviate for our project requirements.",
-            "The documentation mentions ChromaDB as an alternative solution."
+            "The documentation mentions ChromaDB as an alternative solution.",
         ]
         for query in sentence_queries:
             assert _is_competitor_database_query(query) is True, f"Failed for: {query}"
@@ -203,16 +203,16 @@ class TestCompetitorDetection:
         """Test that competitor queries are excluded from cache."""
         # This test verifies that the cache exclusion logic exists
         # The actual exclusion is tested by checking the function works
-        
+
         competitor_query = "Tell me more about Pinecone?"
-        
+
         # Test the logic that competitor queries should not use cache
-        is_competitor = _is_competitor_database_query(competitor_query) 
+        is_competitor = _is_competitor_database_query(competitor_query)
         assert is_competitor is True
-        
+
         # Verify that the agent has response cache capability
         # (Full integration testing would require actual cache setup)
-        assert hasattr(agent, 'response_cache') or hasattr(agent, '_response_cache')
+        assert hasattr(agent, "response_cache") or hasattr(agent, "_response_cache")
 
     # ======================================================================
     # ERROR MESSAGE CONSISTENCY TESTS
@@ -221,15 +221,10 @@ class TestCompetitorDetection:
     def test_competitor_query_error_message_format(self, agent):
         """Test that competitor queries produce consistent error messages."""
         # This tests the DRY error messaging we implemented
-        expected_patterns = [
-            "web search",
-            "unavailable", 
-            "currently",
-            "supplement"
-        ]
-        
+        expected_patterns = ["web search", "unavailable", "currently", "supplement"]
+
         # The actual error message should come from get_web_search_unavailable_message
-        if hasattr(agent, 'get_web_search_unavailable_message'):
+        if hasattr(agent, "get_web_search_unavailable_message"):
             error_msg = agent.get_web_search_unavailable_message()
             # Check that error message contains expected patterns
             assert any(pattern in error_msg.lower() for pattern in expected_patterns)
@@ -241,22 +236,23 @@ class TestCompetitorDetection:
     def test_competitor_detection_in_full_pipeline(self, agent):
         """Test competitor detection works within full query routing pipeline."""
         # This tests that the routing order works correctly:
-        # 1. Topic validation 
+        # 1. Topic validation
         # 2. Security check
         # 3. Time-sensitive detection
         # 4. Competitor detection
         # 5. RAG processing
-        
+
         competitor_query = "What is Pinecone database?"
-        
+
         # Verify that competitor detection function works
         assert _is_competitor_database_query(competitor_query) is True
-        
-        # Verify that time-sensitive detection method exists  
-        assert hasattr(agent, '_is_time_sensitive_query')
-        
+
+        # Verify that time-sensitive detection method exists
+        assert hasattr(agent, "_is_time_sensitive_query")
+
         # Verify that security detection function exists
         from src.agents.strands_graph_agent import _is_security_attack
+
         assert _is_security_attack(competitor_query) is False
 
     # ======================================================================
@@ -273,7 +269,11 @@ class TestCompetitorDetection:
 
     def test_very_long_query_with_competitor(self, agent):
         """Test competitor detection in very long queries."""
-        long_query = "I am working on a machine learning project that requires vector search capabilities and " * 10 + "I heard Pinecone might be a good option."
+        long_query = (
+            "I am working on a machine learning project that requires vector search capabilities and "
+            * 10
+            + "I heard Pinecone might be a good option."
+        )
         assert _is_competitor_database_query(long_query) is True
 
     def test_special_characters_in_competitor_query(self, agent):
@@ -282,7 +282,7 @@ class TestCompetitorDetection:
             "What is Pinecone? (vector database)",
             "Tell me about Weaviate.",
             "How does ChromaDB work??? Please explain!",
-            "Qdrant: the vector database"
+            "Qdrant: the vector database",
         ]
         for query in special_queries:
             result = _is_competitor_database_query(query)
@@ -296,13 +296,13 @@ class TestCompetitorDetection:
     def test_competitor_detection_performance(self, agent):
         """Test that competitor detection is fast enough for real-time use."""
         import time
-        
+
         query = "Tell me more about Pinecone database features"
-        
+
         start_time = time.time()
         result = _is_competitor_database_query(query)
         end_time = time.time()
-        
+
         # Should complete in under 10ms for real-time responsiveness
         duration = end_time - start_time
         assert duration < 0.01, f"Competitor detection too slow: {duration:.3f}s"
@@ -312,23 +312,26 @@ class TestCompetitorDetection:
         """Test competitor detection on batch of queries."""
         test_queries = [
             "What is Pinecone?",
-            "How does Weaviate work?", 
+            "How does Weaviate work?",
             "What is Milvus?",
             "Vector database performance",  # Changed from comparison query
             "What is the weather?",
-            "ChromaDB installation guide"
+            "ChromaDB installation guide",
         ]
-        
+
         expected_results = [True, True, False, False, False, True]
-        
+
         for query, expected in zip(test_queries, expected_results):
             result = _is_competitor_database_query(query)
-            assert result == expected, f"Wrong result for '{query}': expected {expected}, got {result}"
+            assert result == expected, (
+                f"Wrong result for '{query}': expected {expected}, got {result}"
+            )
 
 
 # ======================================================================
 # PARAMETRIZED TESTS FOR COMPREHENSIVE COVERAGE
 # ======================================================================
+
 
 class TestCompetitorDetectionParametrized:
     """Parametrized tests for comprehensive competitor detection coverage."""
@@ -339,31 +342,37 @@ class TestCompetitorDetectionParametrized:
         settings = Settings()
         return StrandsGraphRAGAgent(settings=settings)
 
-    @pytest.mark.parametrize("competitor,query_template", [
-        ("Pinecone", "What is {} database?"),
-        ("Weaviate", "How does {} work?"),
-        ("ChromaDB", "{} vector installation guide"),
-        ("Qdrant", "Tell me about {} features"), 
-        ("pgvector", "Using {} extension"),
-        ("Elasticsearch", "{} vector search"),
-        ("OpenSearch", "{} vector capabilities")
-        # Note: FAISS not included as it's not in the current competitor patterns
-    ])
+    @pytest.mark.parametrize(
+        "competitor,query_template",
+        [
+            ("Pinecone", "What is {} database?"),
+            ("Weaviate", "How does {} work?"),
+            ("ChromaDB", "{} vector installation guide"),
+            ("Qdrant", "Tell me about {} features"),
+            ("pgvector", "Using {} extension"),
+            ("Elasticsearch", "{} vector search"),
+            ("OpenSearch", "{} vector capabilities"),
+            # Note: FAISS not included as it's not in the current competitor patterns
+        ],
+    )
     def test_all_competitors_detected(self, agent, competitor, query_template):
         """Test that all known competitors are detected."""
         query = query_template.format(competitor)
         assert _is_competitor_database_query(query) is True
 
-    @pytest.mark.parametrize("safe_query", [
-        "What is Milvus?",
-        "How do vector databases work?",
-        "RAG architecture patterns", 
-        "Embedding similarity search",
-        "Information retrieval systems",
-        "What is the weather today?",
-        "How to cook pasta?",
-        "Python programming tutorial"
-    ])
+    @pytest.mark.parametrize(
+        "safe_query",
+        [
+            "What is Milvus?",
+            "How do vector databases work?",
+            "RAG architecture patterns",
+            "Embedding similarity search",
+            "Information retrieval systems",
+            "What is the weather today?",
+            "How to cook pasta?",
+            "Python programming tutorial",
+        ],
+    )
     def test_non_competitors_not_detected(self, agent, safe_query):
         """Test that non-competitor queries are not detected."""
         assert _is_competitor_database_query(safe_query) is False

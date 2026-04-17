@@ -6,12 +6,12 @@ properly initialize with the `system_prompt` parameter (Strands 1.27.0+).
 This is a CRITICAL test suite for validating the framework API migration.
 """
 
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import patch
 
 import pytest
 from strands import Agent
 
-from src.agents import prompts, strands_graph_agent
+from src.agents import prompts
 from src.config import Settings
 
 # ============================================================================
@@ -45,7 +45,7 @@ class TestTopicCheckerInitialization:
         # This test validates that the Strands Agent API expects system_prompt
         # and not the deprecated instructions parameter
         expected_system_prompt = prompts.ScopeCheckPrompts.SYSTEM_INSTRUCTIONS
-        
+
         assert expected_system_prompt is not None
         assert isinstance(expected_system_prompt, str)
         assert "topic validation" in expected_system_prompt.lower()
@@ -54,7 +54,7 @@ class TestTopicCheckerInitialization:
     def test_topic_checker_prompt_content(self):
         """Verify TopicChecker system instructions have proper content."""
         prompt = prompts.ScopeCheckPrompts.SYSTEM_INSTRUCTIONS
-        
+
         # Check that prompt contains expected keywords
         assert "vector database" in prompt.lower() or "databases" in prompt.lower()
         assert "question" in prompt.lower() or "query" in prompt.lower()
@@ -64,12 +64,12 @@ class TestTopicCheckerInitialization:
 
     def test_topic_checker_no_placeholder_variables(self):
         """Verify TopicChecker prompt has no placeholder variables.
-        
+
         Strands agents receive user input separately via invoke(),
         so system_prompt should not contain placeholder variables.
         """
         prompt = prompts.ScopeCheckPrompts.SYSTEM_INSTRUCTIONS
-        
+
         # Check for common placeholder patterns
         assert "{user_question}" not in prompt
         assert "{query}" not in prompt
@@ -83,25 +83,30 @@ class TestSecurityCheckerInitialization:
     def test_security_checker_uses_system_prompt_parameter(self):
         """Verify SecurityChecker agent initializes with system_prompt (not instructions)."""
         expected_system_prompt = prompts.SecurityCheckPrompts.SYSTEM_INSTRUCTIONS
-        
+
         assert expected_system_prompt is not None
         assert isinstance(expected_system_prompt, str)
-        assert "security" in expected_system_prompt.lower() or "attack" in expected_system_prompt.lower()
+        assert (
+            "security" in expected_system_prompt.lower()
+            or "attack" in expected_system_prompt.lower()
+        )
         assert len(expected_system_prompt) > 0
 
     def test_security_checker_prompt_content(self):
         """Verify SecurityChecker system instructions have proper content."""
         prompt = prompts.SecurityCheckPrompts.SYSTEM_INSTRUCTIONS
-        
+
         # Check that prompt addresses security concerns
-        assert "security" in prompt.lower() or "attack" in prompt.lower() or "risk" in prompt.lower()
+        assert (
+            "security" in prompt.lower() or "attack" in prompt.lower() or "risk" in prompt.lower()
+        )
         # Should not have placeholders
         assert "{question}" not in prompt
 
     def test_security_checker_no_placeholder_variables(self):
         """Verify SecurityChecker prompt has no placeholder variables."""
         prompt = prompts.SecurityCheckPrompts.SYSTEM_INSTRUCTIONS
-        
+
         # Check for common placeholder patterns
         assert "{user_question}" not in prompt
         assert "{query}" not in prompt
@@ -115,21 +120,22 @@ class TestRAGWorkerInitialization:
     def test_rag_worker_uses_system_prompt_parameter(self):
         """Verify RAGWorker agent initializes with system_prompt (not instructions)."""
         expected_system_prompt = prompts.RAGPrompts.SYSTEM_INSTRUCTIONS
-        
+
         assert expected_system_prompt is not None
         assert isinstance(expected_system_prompt, str)
-        assert "answer" in expected_system_prompt.lower() or "retrieval" in expected_system_prompt.lower()
+        assert (
+            "answer" in expected_system_prompt.lower()
+            or "retrieval" in expected_system_prompt.lower()
+        )
         assert len(expected_system_prompt) > 0
 
     def test_rag_worker_prompt_can_be_formatted(self):
         """Verify RAGWorker prompt can be formatted with formatting_rules."""
         prompt_template = prompts.RAGPrompts.SYSTEM_INSTRUCTIONS
-        
+
         # This prompt is formatted with FORMATTING_RULES
-        formatted_prompt = prompt_template.format(
-            formatting_rules=prompts.FORMATTING_RULES
-        )
-        
+        formatted_prompt = prompt_template.format(formatting_rules=prompts.FORMATTING_RULES)
+
         assert isinstance(formatted_prompt, str)
         assert len(formatted_prompt) > 0
         assert "answer" in formatted_prompt.lower() or "retrieval" in formatted_prompt.lower()
@@ -137,14 +143,14 @@ class TestRAGWorkerInitialization:
     def test_rag_worker_prompt_contains_formatting_rules(self):
         """Verify RAGWorker prompt template has formatting_rules placeholder."""
         prompt = prompts.RAGPrompts.SYSTEM_INSTRUCTIONS
-        
+
         # Should have {formatting_rules} placeholder for injection
         assert "{formatting_rules}" in prompt
 
     def test_rag_worker_prompt_no_other_placeholders(self):
         """Verify RAGWorker prompt only has formatting_rules placeholder."""
         prompt = prompts.RAGPrompts.SYSTEM_INSTRUCTIONS
-        
+
         # Should not have question or context placeholders
         assert "{question}" not in prompt
         assert "{context}" not in prompt
@@ -196,7 +202,7 @@ class TestAgentCreationWithMocks:
         """Test that create_rag_graph returns a valid graph configuration."""
         # Skip actual graph creation to avoid Strands framework instantiation
         # Just verify that the graph config structure would be correct
-        
+
         # The function should return a dict with nodes and edges
         # This is structurally validated if the function doesn't raise exceptions
         # Full integration test below
@@ -221,21 +227,21 @@ class TestStrandsAPICompatibility:
     def test_agent_class_has_system_prompt_parameter(self):
         """Verify Strands Agent class supports system_prompt parameter."""
         import inspect
-        
+
         # Check Agent.__init__ signature
         sig = inspect.signature(Agent.__init__)
         param_names = list(sig.parameters.keys())
-        
+
         # Should have system_prompt parameter (not instructions)
         assert "system_prompt" in param_names or "model" in param_names
 
     def test_invalid_instructions_parameter_would_fail(self):
         """Document that instructions parameter is no longer valid."""
         import inspect
-        
+
         sig = inspect.signature(Agent.__init__)
         param_names = list(sig.parameters.keys())
-        
+
         # Modern Strands uses system_prompt, not instructions
         # If instructions is present, the test documents a regression
         if "instructions" in param_names:

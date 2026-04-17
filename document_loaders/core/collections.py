@@ -1,6 +1,6 @@
 """Collection operations for Milvus."""
 
-from typing import Any, Dict, List, Tuple
+from typing import Any
 import os
 from pymilvus import MilvusException  # type: ignore[import-untyped]
 from .client import get_client
@@ -75,14 +75,14 @@ def has_collection(collection_name: str) -> bool:
     return bool(client.has_collection(collection_name=collection_name))  # type: ignore[no-any-return]
 
 
-def insert_data(collection_name: str, data: List[Dict[str, Any]]) -> Dict[str, Any]:
+def insert_data(collection_name: str, data: list[dict[str, Any]]) -> dict[str, Any]:
     """Insert data into collection."""
     client = get_client()
     result = client.insert(collection_name=collection_name, data=data)
     return result if isinstance(result, dict) else {}  # type: ignore[no-any-return]
 
 
-def vectorize_documents(collection_name: str, docs: List[str]) -> Tuple[Dict[str, Any], int]:
+def vectorize_documents(collection_name: str, docs: list[str]) -> tuple[dict[str, Any], int]:
     """Vectorize documents using Ollama and insert into collection."""
     # Get embedding dimension from the environment or use default
     embedding_model = os.getenv("OLLAMA_EMBEDDING_MODEL", "nomic-embed-text:v1.5")

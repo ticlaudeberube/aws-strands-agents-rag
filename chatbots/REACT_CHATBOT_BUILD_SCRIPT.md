@@ -1,7 +1,7 @@
 # React Chatbot Build Script Documentation
 
-**Location**: `chatbots/build.sh`  
-**Purpose**: Comprehensive React chatbot build and deployment helper script  
+**Location**: `chatbots/build.sh`
+**Purpose**: Comprehensive React chatbot build and deployment helper script
 **Status**: ✅ Production-ready
 
 ## Overview

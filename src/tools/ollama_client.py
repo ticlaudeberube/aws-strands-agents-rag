@@ -3,7 +3,6 @@
 import logging
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import List, Optional
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -19,9 +18,9 @@ class OllamaClient:
 
     def __init__(
         self,
-        host: Optional[str] = None,
-        timeout: Optional[int] = None,
-        pool_size: Optional[int] = None,
+        host: str | None = None,
+        timeout: int | None = None,
+        pool_size: int | None = None,
     ):
         """Initialize Ollama client with connection pooling.
 
@@ -63,7 +62,7 @@ class OllamaClient:
         self.session.mount("http://", adapter)
         self.session.mount("https://", adapter)
 
-    def is_available(self, timeout: Optional[int] = None) -> bool:
+    def is_available(self, timeout: int | None = None) -> bool:
         """Check if Ollama server is available.
 
         Args:
@@ -80,7 +79,7 @@ class OllamaClient:
             logger.warning(f"Ollama server not available: {e}")
             return False
 
-    def get_available_models(self, timeout: Optional[int] = None) -> List[str]:
+    def get_available_models(self, timeout: int | None = None) -> list[str]:
         """Get list of available models from Ollama.
 
         Args:
@@ -109,9 +108,9 @@ class OllamaClient:
     def embed_text(
         self,
         text: str,
-        model: Optional[str] = None,
-        timeout: Optional[int] = None,
-    ) -> List[float]:
+        model: str | None = None,
+        timeout: int | None = None,
+    ) -> list[float]:
         """Generate embedding for text using Ollama.
 
         Args:
@@ -162,11 +161,11 @@ class OllamaClient:
 
     def embed_texts(
         self,
-        texts: List[str],
-        model: Optional[str] = None,
+        texts: list[str],
+        model: str | None = None,
         batch_size: int = 32,
-        max_workers: Optional[int] = None,
-    ) -> List[Optional[List[float]]]:
+        max_workers: int | None = None,
+    ) -> list[list[float] | None]:
         """Generate embeddings for multiple texts with batch processing.
 
         Args:
@@ -187,9 +186,7 @@ class OllamaClient:
         if max_workers is None:
             max_workers = 4
 
-        embeddings: List[Optional[List[float]]] = [None] * len(
-            texts
-        )  # Pre-allocate to maintain order
+        embeddings: list[list[float] | None] = [None] * len(texts)  # Pre-allocate to maintain order
 
         # Use ThreadPoolExecutor for parallel embedding requests
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -217,10 +214,10 @@ class OllamaClient:
     def generate(
         self,
         prompt: str,
-        model: Optional[str] = None,
+        model: str | None = None,
         stream: bool = False,
         temperature: float = 0.1,
-        max_tokens: Optional[int] = None,
+        max_tokens: int | None = None,
     ) -> str:
         """Generate text using Ollama LLM.
 
@@ -284,9 +281,9 @@ class OllamaClient:
     def generate_stream(
         self,
         prompt: str,
-        model: Optional[str] = None,
+        model: str | None = None,
         temperature: float = 0.1,
-        max_tokens: Optional[int] = None,
+        max_tokens: int | None = None,
     ):
         """Stream text generation using Ollama LLM.
 
@@ -332,7 +329,7 @@ class OllamaClient:
             chunk_count = 0
             empty_chunk_count = 0
             total_length = 0
-            
+
             for line in response.iter_lines():
                 if line:
                     try:
@@ -343,14 +340,14 @@ class OllamaClient:
                         # Extract the response chunk from the JSON
                         chunk = chunk_data.get("response", "")
                         is_done = chunk_data.get("done", False)
-                        
+
                         if chunk:
                             chunk_count += 1
                             total_length += len(chunk)
                             yield chunk
                         else:
                             empty_chunk_count += 1
-                            
+
                         # Log completion info
                         if is_done:
                             logger.info(
@@ -363,7 +360,7 @@ class OllamaClient:
                     except Exception as e:
                         logger.debug(f"Failed to process chunk: {e}")
                         continue
-            
+
             # Check if we got no chunks at all
             if chunk_count == 0:
                 logger.warning(

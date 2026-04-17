@@ -1,15 +1,14 @@
 """Milvus client connection management."""
 
-from typing import Optional
 from pymilvus import MilvusClient  # type: ignore[import-untyped]
 from .config import get_milvus_config
 from .exceptions import MilvusConnectionError
 
 # Global client instance - initialized lazily
-_client: Optional[MilvusClient] = None
+_client: MilvusClient | None = None
 
 
-def get_client(db_name: Optional[str] = None) -> MilvusClient:
+def get_client(db_name: str | None = None) -> MilvusClient:
     """Get Milvus client with lazy initialization and connection validation.
 
     Args:

@@ -39,19 +39,24 @@ def mock_ollama_client():
 def mock_milvus_client():
     """Provide mock Milvus client for unit tests."""
     client = MagicMock()
-    client.search = MagicMock(return_value=[
-        {"doc_id": "1", "score": 0.95, "text": "Mock document 1"},
-        {"doc_id": "2", "score": 0.92, "text": "Mock document 2"},
-    ])
+    client.search = MagicMock(
+        return_value=[
+            {"doc_id": "1", "score": 0.95, "text": "Mock document 1"},
+            {"doc_id": "2", "score": 0.92, "text": "Mock document 2"},
+        ]
+    )
     return client
 
 
 @pytest.fixture(autouse=True)
 def mock_env_vars():
     """Mock environment variables for all unit tests."""
-    with patch.dict(os.environ, {
-        "MILVUS_HOST": "localhost",
-        "MILVUS_PORT": "19530",
-        "OLLAMA_BASE_URL": "http://localhost:11434",
-    }):
+    with patch.dict(
+        os.environ,
+        {
+            "MILVUS_HOST": "localhost",
+            "MILVUS_PORT": "19530",
+            "OLLAMA_BASE_URL": "http://localhost:11434",
+        },
+    ):
         yield

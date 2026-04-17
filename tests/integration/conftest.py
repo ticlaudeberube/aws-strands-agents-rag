@@ -6,7 +6,6 @@ Integration tests verify system interactions and may use real services or more r
 
 import os
 from pathlib import Path
-from typing import Generator
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -62,6 +61,7 @@ def integration_env_vars(test_project_root: Path):
 @pytest.fixture
 def mock_streaming_response():
     """Provide mock streaming response for integration tests."""
+
     async def async_generator():
         chunks = [
             b"data: " + b'{"type": "text", "content": "The "}' + b"\n\n",
@@ -70,6 +70,7 @@ def mock_streaming_response():
         ]
         for chunk in chunks:
             yield chunk
+
     return async_generator
 
 
@@ -118,7 +119,7 @@ def pytest_collection_modifyitems(config, items):
         server_available = response.status_code == 200
     except (requests.ConnectionError, requests.Timeout):
         server_available = False
-    
+
     if not server_available:
         skip_marker = pytest.mark.skip(reason="API server not running on localhost:8000")
         for item in items:

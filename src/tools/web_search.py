@@ -7,7 +7,6 @@ Supports multiple search providers:
 import json
 import logging
 import os
-from typing import Dict, List, Optional, Tuple
 
 import requests
 
@@ -23,7 +22,7 @@ class TavilySearchClient:
     for technical products like Pinecone, Weaviate, etc.
     """
 
-    def __init__(self, api_key: Optional[str] = None, timeout: Optional[int] = None):
+    def __init__(self, api_key: str | None = None, timeout: int | None = None):
         """Initialize Tavily search client.
 
         Args:
@@ -50,7 +49,7 @@ class TavilySearchClient:
         max_results: int = 5,
         search_depth: str = "basic",
         include_answer: bool = False,
-    ) -> Tuple[List[Dict[str, str]], str]:
+    ) -> tuple[list[dict[str, str]], str]:
         """Search using Tavily API.
 
         Args:
@@ -64,7 +63,7 @@ class TavilySearchClient:
         """
         if not self.api_key:
             logger.warning("[TAVILY] API key not available, skipping Tavily search")
-            return [], 'api_unavailable'
+            return [], "api_unavailable"
 
         try:
             logger.info(f"[TAVILY] Web search for: {query}")
@@ -83,28 +82,28 @@ class TavilySearchClient:
                 json=payload,
                 timeout=self.timeout,
             )
-            
-            # Check for specific Tavily error codes  
+
+            # Check for specific Tavily error codes
             if response.status_code == 401:
                 logger.error("[TAVILY] Authentication failed - invalid API key")
-                return [], 'api_unavailable'
+                return [], "api_unavailable"
             elif response.status_code == 429:
                 logger.error("[TAVILY] Rate limit exceeded - too many requests")
-                return [], 'api_unavailable'
+                return [], "api_unavailable"
             elif response.status_code == 432:
                 logger.error("[TAVILY] Quota exceeded or API key invalid")
-                return [], 'api_unavailable'
+                return [], "api_unavailable"
             elif not response.ok:
                 logger.error(f"[TAVILY] API error: {response.status_code} - {response.text}")
-                return [], 'api_unavailable'
-                
+                return [], "api_unavailable"
+
             response.raise_for_status()
 
             data = response.json()
 
             if "results" not in data:
                 logger.warning(f"[TAVILY] No results field in response: {list(data.keys())}")
-                return [], 'no_results'
+                return [], "no_results"
 
             results = []
             for result in data.get("results", []):
@@ -121,15 +120,15 @@ class TavilySearchClient:
             logger.info(
                 f"[TAVILY] Found {len(results)} results (score: {data.get('response_time', 'N/A')}s)"
             )
-            status = 'success' if results else 'no_results'
+            status = "success" if results else "no_results"
             return results, status
 
         except requests.exceptions.RequestException as e:
             logger.error(f"[TAVILY] Search error: {type(e).__name__}: {e}")
-            return [], 'api_unavailable'
+            return [], "api_unavailable"
         except (KeyError, json.JSONDecodeError) as e:
             logger.error(f"[TAVILY] Response parsing error: {e}")
-            return [], 'api_unavailable'
+            return [], "api_unavailable"
 
 
 class WebSearchClient:
@@ -138,7 +137,7 @@ class WebSearchClient:
     Uses Tavily API for comprehensive coverage of technical products and databases.
     """
 
-    def __init__(self, tavily_api_key: Optional[str] = None, timeout: Optional[int] = None):
+    def __init__(self, tavily_api_key: str | None = None, timeout: int | None = None):
         """Initialize the web search client.
 
         Args:
@@ -168,7 +167,7 @@ class WebSearchClient:
         query: str,
         max_results: int = 5,
         safe_search: bool = False,
-    ) -> Tuple[List[Dict[str, str]], str]:
+    ) -> tuple[list[dict[str, str]], str]:
         """Search using Tavily API.
 
         Args:
@@ -181,7 +180,7 @@ class WebSearchClient:
         """
         if not self.tavily.api_key:
             logger.warning("[WEB_SEARCH] Tavily API key not available. Web search will not work.")
-            return [], 'api_unavailable'
+            return [], "api_unavailable"
 
         results, status = self.tavily.search(query, max_results=max_results)
         logger.info(f"[WEB_SEARCH] Got {len(results)} results from Tavily (status: {status})")
@@ -192,7 +191,7 @@ class WebSearchClient:
         product1: str,
         product2: str,
         max_results: int = 2,
-    ) -> Dict[str, List[Dict[str, str]]]:
+    ) -> dict[str, list[dict[str, str]]]:
         """Search for comparison between two products using feature-focused queries.
 
         Performance Optimizations:
@@ -211,11 +210,13 @@ class WebSearchClient:
         logger.info(f"[COMPARISON_SEARCH] Searching for comparison: {product1} vs {product2}")
 
         # Try direct comparison query first
-        combined_results: List[Dict[str, str]] = []
+        combined_results: list[dict[str, str]] = []
         if self.tavily.api_key:
             comparison_query = f"{product1} vs {product2} comparison features advantages"
-            search_results, search_status = self.tavily.search(comparison_query, max_results=max_results)
-            if search_status == 'success' and search_results:
+            search_results, search_status = self.tavily.search(
+                comparison_query, max_results=max_results
+            )
+            if search_status == "success" and search_results:
                 combined_results = search_results
                 logger.info(
                     f"[COMPARISON_SEARCH] Got {len(combined_results)} results from direct comparison query"
@@ -260,7 +261,7 @@ class WebSearchClient:
             },
         }
 
-    def extract_text_summary(self, results: List[Dict[str, str]]) -> str:
+    def extract_text_summary(self, results: list[dict[str, str]]) -> str:
         """Extract and format search results into readable text.
 
         Args:

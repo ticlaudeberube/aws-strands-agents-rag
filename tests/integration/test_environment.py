@@ -66,8 +66,28 @@ try:
     print(f"Search results: {len(results)} found")
     if results:
         for i, result in enumerate(results, 1):
-            print(f"  {i}. {result.get('title', 'No title')[:50]}")
-            print(f"     URL: {result.get('url', 'No URL')}")
+            # Handle result safely for type checking
+            from typing import Any, Dict
+
+            result_dict: Dict[str, Any] = {}
+
+            # Try to extract title and URL safely
+            try:
+                if isinstance(result, dict):
+                    result_dict = result
+                elif hasattr(result, "get"):
+                    # Object has get method, treat as dict-like
+                    title = result.get("title", "No title")  # type: ignore
+                    url = result.get("url", "No URL")  # type: ignore
+                    result_dict = {"title": title, "url": url}
+                else:
+                    # Fallback for unknown types
+                    result_dict = {"title": "No title", "url": "No URL"}
+            except (AttributeError, TypeError):
+                result_dict = {"title": "No title", "url": "No URL"}
+
+            print(f"  {i}. {result_dict.get('title', 'No title')[:50]}")
+            print(f"     URL: {result_dict.get('url', 'No URL')}")
     else:
         print("✗ No results returned - API key may not be valid")
 except Exception as e:

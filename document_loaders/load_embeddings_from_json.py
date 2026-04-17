@@ -23,7 +23,7 @@ vector_db = MilvusVectorDB(
 def sync_embeddings():
     """Sync embeddings from JSON file into Milvus collection"""
     try:
-        with open("./data/embeddings.json", "r", encoding="utf-8") as f:
+        with open("./data/embeddings.json", encoding="utf-8") as f:
             data = json.load(f)
     except FileNotFoundError:
         print("❌ Error: ./data/embeddings.json not found")

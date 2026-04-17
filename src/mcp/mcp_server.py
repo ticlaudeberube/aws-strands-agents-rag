@@ -7,7 +7,7 @@ and enables agent communication with proper MCP compliance.
 import logging
 import asyncio
 import json
-from typing import Any, Dict
+from typing import Any
 
 from src.config import Settings
 from src.agents.strands_graph_agent import StrandsGraphRAGAgent
@@ -94,7 +94,7 @@ class RAGAgentMCPServer:
 
         return resources
 
-    def get_skills(self) -> Dict[str, int]:
+    def get_skills(self) -> dict[str, int]:
         """Get list of available skills and their tool counts.
 
         Returns:
@@ -147,7 +147,7 @@ class RAGAgentMCPServer:
 
         return doc
 
-    async def call_tool(self, tool_name: str, arguments: Dict[str, Any]) -> str:
+    async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> str:
         """Execute a tool call.
 
         Args:
@@ -178,7 +178,7 @@ class RAGAgentMCPServer:
             logger.error(f"Tool execution failed: {tool_name}: {str(e)}", exc_info=True)
             return f"Error executing tool '{tool_name}': {str(e)}"
 
-    def get_server_info(self) -> Dict[str, Any]:
+    def get_server_info(self) -> dict[str, Any]:
         """Get information about the server.
 
         Returns:
@@ -220,7 +220,7 @@ class MCPServerInterface:
         """
         self.server = server
 
-    def handle_request(self, request: Dict[str, Any]) -> Dict[str, Any]:
+    def handle_request(self, request: dict[str, Any]) -> dict[str, Any]:
         """Handle an MCP protocol request.
 
         Args:

@@ -158,10 +158,12 @@ class DocumentationSkill:
     def _create_docs_improvement_tool():
         """Create a specialized tool for documentation improvement suggestions."""
 
-        from typing import Any, List, Optional
+        from typing import Any
 
         def improve_documentation(
-            doc_path: str, focus_areas: Optional[List[Any]] = None, improvement_type: str = "completeness"
+            doc_path: str,
+            focus_areas: list[Any] | None = None,
+            improvement_type: str = "completeness",
         ):
             """Analyze documentation and provide improvement suggestions.
 

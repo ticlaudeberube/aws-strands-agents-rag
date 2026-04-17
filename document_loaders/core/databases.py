@@ -1,6 +1,5 @@
 """Database operations for Milvus."""
 
-from typing import List
 from pymilvus import MilvusException, utility, Collection  # type: ignore[import-untyped]
 from .client import get_client
 from .exceptions import DatabaseError
@@ -54,7 +53,7 @@ def drop_database(db_name: str | None) -> None:
         raise DatabaseError(f"Failed to drop database '{db_name}': {e}")
 
 
-def list_databases() -> List[str]:
+def list_databases() -> list[str]:
     """List all databases."""
     try:
         client = get_client()

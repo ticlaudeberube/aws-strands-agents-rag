@@ -30,7 +30,7 @@ Quick navigation for committed documentation in this project.
 - **[IMPLEMENTATION_ARCHITECTURE.md](IMPLEMENTATION_ARCHITECTURE.md)** - Complete RAG system implementation documentation with infrastructure components
 - **[INFRASTRUCTURE_IMPLEMENTATION_STATUS.md](INFRASTRUCTURE_IMPLEMENTATION_STATUS.md)** - Actual implementation status vs documentation claims
 - **[DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md)** - Quick API reference and usage patterns for developers
-- **[ARCHITECTURE.md](ARCHITECTURE.md)** - Three-tier system architecture (Cache → KB → Web Search) + complete component details
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** - Three-tier system architecture (Cache → KB → Web Search), dual-mode (Strands/AgentCore) architecture, and component details
 - **[QUERY_ROUTING.md](QUERY_ROUTING.md)** - Complete query routing paths, validation layers, and decision logic
 - **[AWS_ARCHITECTURE.md](AWS_ARCHITECTURE.md)** - AWS deployment architectures (ECS/Fargate, Lambda + AgentCore)
 - **[DEVELOPMENT.md](DEVELOPMENT.md)** - Development guidelines and patterns
@@ -41,7 +41,7 @@ Quick navigation for committed documentation in this project.
 - **[AGENTCORE_CACHING_STRATEGY.md](AGENTCORE_CACHING_STRATEGY.md)** - Caching strategy for serverless AgentCore deployment
 
 ### Getting Started & Quick Reference
-- **[GETTING_STARTED.md](GETTING_STARTED.md)** - Installation and setup guide
+- **[GETTING_STARTED.md](GETTING_STARTED.md)** - Installation, setup, and dual-mode deployment guide (Strands/local and AgentCore/cloud)
 - **[STRANDS_QUICK_REFERENCE.md](STRANDS_QUICK_REFERENCE.md)** - Quick reference for common tasks
 
 ### API & Integration

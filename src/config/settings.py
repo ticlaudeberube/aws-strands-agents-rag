@@ -8,13 +8,45 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """Application settings loaded from environment variables and .env file."""
+    # Default collection name for knowledge base RAG search (Option A: Semantic Cache Only)
+    # Data: 6,878 document chunks from embeddings.json
+    ollama_collection_name: str = Field(
+        default="milvus_rag_collection",
+        validation_alias="OLLAMA_COLLECTION_NAME",
+        description="Collection name for knowledge base RAG search (contains embeddings.json)."
+    )
+    # Maximum number of tokens for LLM responses
+    max_tokens: int = Field(
+        default=2000,
+        validation_alias="MAX_TOKENS",
+        description="Maximum number of tokens for LLM responses."
+    )
+    # Response cache similarity threshold (for cache hits)
+    response_cache_threshold: float = Field(
+        default=0.92,
+        validation_alias="RESPONSE_CACHE_THRESHOLD",
+        description="Minimum cosine similarity for cache hit (0-1)."
+    )
 
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        case_sensitive=False,
-        extra="ignore",  # Ignore extra env variables
+    # Response cache stats limit (number of entries to return in stats)
+    response_cache_stats_limit: int = Field(
+        default=100,
+        validation_alias="RESPONSE_CACHE_STATS_LIMIT",
+        description="Number of cache entries to return in stats."
+    )
+
+    # Collection name for response cache
+    response_cache_collection_name: str = Field(
+        default="response_cache",
+        validation_alias="RESPONSE_CACHE_COLLECTION_NAME",
+        description="Collection name for cached Q&A pairs."
+    )
+
+    # Embedding dimension for response cache (must match embedding model)
+    response_cache_embedding_dim: int = Field(
+        default=768,
+        validation_alias="RESPONSE_CACHE_EMBEDDING_DIM",
+        description="Embedding dimension for response cache (must match embedding model)."
     )
 
     # Ollama Configuration
@@ -33,64 +65,69 @@ class Settings(BaseSettings):
     milvus_password: str = "Milvus"
     milvus_timeout: int = 30  # Request timeout in seconds
     milvus_pool_size: int = 10  # Connection pool size
-    milvus_index_type: str = os.getenv(
-        "MILVUS_INDEX_TYPE", "HNSW"
-    )  # Index type (HNSW, IVF_FLAT, FLAT)
-    milvus_metric_type: str = os.getenv(
-        "MILVUS_METRIC_TYPE", "COSINE"
-    )  # Similarity metric (COSINE, L2, IP)
-    # HNSW Index Parameters
-    milvus_hnsw_m: int = int(
-        os.getenv("MILVUS_HNSW_M", "30")
-    )  # Maximum connections for each element in HNSW
-    milvus_hnsw_ef_construction: int = int(
-        os.getenv("MILVUS_HNSW_EF_CONSTRUCTION", "200")
-    )  # Dynamic list size for HNSW construction
-    milvus_ivf_nlist: int = int(
-        os.getenv("MILVUS_IVF_NLIST", "128")
-    )  # Number of clusters for IVF_FLAT index
-    milvus_search_ef: int = int(
-        os.getenv("MILVUS_SEARCH_EF", "64")
-    )  # HNSW search parameter (speed/accuracy tradeoff)
+    milvus_index_type: str = os.getenv("MILVUS_INDEX_TYPE", "HNSW")  # Index type (HNSW, IVF_FLAT, FLAT)
+    milvus_metric_type: str = os.getenv("MILVUS_METRIC_TYPE", "COSINE")  # Similarity metric (COSINE, L2, IP)
+    milvus_hnsw_m: int = int(os.getenv("MILVUS_HNSW_M", "30"))  # Maximum connections for each element in HNSW
+    milvus_hnsw_ef_construction: int = int(os.getenv("MILVUS_HNSW_EF_CONSTRUCTION", "200"))  # Dynamic list size for HNSW construction
+    milvus_ivf_nlist: int = int(os.getenv("MILVUS_IVF_NLIST", "128"))  # IVF_FLAT nlist parameter
 
-    # Collection Configuration
-    ollama_collection_name: str = "milvus_rag_collection"
-    response_cache_collection_name: str = Field(
-        default="response_cache",
-        validation_alias="RESPONSE_CACHE_COLLECTION_NAME",
+    # Deployment Mode
+    use_agentcore: bool = Field(
+        default=False,
+        validation_alias="USE_AGENTCORE",
+        description="Set to True to use AgentCore (serverless/cloud) mode; False for local Strands agent."
     )
 
-    # Embedding and chunk processing
-    max_chunk_length: int = 250  # Reduced from 400 for faster context processing (30-40% speedup)
-    embedding_dim: int = Field(
-        default=768,
-        validation_alias="EMBEDDING_DIM",
+    # AgentCore Distributed Cache/Session Analytics (for Lambda/Bedrock)
+    redis_cache_enabled: bool = Field(
+        default=False,
+        validation_alias="REDIS_CACHE_ENABLED",
+        description="Enable Redis distributed cache for AgentCore."
     )
-    response_cache_embedding_dim: int = Field(
-        default=768,
-        validation_alias="RESPONSE_CACHE_EMBEDDING_DIM",
+    redis_host: Optional[str] = Field(
+        default=None,
+        validation_alias="REDIS_HOST",
+        description="Redis host for distributed cache."
     )
-
-    # Performance Settings
-    ollama_num_threads: int = 6
-    tokenizers_parallelism: bool = False
-    pytorch_mps_high_watermark_ratio: float = 0.0
-
-    # LLM Generation Optimization
-    max_tokens: int = 256  # Limit output length for faster generation (256 tokens ≈ 1-2s vs 3-4s)
-    ollama_temperature: float = 0.7  # Temperature for response generation
-    ollama_max_tokens: int = 256  # Max tokens for response generation
-
-    # Caching Configuration
-    agent_cache_size: int = 500  # LRU cache size for embeddings, searches, and answers
-    embedding_batch_size: int = 32  # Batch size for bulk embedding operations
-    response_cache_threshold: float = Field(
-        default=0.99,
-        validation_alias="RESPONSE_CACHE_THRESHOLD",
+    redis_port: Optional[int] = Field(
+        default=6379,
+        validation_alias="REDIS_PORT",
+        description="Redis port for distributed cache."
     )
-    response_cache_stats_limit: int = Field(
-        default=10000,
-        validation_alias="RESPONSE_CACHE_STATS_LIMIT",
+    redis_db: Optional[int] = Field(
+        default=0,
+        validation_alias="REDIS_DB",
+        description="Redis DB index for distributed cache."
+    )
+    embedding_cache_ttl_hours: int = Field(
+        default=1,
+        validation_alias="EMBEDDING_CACHE_TTL_HOURS",
+        description="TTL for embedding cache in hours."
+    )
+    search_cache_ttl_hours: int = Field(
+        default=24,
+        validation_alias="SEARCH_CACHE_TTL_HOURS",
+        description="TTL for search cache in hours."
+    )
+    use_dynamodb_cache: bool = Field(
+        default=False,
+        validation_alias="USE_DYNAMODB_CACHE",
+        description="Enable DynamoDB for distributed cache (alternative to Redis)."
+    )
+    dynamodb_cache_table: Optional[str] = Field(
+        default=None,
+        validation_alias="DYNAMODB_CACHE_TABLE",
+        description="DynamoDB table name for distributed cache."
+    )
+    agentcore_session_table: Optional[str] = Field(
+        default=None,
+        validation_alias="AGENTCORE_SESSION_TABLE",
+        description="DynamoDB table for AgentCore session analytics."
+    )
+    enable_question_analytics: bool = Field(
+        default=False,
+        validation_alias="ENABLE_QUESTION_ANALYTICS",
+        description="Enable question analytics for AgentCore sessions."
     )
 
     # Retrieval Tuning (Phase 3B)

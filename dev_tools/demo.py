@@ -12,9 +12,7 @@ Usage:
 
 import asyncio
 import logging
-from pathlib import Path
 
-from dev_tools.mcp_server import CoreAgentMCPServer, IntegratedMCPServer
 from dev_tools.strands_core_agent import StrandsCoreAgent
 from src.config import Settings
 
@@ -104,78 +102,6 @@ async def demo_project_analysis():
     except Exception as e:
         logger.error(f"Project analysis failed: {e}")
 
-
-async def demo_mcp_server():
-    """Demonstrate MCP server functionality."""
-    print("\n🌐 MCP Server Demo")
-    print("=" * 50)
-    
-    settings = Settings() 
-    mcp_server = CoreAgentMCPServer(settings)
-    
-    # Show available tools
-    tools = mcp_server.get_tools()
-    print(f"Available Tools: {len(tools)}")
-    for tool in tools[:5]:  # Show first 5 tools
-        print(f"  - {tool['name']}: {tool['description'][:60]}...")
-    
-    # Show available resources
-    resources = mcp_server.get_resources()
-    print(f"\nAvailable Resources: {len(resources)}")
-    for resource in resources:
-        print(f"  - {resource['name']}: {resource['description']}")
-    
-    # Demonstrate tool invocation
-    try:
-        result = await mcp_server.invoke_tool(
-            "analyze_files",
-            {
-                "path": "src/agents/",
-                "file_pattern": "*.py",
-                "recursive": False
-            }
-        )
-        
-        print(f"\n🛠️  Tool Invocation Result:")
-        print(f"Status: {result.get('status')}")
-        if result.get('status') == 'success':
-            tool_result = result.get('result', {})
-            print(f"Files Found: {tool_result.get('files_found', 0)}")
-            print(f"Files Analyzed: {tool_result.get('files_analyzed', 0)}")
-            
-    except Exception as e:
-        logger.error(f"MCP tool invocation failed: {e}")
-
-
-async def demo_integrated_server():
-    """Demonstrate integrated server with both RAG and Core agents."""
-    print("\n🔗 Integrated Server Demo")
-    print("=" * 50)
-    
-    settings = Settings()
-    integrated = IntegratedMCPServer(settings)
-    
-    # Show combined capabilities
-    all_tools = integrated.get_all_tools()
-    all_resources = integrated.get_all_resources()
-    
-    print(f"Total Tools Available: {len(all_tools)}")
-    print(f"Total Resources Available: {len(all_resources)}")
-    
-    # Show server status
-    status = integrated.get_server_status()
-    print(f"\n📊 Server Status:")
-    print(f"RAG Server Tools: {status['rag_server']['tools']}")
-    print(f"Core Server Tools: {status['core_server']['tools']}")
-    print(f"Total Tools: {status['total_tools']}")
-    
-    # Show skills breakdown
-    core_skills = status['core_server']['skills']
-    print(f"\n🎯 Core Agent Skills:")
-    for skill_name, skill_info in core_skills.items():
-        print(f"  - {skill_name}: {skill_info['tool_count']} tools")
-
-
 async def demo_direct_tool_access():
     """Demonstrate direct tool access for specific tasks."""
     print("\n🎯 Direct Tool Access Demo")
@@ -262,8 +188,6 @@ async def main():
         await demo_documentation_analysis()
         await demo_code_analysis()
         await demo_project_analysis()
-        await demo_mcp_server()
-        await demo_integrated_server()
         await demo_direct_tool_access()
         
         print("\n✨ All demonstrations completed successfully!")

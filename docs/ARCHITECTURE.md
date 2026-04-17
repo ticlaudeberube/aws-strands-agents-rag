@@ -1,3 +1,113 @@
+## Caching Implementation: Local (Strands) vs. Cloud (AgentCore)
+
+### Local/Strands Mode
+
+- **Short-Term Cache:**
+    - In-memory Python dictionaries (process-local, not shared across restarts)
+    - Used for fast response cache (recent answers, embeddings)
+    - TTL (time-to-live) is typically minutes to hours, reset on process restart
+
+- **Long-Term Cache:**
+    - Optionally, Milvus collections can be used for persistent embedding storage
+    - Pre-warmed Q&A pairs are loaded at startup for instant cache hits
+
+- **Reasoning:**
+    - Prioritizes speed and simplicity for local/dev use
+    - No external dependencies or network latency
+    - Cache is lost on restart, so not suitable for production persistence
+
+### Cloud/AgentCore Mode
+
+- **Short-Term Cache:**
+    - Distributed cache using ElastiCache Redis (recommended) or DynamoDB
+    - Shared across all Lambda invocations/containers
+    - Used for embeddings, search results, and recent answers
+    - TTL: 1 hour for embeddings, 24 hours for search results (configurable)
+
+- **Long-Term Cache:**
+    - Vector DB (Zilliz Cloud, Milvus on AWS, or OpenSearch) stores all document embeddings and indexed data
+    - Persistent across deployments and restarts
+
+- **Reasoning:**
+    - Ensures cache is available to all stateless serverless functions
+    - Redis provides low-latency, high-throughput for hot data
+    - DynamoDB is a cost-effective alternative for lower traffic
+    - Vector DB is the source of truth for all indexed knowledge
+
+**Summary Table:**
+
+| Mode         | Short-Term Cache         | Long-Term Cache         | Reasoning                                      |
+|--------------|-------------------------|-------------------------|------------------------------------------------|
+| Local        | In-memory dicts         | Milvus (optional)       | Fast dev, no persistence, simple                |
+| Cloud        | Redis/DynamoDB          | Cloud Vector DB         | Shared, persistent, scalable, production-grade  |
+
+#
+# Dual-Mode Architecture: Strands (Local) and AgentCore (Cloud)
+
+## Supported Deployment Modes
+
+This system supports two primary deployment modes:
+
+- **Strands (Local/Container):**
+    - Default for local development and containerized deployments
+    - Uses Ollama for LLM inference and Milvus for vector DB
+    - Fast, cost-optimized, and easy to run locally or in Docker
+
+- **AgentCore (Cloud/Serverless):**
+    - For AWS Lambda/Bedrock serverless deployments
+    - Distributed cache/session analytics (Redis/DynamoDB)
+    - Integrates with Bedrock agents and AWS services
+
+    **Cloud Vector Database Requirement:**
+    - In AgentCore/cloud mode, all retrieval and indexing operations require a managed, cloud-accessible vector database instance.
+    - Supported options:
+        - **Zilliz Cloud** (managed Milvus)
+        - **Milvus** deployed on AWS (ECS, EKS, or EC2 in VPC)
+        - **Amazon OpenSearch** with vector search enabled (alternative to Milvus)
+    - The Lambda/AgentCore handler must be configured with the vector DB endpoint, credentials, and network access (VPC/subnet/security group) to reach the cloud vector DB.
+    - All document indexing and retrieval in serverless mode use this cloud vector DB (not a local instance).
+    - **Configuration:**
+        - Set the vector DB endpoint and credentials in your `.env` and `settings.py` (see `docs/GETTING_STARTED.md#configuration`)
+        - Example:
+            ```env
+            VECTOR_DB_HOST=milvus-cloud-endpoint.zillizcloud.com
+            VECTOR_DB_PORT=19530
+            VECTOR_DB_USER=your_user
+            VECTOR_DB_PASSWORD=your_password
+            VECTOR_DB_USE_SSL=true
+            ```
+        - Ensure your Lambda function or container has network access to the vector DB (VPC/subnet/security group setup)
+    - See [GETTING_STARTED.md](GETTING_STARTED.md#cloud-vector-db-setup) for full setup instructions.
+
+## Switching Modes
+
+Set the deployment mode in your `.env` file:
+
+```env
+# Local/Strands agent (default)
+USE_AGENTCORE=false
+
+# AgentCore (cloud/serverless)
+USE_AGENTCORE=true
+```
+
+See `docs/GETTING_STARTED.md` for full configuration details.
+
+## Entrypoints
+
+- **Local/Strands:**
+    - `python api_server.py` (FastAPI + Strands agent)
+    - `python chatbots/interactive_chat.py` (interactive chat)
+
+- **AgentCore (AWS Lambda):**
+    - `src/agents/agentcore_handler.py` (Lambda handler)
+    - See `docs/AGENTCORE_CACHING_STRATEGY.md` for serverless deployment
+
+## Shared Logic
+
+All core logic (retrieval, answer generation, cache, KB management) is modular and shared between both modes. See `src/tools/` and `src/agents/skills/` for details.
+
+---
 # Project Architecture: Strands Agent RAG System
 
 ## Executive Summary
@@ -780,6 +890,45 @@ curl -X POST http://localhost:8000/api/mcp/tools/call \
     }
   }'
 ```
+
+
+---
+
+## Production Architecture Checklist
+
+For full production readiness, ensure the following architectural pieces are addressed (see referenced docs for details):
+
+- **Authentication & Authorization**
+    - Use API Gateway + Cognito (cloud/serverless) to secure endpoints and manage user sessions
+    - See [AWS_ARCHITECTURE.md](AWS_ARCHITECTURE.md#authentication--authorization)
+
+- **Observability**
+    - Integrate CloudWatch for logs, metrics, and tracing (AgentCore mode)
+    - Use local logging configuration for Strands mode
+    - See [AWS_ARCHITECTURE.md](AWS_ARCHITECTURE.md#observability--monitoring)
+
+- **Error Handling & Resilience**
+    - Implement retry/backoff for vector DB and cache failures
+    - Ensure graceful degradation if a dependency is unavailable
+    - See [DEVELOPMENT.md](DEVELOPMENT.md#error-handling--resilience)
+
+- **Infrastructure as Code (IaC)**
+    - Use CloudFormation, CDK, or Terraform to provision all cloud resources (VPC, Lambda, Redis, Milvus, etc.)
+    - See [AWS_ARCHITECTURE.md](AWS_ARCHITECTURE.md#infrastructure-as-code)
+
+- **Data Privacy & Compliance**
+    - Address data retention, encryption at rest/in transit, and compliance for user data and embeddings
+    - See [AWS_ARCHITECTURE.md](AWS_ARCHITECTURE.md#data-privacy--compliance)
+
+- **Scalability & Cost Controls**
+    - Configure Lambda concurrency, cache sizing, and vector DB scaling
+    - See [AWS_ARCHITECTURE.md](AWS_ARCHITECTURE.md#scalability--cost-controls)
+
+- **CI/CD Pipeline**
+    - Set up automated deployment/testing pipeline (GitHub Actions, CodePipeline, etc.)
+    - See [DEVELOPMENT.md](DEVELOPMENT.md#cicd-pipeline)
+
+---
 
 ### Example 4: Tool Registry (For Advanced Custom Workflows)
 

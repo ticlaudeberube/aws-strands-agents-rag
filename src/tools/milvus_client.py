@@ -1,407 +1,218 @@
 """Milvus vector database utilities."""
 
-from pymilvus import MilvusClient  # type: ignore[import-untyped]
-from typing import List, Optional, Dict, Any
-import logging
-import asyncio
-from concurrent.futures import ThreadPoolExecutor
-from src.config.settings import get_settings
 
-logger = logging.getLogger(__name__)
+import asyncio
+import json
+import logging
+from concurrent.futures import ThreadPoolExecutor
+from typing import Any, Dict, List, Optional
+
+from pymilvus import MilvusClient  # type: ignore[import-untyped]
 
 
 class MilvusVectorDB:
-    """Wrapper for Milvus vector database operations with connection pooling."""
+	"""Wrapper for Milvus vector database operations with connection pooling."""
 
-    def __init__(
-        self,
-        host: Optional[str] = None,
-        port: Optional[int] = None,
-        db_name: Optional[str] = None,
-        user: Optional[str] = None,
-        password: Optional[str] = None,
-        timeout: Optional[int] = None,
-        pool_size: Optional[int] = None,
-    ):
-        """Initialize Milvus client with connection pooling.
+	def list_all_cached_questions(self, collection_name: str, limit: int = 100) -> list:
+		"""List all cached questions with full response data for GUI/API."""
+		try:
+			self.client.load_collection(collection_name=collection_name, db_name=self.db_name)
+		except Exception:
+			pass  # Already loaded or not needed
+		results = self.client.query(
+			collection_name=collection_name,
+			db_name=self.db_name,
+			output_fields=["id", "text", "metadata"],
+			limit=limit,
+		)
+		out = []
+		for entity in results or []:
+			entity_id = entity.get("id")
+			answer = entity.get("text", "")
+			metadata = entity.get("metadata", {})
+			if isinstance(metadata, str):
+				try:
+					metadata = json.loads(metadata)
+				except Exception:
+					metadata = {}
+			question = metadata.get("question", "").strip()
+			sources = metadata.get("sources", [])
+			timing = metadata.get("timing", {})
+			if question:
+				out.append({
+					"id": str(entity_id),
+					"question": question,
+					"answer": answer,
+					"sources": sources,
+					"timing": timing,
+				})
+		return out
 
-        Args:
-            host: Milvus server host (falls back to settings.milvus_host)
-            port: Milvus server port (falls back to settings.milvus_port)
-            db_name: Database name to use (falls back to settings.milvus_db_name)
-            user: Milvus username (falls back to settings.milvus_user)
-            password: Milvus password (falls back to settings.milvus_password)
-            timeout: Request timeout in seconds (falls back to settings.milvus_timeout)
-            pool_size: Connection pool size (falls back to settings.milvus_pool_size)
-        """
-        # Load defaults from settings
-        settings = get_settings()
-        host = host or settings.milvus_host
-        port = port or settings.milvus_port
-        db_name = db_name or settings.milvus_db_name
-        user = user or settings.milvus_user
-        password = password or settings.milvus_password
-        timeout = timeout or settings.milvus_timeout
-        pool_size = pool_size or settings.milvus_pool_size
+	def __init__(
+		self,
+		host: Optional[str] = None,
+		port: Optional[int] = None,
+		db_name: Optional[str] = None,
+		user: Optional[str] = None,
+		password: Optional[str] = None,
+		timeout: Optional[int] = None,
+		pool_size: Optional[int] = None,
+	):
+		from src.config.settings import get_settings
+		settings = get_settings()
+		host = host or settings.milvus_host
+		port = port or settings.milvus_port
+		db_name = db_name or settings.milvus_db_name
+		user = user or settings.milvus_user
+		password = password or settings.milvus_password
+		timeout = timeout or settings.milvus_timeout
+		pool_size = pool_size or settings.milvus_pool_size
 
-        uri = f"http://{host}:{port}"
-        self.host = host
-        self.port = port
-        self.timeout = timeout
-        self.pool_size = pool_size
+		uri = f"http://{host}:{port}"
+		self.host = host
+		self.port = port
+		self.timeout = timeout
+		self.pool_size = pool_size
 
-        try:
-            # Try with authentication first
-            self.client = MilvusClient(
-                uri=uri,
-                user=user,
-                password=password,
-                pool_size=pool_size,
-            )
-            logger.info(f"Connected to Milvus at {uri}")
-        except ConnectionError as e:
-            logger.error(f"❌ Cannot connect to Milvus at {uri}")
-            logger.error("   Is Milvus running? Check: cd docker && docker-compose ps")
-            raise RuntimeError(
-                f"Milvus connection failed at {host}:{port}. Make sure Milvus is running."
-            ) from e
-        except Exception as auth_error:
-            logger.warning(f"Auth failed, trying without credentials: {auth_error}")
-            # Fall back to no auth
-            try:
-                self.client = MilvusClient(uri=uri, pool_size=pool_size)
-                logger.info(f"Connected to Milvus at {uri} (without auth)")
-            except Exception as e:
-                logger.error(f"❌ Cannot connect to Milvus at {uri}")
-                logger.error("   Is Milvus running? Check: cd docker && docker-compose ps")
-                raise RuntimeError(
-                    f"Milvus connection failed at {host}:{port}. Make sure Milvus is running."
-                ) from e
+		try:
+			self.client = MilvusClient(
+				uri=uri,
+				user=user,
+				password=password,
+				pool_size=pool_size,
+				db_name=db_name,
+			)
+			logging.info(f"Connected to Milvus at {uri} with db_name={db_name}")
+		except Exception as e:
+			logging.error(f"Cannot connect to Milvus at {uri}: {e}")
+			raise RuntimeError(f"Milvus connection failed at {host}:{port}. Make sure Milvus is running.") from e
 
-        self.db_name = db_name
-        self._ensure_database()
+		self.db_name = db_name
+		# Optionally: ensure database exists, etc.
 
-    def _ensure_database(self):
-        """Ensure the database exists."""
-        try:
-            databases = self.client.list_databases()
-            if self.db_name not in databases:
-                self.client.create_database(db_name=self.db_name)
-                logger.info(f"Created database: {self.db_name}")
-            # Switch to the correct database
-            self.client.using_database(self.db_name)
-            logger.info(f"Using database: {self.db_name}")
-        except Exception as e:
-            logger.warning(f"Could not verify/switch database: {e}")
+	def create_collection(
+		self,
+		collection_name: str,
+		embedding_dim: Optional[int] = None,
+		index_type: Optional[str] = None,
+		metric_type: Optional[str] = None,
+	) -> bool:
+		"""Create a collection for storing embeddings with optimal indexing."""
+		from src.config.settings import get_settings
 
-    def create_collection(
-        self,
-        collection_name: str,
-        embedding_dim: Optional[int] = None,
-        index_type: Optional[str] = None,
-        metric_type: Optional[str] = None,
-    ) -> bool:
-        """Create a collection for storing embeddings with optimal indexing.
+		settings = get_settings()
+		if embedding_dim is None:
+			embedding_dim = 768  # Default fallback if not provided
+		if index_type is None:
+			index_type = settings.milvus_index_type
+		if metric_type is None:
+			metric_type = settings.milvus_metric_type
 
-        Args:
-            collection_name: Name of the collection to create
-            embedding_dim: Dimension of embeddings. If None, falls back to settings.embedding_dim (default: 768)
-            index_type: Type of index (HNSW, IVF_FLAT, FLAT). Falls back to settings.milvus_index_type (default: HNSW)
-            metric_type: Similarity metric (COSINE, L2, IP). Falls back to settings.milvus_metric_type (default: COSINE)
+		try:
+			if collection_name in self.client.list_collections(db_name=self.db_name):
+				logging.info(f"Collection {collection_name} already exists")
+				return False
 
-        Returns:
-            True if collection was created, False if already exists
-        """
-        # Fallback to settings if parameters not provided
-        settings = get_settings()
-        if embedding_dim is None:
-            embedding_dim = settings.embedding_dim
-        if index_type is None:
-            index_type = settings.milvus_index_type
-        if metric_type is None:
-            metric_type = settings.milvus_metric_type
+			index_params: Dict[str, Any] = {
+				"metric_type": metric_type,
+				"index_type": index_type,
+			}
+			if index_type == "HNSW":
+				index_params["params"] = {
+					"M": settings.milvus_hnsw_m,
+					"efConstruction": settings.milvus_hnsw_ef_construction,
+				}
+			elif index_type == "IVF_FLAT":
+				index_params["params"] = {
+					"nlist": settings.milvus_ivf_nlist,
+				}
 
-        try:
-            if collection_name in self.client.list_collections(db_name=self.db_name):
-                logger.info(f"Collection {collection_name} already exists")
-                return False
+			self.client.create_collection(
+				collection_name=collection_name,
+				dimension=embedding_dim,
+				metric_type=metric_type,
+				primary_field_name="id",
+				vector_field_name="vector",
+				id_type="int",
+				db_name=self.db_name,
+				index_params=index_params,
+			)
+			logging.info(f"Created collection: {collection_name} with {index_type} index")
+			return True
+		except Exception as e:
+			logging.error(f"Failed to create collection: {e}")
+			raise
 
-            # Create collection with explicit index parameters (optimized for performance)
-            index_params: Dict[str, Any] = {
-                "metric_type": metric_type,
-                "index_type": index_type,
-            }
 
-            # Set index-specific parameters from settings
-            if index_type == "HNSW":
-                index_params["params"] = {
-                    "M": settings.milvus_hnsw_m,
-                    "efConstruction": settings.milvus_hnsw_ef_construction,
-                }
-            elif index_type == "IVF_FLAT":
-                index_params["params"] = {
-                    "nlist": settings.milvus_ivf_nlist,
-                }
+	def search(self, collection_name: str, query_embedding: List[float], limit: int = 5) -> List[Dict]:
+		"""Search for similar embeddings in the collection."""
+		try:
+			self.client.load_collection(collection_name=collection_name, db_name=self.db_name)
+		except Exception:
+			pass  # Already loaded or not needed
 
-            self.client.create_collection(
-                collection_name=collection_name,
-                dimension=embedding_dim,
-                metric_type=metric_type,
-                primary_field_name="id",
-                vector_field_name="vector",
-                id_type="int",
-                db_name=self.db_name,
-                index_params=index_params,
-            )
-            logger.info(f"Created collection: {collection_name} with {index_type} index")
-            return True
+		results = self.client.search(
+			collection_name=collection_name,
+			data=[query_embedding],
+			limit=limit,
+			output_fields=["id", "text", "metadata"],
+			db_name=self.db_name,
+		)
+		# results is a list of lists (one per query)
+		if not results or not results[0]:
+			return []
+		out = []
+		for hit in results[0]:
+			meta = hit.get("metadata", {})
+			if isinstance(meta, str):
+				try:
+					meta = json.loads(meta)
+				except Exception:
+					meta = {}
+			out.append({
+				"id": hit.get("id"),
+				"text": hit.get("text", ""),
+				"metadata": meta,
+				"distance": hit.get("score", 0.0),
+			})
+		return out
 
-        except Exception as e:
-            logger.error(f"Failed to create collection: {e}")
-            raise
+	def insert_embeddings(self, collection_name: str, embeddings: List[List[float]], texts: List[str], metadata: List[Dict[str, Any]]) -> None:
+		"""Insert embeddings and associated data into the collection."""
+		import random
+		import time
+		data = []
+		base_id = int(time.time() * 1000) % (2**31 - 1)
+		for idx, (embedding, text, item_metadata) in enumerate(zip(embeddings, texts, metadata)):
+			document_name = item_metadata.get("document_name") or item_metadata.get("filename", "")
+			source = item_metadata.get("source", "unknown")
+			metadata_json = json.dumps(item_metadata)
+			unique_id = base_id + idx + random.randint(1, 999)
+			unique_id = abs(unique_id) % (2**31 - 1)
+			if unique_id == 0:
+				unique_id = 1
+			data.append({
+				"id": unique_id,
+				"vector": embedding,
+				"text": text,
+				"document_name": document_name,
+				"source": source,
+				"metadata": metadata_json,
+			})
+		logging.info(f"Inserting {len(data)} embeddings into '{collection_name}'")
+		result = self.client.insert(collection_name=collection_name, data=data, db_name=self.db_name)
+		try:
+			self.client.flush(collection_name=collection_name, db_name=self.db_name)
+			logging.info(f"Successfully inserted and flushed {len(data)} embeddings into '{collection_name}'")
+		except Exception as e:
+			logging.error(f"Flush failed for '{collection_name}': {e}")
 
-    def insert_embeddings(
-        self,
-        collection_name: str,
-        embeddings: List[List[float]],
-        texts: List[str],
-        metadata: Optional[List[Dict[str, Any]]] = None,
-    ) -> List[int]:
-        """Insert embeddings and their associated text with enhanced metadata support.
+	def list_collections(self) -> List[str]:
+		"""List all collections in the database."""
+		try:
+			return self.client.list_collections(db_name=self.db_name)
+		except Exception as e:
+			logging.error(f"Failed to list collections: {e}")
+			return []
 
-        Args:
-            collection_name: Name of the collection
-            embeddings: List of embedding vectors
-            texts: List of text documents
-            metadata: Optional list of metadata dicts
 
-        Returns:
-            List of inserted IDs
-        """
-        try:
-            if metadata is None:
-                metadata = [{"source": "unknown"} for _ in texts]
-
-            # Prepare data with enhanced metadata extraction
-            import json
-            import time
-            import random
-
-            data = []
-
-            # Generate a base ID for this batch (to avoid duplicates across batches)
-            base_id = int(time.time() * 1000) % (2**31 - 1)  # Use 31-bit safe timestamp
-
-            for idx, (emb, text, meta) in enumerate(zip(embeddings, texts, metadata)):
-                # Extract common metadata fields for scalar filtering
-                document_name = meta.get("document_name") or meta.get("filename", "")
-                source = meta.get("source", "unknown")
-
-                # Store metadata as JSON string for full preservation
-                metadata_json = json.dumps(meta)
-
-                # Generate unique ID: combine base timestamp with random number for uniqueness
-                unique_id = base_id + idx + random.randint(1, 999)
-                # Ensure it's a 31-bit positive integer for safety
-                unique_id = abs(unique_id) % (2**31 - 1)
-                if unique_id == 0:
-                    unique_id = 1
-
-                record = {
-                    "id": unique_id,  # Use safe unique IDs
-                    "vector": emb,  # Use 'vector' for MilvusClient API
-                    "text": text,
-                    "document_name": document_name,
-                    "source": source,
-                    "metadata": metadata_json,  # Full metadata as JSON
-                }
-                data.append(record)
-
-            result = self.client.insert(
-                collection_name=collection_name,
-                data=data,
-                db_name=self.db_name,
-            )
-
-            insert_count = result.get("insert_count", 0)
-            if isinstance(insert_count, list):
-                insert_count = len(insert_count)
-
-            logger.info(f"Inserted {insert_count} embeddings into {collection_name}")
-            logger.debug(f"  Insert result full: {result}")
-            logger.debug(f"  Generated {len(data)} records with IDs: {[r['id'] for r in data]}")
-
-            # Flush the collection to ensure data is written to disk
-            try:
-                self.client.flush(collection_name=collection_name, db_name=self.db_name)
-                logger.debug(f"  Flushed collection {collection_name}")
-            except Exception as flush_error:
-                logger.warning(f"  Could not flush collection: {flush_error}")
-
-            return result.get("insert_count", [])  # type: ignore[no-any-return]
-
-        except Exception as e:
-            logger.error(f"Failed to insert embeddings: {e}")
-            raise
-
-    def search(
-        self,
-        collection_name: str,
-        query_embedding: List[float],
-        limit: int = 5,
-        offset: int = 0,
-        search_params: Optional[Dict[str, Any]] = None,
-        filter_expr: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
-        """Search for similar embeddings with pagination and filtering.
-
-        Args:
-            collection_name: Name of the collection to search
-            query_embedding: Query embedding vector
-            limit: Number of results to return
-            offset: Number of results to skip (pagination)
-            search_params: Optional search parameters (e.g., ef for HNSW)
-            filter_expr: Optional filter expression for metadata filtering
-
-        Returns:
-            List of search results with text and scores
-        """
-        try:
-            # Load settings for default search parameters
-            settings = get_settings()
-            # Default search parameters optimized for HNSW (from settings)
-            if search_params is None:
-                search_params = {"ef": settings.milvus_search_ef}
-
-            results = self.client.search(
-                collection_name=collection_name,
-                data=[query_embedding],
-                db_name=self.db_name,
-                anns_field="vector",
-                limit=limit + offset,  # Get extra results for offset
-                search_params=search_params,
-                output_fields=["text", "metadata", "document_name", "source"],
-                filter=filter_expr,  # Apply filter if provided
-            )
-
-            # Process results with pagination
-            processed_results: List[Dict[str, Any]] = []
-            for result_group in results:
-                for idx, result in enumerate(result_group):
-                    # Skip results before offset
-                    if idx < offset:
-                        continue
-                    # Stop after limit
-                    if len(processed_results) >= limit:
-                        break
-
-                    entity = result.get("entity", {})
-                    processed_results.append(
-                        {
-                            "text": entity.get("text", ""),
-                            "metadata": entity.get("metadata", "{}"),
-                            "document_name": entity.get("document_name", ""),
-                            "source": entity.get("source", ""),
-                            "distance": result.get("distance", 0),
-                        }
-                    )
-
-            return processed_results
-
-        except Exception as e:
-            logger.error(f"Search failed: {e}")
-            raise
-
-    async def search_async(
-        self,
-        collection_name: str,
-        query_embedding: List[float],
-        limit: int = 5,
-        offset: int = 0,
-        search_params: Optional[Dict[str, Any]] = None,
-        filter_expr: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
-        """Async search for similar embeddings with pagination and filtering.
-
-        Args:
-            collection_name: Name of the collection to search
-            query_embedding: Query embedding vector
-            limit: Number of results to return
-            offset: Number of results to skip
-            search_params: Optional search parameters
-            filter_expr: Optional filter expression
-
-        Returns:
-            List of search results
-        """
-        # Run search in thread pool executor to avoid blocking
-        loop = asyncio.get_event_loop()
-        with ThreadPoolExecutor() as executor:
-            return await loop.run_in_executor(
-                executor,
-                self.search,
-                collection_name,
-                query_embedding,
-                limit,
-                offset,
-                search_params,
-                filter_expr,
-            )
-
-    def delete_collection(self, collection_name: str) -> bool:
-        """Delete a collection.
-
-        Args:
-            collection_name: Name of the collection to delete
-
-        Returns:
-            True if successful
-        """
-        try:
-            self.client.drop_collection(
-                collection_name=collection_name,
-                db_name=self.db_name,
-            )
-            logger.info(f"Deleted collection: {collection_name}")
-            return True
-        except Exception as e:
-            logger.error(f"Failed to delete collection: {e}")
-            raise
-
-    def list_collections(self) -> List[str]:
-        """List all collections in the database.
-
-        Returns:
-            List of collection names
-        """
-        try:
-            return self.client.list_collections(db_name=self.db_name)  # type: ignore[no-any-return]
-        except Exception as e:
-            logger.error(f"Failed to list collections: {e}")
-            return []
-
-    def search_by_source(
-        self,
-        collection_name: str,
-        query_embedding: List[float],
-        source: str,
-        limit: int = 5,
-    ) -> List[Dict[str, Any]]:
-        """Search for similar embeddings filtered by source.
-
-        Args:
-            collection_name: Name of the collection to search
-            query_embedding: Query embedding vector
-            source: Source to filter by (e.g., 'milvus_docs')
-            limit: Number of results to return
-
-        Returns:
-            List of search results filtered by source
-        """
-        filter_expr = f"source == '{source}'"
-        return self.search(
-            collection_name=collection_name,
-            query_embedding=query_embedding,
-            limit=limit,
-            filter_expr=filter_expr,
-        )

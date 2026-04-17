@@ -33,6 +33,10 @@ vector_db = MilvusVectorDB(
     host=settings.milvus_host,
     port=settings.milvus_port,
     db_name=settings.milvus_db_name,
+    user=settings.milvus_user,
+    password=settings.milvus_password,
+    timeout=settings.milvus_timeout,
+    pool_size=settings.milvus_pool_size,
 )
 ollama_client = OllamaClient(
     host=settings.ollama_host,
@@ -67,8 +71,8 @@ def load_responses_cache():
         print("❌ No Q&A pairs found in responses.json")
         return
 
-    # Use configured collection name for all Q&A pairs
-    collection_name = settings.ollama_collection_name
+    # Use response_cache collection name for all Q&A pairs (metadata consistency)
+    collection_name = settings.response_cache_collection_name
     print(f"Using collection: {collection_name}")
 
     # Clear and recreate response_cache collection to prevent duplicates

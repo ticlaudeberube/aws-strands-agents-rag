@@ -1,4 +1,5 @@
 {
+  "_comment": "ARCHITECTURE NOTE: This file implements Option A (Semantic Cache Only). The 'collection' field below is INFORMATIONAL ONLY - it describes what each Q&A is about, not where to load the data. ALL responses in this file load into the 'response_cache' collection for fast semantic matching. The embeddings.json file loads separately into 'milvus_rag_collection' for the knowledge base. This prevents data duplication and keeps concerns separated: response_cache = pre-cached answers, milvus_rag_collection = raw document chunks for discovery.",
   "qa_pairs": [
     {
       "question": "What is Milvus?",

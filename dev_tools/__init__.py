@@ -10,14 +10,11 @@ Components:
 - Demo: Example usage and integration patterns
 """
 
-from .mcp_server import CoreAgentMCPServer, IntegratedMCPServer
 from .skills import DocumentationSkill, ProgrammingSkill
 from .strands_core_agent import StrandsCoreAgent
 
 __all__ = [
     "StrandsCoreAgent",
     "DocumentationSkill", 
-    "ProgrammingSkill",
-    "CoreAgentMCPServer",
-    "IntegratedMCPServer",
+    "ProgrammingSkill"
 ]

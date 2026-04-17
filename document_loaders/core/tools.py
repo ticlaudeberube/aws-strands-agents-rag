@@ -167,12 +167,15 @@ class MilvusVectorDB:
                 }
             )
 
+        logger.info(f"[LOADER_INSERT] Inserting {len(data)} documents into {collection_name} (db: {self.db_name})")
         result = self.client.insert(
             collection_name=collection_name, data=data, db_name=self.db_name
         )
+        logger.info(f"[LOADER_INSERT] Insert result: {result}")
 
         try:
-            self.client.flush(collection_name=collection_name, db_name=self.db_name)
+            flush_result = self.client.flush(collection_name=collection_name, db_name=self.db_name)
+            logger.info(f"[LOADER_INSERT] Flush result: {flush_result}")
         except Exception as flush_error:
             logger.warning("Could not flush collection %s: %s", collection_name, flush_error)
 

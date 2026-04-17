@@ -1,3 +1,5 @@
+from typing import Any, Optional
+
 """Milvus-based persistent response cache for RAG agent.
 
 This module implements a semantic response cache that:
@@ -11,8 +13,8 @@ This module implements a semantic response cache that:
 import json
 import logging
 import re
-from typing import Optional, Dict, List, Any
 from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 

@@ -41,11 +41,14 @@ from src.tools.tool_registry import get_registry
 sys.path.insert(0, str(Path(__file__).parent))
 load_dotenv()
 
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+
 
 
 # ============================================================================
@@ -1791,49 +1794,12 @@ async def get_cached_questions_v1():
         response_cache = current_agent.response_cache
         logger.info(f"Cache collection: {response_cache.cache_collection_name}")
 
-        # Query cached responses - get metadata and ID
-        results = response_cache.vector_db.client.query(
-            collection_name=response_cache.cache_collection_name,
-            db_name=response_cache.vector_db.db_name,
-            output_fields=["metadata", "id"],
-            limit=100,
+        # Use the new list_all_cached_questions method
+        questions = response_cache.vector_db.list_all_cached_questions(
+            collection_name=response_cache.cache_collection_name, limit=100
         )
-
-        questions = []
-        seen_questions = {}  # Track unique questions by text
-
-        if results:
-            results_list = list(results) if not isinstance(results, list) else results
-            logger.info(f"Got {len(results_list)} results from cache (before dedup)")
-
-            for idx, entity in enumerate(results_list):
-                try:
-                    # Get ID from entity
-                    entity_id = str(entity.get("id", idx))
-
-                    metadata = entity.get("metadata", {})
-                    if isinstance(metadata, str):
-                        metadata = json.loads(metadata)
-
-                    question = metadata.get("question", "").strip()
-                    if question:
-                        # Deduplicate: keep first occurrence of each unique question
-                        # (Milvus returns results in insertion order, so first = most recent)
-                        if question not in seen_questions:
-                            seen_questions[question] = True
-                            questions.append({"id": entity_id, "question": question})
-                            logger.info(f"Added question {entity_id}: {question[:50]}...")
-                        else:
-                            logger.info(f"Skipped duplicate: {question[:50]}...")
-                except Exception as e:
-                    logger.warning(f"Error processing question {idx}: {e}")
-                    continue
-
-        logger.info(
-            f"Returning {len(questions)} unique cached questions (deduplicated from {len(results_list) if results else 0})"
-        )
+        logger.info(f"Returning {len(questions)} cached questions")
         return {"questions": questions, "count": len(questions)}
-
     except Exception as e:
         logger.error(f"Error retrieving cached questions: {e}", exc_info=True)
         return {"questions": [], "count": 0}

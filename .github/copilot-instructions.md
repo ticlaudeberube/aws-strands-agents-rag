@@ -27,6 +27,7 @@ This is an AWS Strands Agents RAG system that uses Milvus for vector database op
 - `tests/` - Unit and integration tests (Python/pytest)
 
 ## Key Guidelines
+0. **Architecture Isolation**: Read [src-isolation.instructions.md](.github/instructions/src-isolation.instructions.md) - Critical rule: `src/` must NEVER import from `document-loaders/`, and vice versa. Keep them independent.
 1. **Milvus Integration**: When suggesting Milvus-related code, refer to `document-loaders/milvus_docs/en/` for proper API usage
 2. **Vector Database**: Refer to `src/tools/` for existing MilvusVectorDB implementations
 3. **RAG Pattern**: Consider the full RAG pipeline when suggesting code changes

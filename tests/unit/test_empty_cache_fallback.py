@@ -18,12 +18,12 @@ def mock_settings():
     """Create mock settings for testing."""
     return Settings(
         ollama_host="http://localhost:11434",
-        ollama_model="llama3.2", 
+        ollama_model="llama3.2",
         ollama_embed_model="nomic-embed-text",
         milvus_host="localhost",
         milvus_port=19530,
         milvus_db_name="test_db",
-        enable_web_search_supplement=True,
+        # enable_web_search_supplement removed for compatibility
     )
 
 

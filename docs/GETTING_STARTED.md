@@ -1,3 +1,65 @@
+#
+# Dual-Mode Deployment: Strands (Local) and AgentCore (Cloud)
+
+## Deployment Modes
+
+This project supports two deployment modes:
+
+- **Strands (Local/Container):**
+  - Default mode for local development and containerized deployments
+  - Uses Ollama for LLM inference and Milvus for vector DB
+  - Fast, cost-optimized, and easy to run on your machine or in Docker
+
+- **AgentCore (Cloud/Serverless):**
+  - For AWS Lambda/Bedrock serverless deployments
+  - Uses distributed cache/session analytics (Redis/DynamoDB)
+  - Integrates with Bedrock agents and AWS services
+
+## How to Switch Modes
+
+Set the deployment mode in your `.env` file:
+
+```env
+# For local/Strands agent (default)
+USE_AGENTCORE=false
+
+# For AgentCore (cloud/serverless)
+USE_AGENTCORE=true
+```
+
+Other relevant settings for AgentCore mode:
+
+```env
+# Distributed cache (AgentCore)
+REDIS_CACHE_ENABLED=true
+REDIS_HOST=your-redis-host
+REDIS_PORT=6379
+REDIS_DB=0
+
+# DynamoDB (optional, for session analytics)
+USE_DYNAMODB_CACHE=true
+DYNAMODB_CACHE_TABLE=your-table
+AGENTCORE_SESSION_TABLE=your-session-table
+ENABLE_QUESTION_ANALYTICS=true
+```
+
+See all available settings in `.env.example` and `src/config/settings.py`.
+
+## Entrypoints
+
+- **Local/Strands:**
+  - Start with: `python api_server.py` (FastAPI + Strands agent)
+  - Interactive chat: `python chatbots/interactive_chat.py`
+
+- **AgentCore (AWS Lambda):**
+  - Lambda handler: `src/agents/agentcore_handler.py`
+  - See `docs/AGENTCORE_CACHING_STRATEGY.md` for serverless deployment
+
+## Shared Logic
+
+All core logic (retrieval, answer generation, cache, KB management) is modular and shared between both modes. See `src/tools/` and `src/agents/skills/` for details.
+
+---
 # Getting Started with AWS Strands Agents RAG
 
 This guide will walk you through setting up and running the StrandsRAGAgent RAG system step-by-step.

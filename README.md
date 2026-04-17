@@ -8,13 +8,18 @@ A high-performance Retrieval-Augmented Generation (RAG) system using AWS Strands
 
 | Category | Documents |
 |----------|-----------|
-| **🚀 Quick Start** | [Implementation Status](IMPLEMENTATION_STATUS.md) • [Setup Guide](docs/GETTING_STARTED.md) • [Developer Guide](docs/DEVELOPER_GUIDE.md) • [Infrastructure Status](docs/INFRASTRUCTURE_IMPLEMENTATION_STATUS.md) |
-| **🏗️ Architecture** | [Complete Implementation](docs/IMPLEMENTATION_ARCHITECTURE.md) • [System Design](docs/ARCHITECTURE.md) • [Query Routing](docs/QUERY_ROUTING.md) |
+| **🚀 Quick Start** | [Implementation Status](IMPLEMENTATION_STATUS.md) • [Setup Guide](docs/GETTING_STARTED.md#dual-mode-deployment-strands-local-and-agentcore-cloud) • [Developer Guide](docs/DEVELOPER_GUIDE.md) • [Infrastructure Status](docs/INFRASTRUCTURE_IMPLEMENTATION_STATUS.md) |
+| **🏗️ Architecture** | [Complete Implementation](docs/IMPLEMENTATION_ARCHITECTURE.md) • [System Design](docs/ARCHITECTURE.md#dual-mode-architecture-strands-local-and-agentcore-cloud) • [Query Routing](docs/QUERY_ROUTING.md) |
 | **👩‍💻 Development** | [API Reference](docs/DEVELOPER_GUIDE.md) • [Code Examples](docs/DEVELOPMENT.md) • [Strands Reference](docs/STRANDS_QUICK_REFERENCE.md) |
 | **🛠️ Dev Tools** | [StrandsCoreAgent Overview](dev_tools/AGENT_OVERVIEW.md) • [Architecture & Integration](dev_tools/README.md) • [Technical Reference](dev_tools/DOCUMENTATION.md) |
 | **⚡ Performance** | [Optimization Guide](docs/LATENCY_OPTIMIZATION.md) • [Model Comparison](docs/MODEL_PERFORMANCE_COMPARISON.md) • [Caching Strategy](docs/CACHING_STRATEGY.md) |
 | **🚀 Deployment** | [Production Readiness](docs/PRODUCTION_READINESS.md) • [React UI](docs/REACT_DEPLOYMENT.md) • [AWS Architecture](docs/AWS_ARCHITECTURE.md) |
 | **📋 Complete Index** | [All Documentation](docs/INDEX.md) |
+
+
+> **Supports Dual-Mode Deployment:**
+> - Strands (local/container) and AgentCore (cloud/serverless)
+> - See [Getting Started: Dual-Mode](docs/GETTING_STARTED.md#dual-mode-deployment-strands-local-and-agentcore-cloud) and [Architecture: Dual-Mode](docs/ARCHITECTURE.md#dual-mode-architecture-strands-local-and-agentcore-cloud)
 
 ## Architecture Overview
 

@@ -2,7 +2,7 @@
   "qa_pairs": [
     {
       "question": "What is Milvus?",
-      "answer": "Milvus, also known as MilvusDB, is an open-source vector database that provides a scalable and efficient platform for storing, indexing, searching, and analyzing high-dimensional data. It allows users to efficiently search, store, and retrieve vast amounts of information across different fields such as machine learning, natural language processing, and video analytics.\n\nTo learn more about Milvus, you can visit its official documentation: <https://milvus.io/docs> (web source) or its GitHub repository: <a href=\"https://github.com/milvus-io/milvus\">GitHub</a> (code examples).",
+      "answer": "Milvus is an open-source vector database designed for building AI applications. It provides a scalable and efficient platform for storing, indexing, searching, and analyzing high-dimensional vector data. Milvus is particularly useful for similarity search, retrieval-augmented generation (RAG), and machine learning applications that require fast vector search capabilities.\n\nKey features include:\n- Support for multiple distance metrics (COSINE, L2, Inner Product)\n- Flexible indexing strategies (HNSW, IVF_FLAT, IVF_SQ8, FLAT)\n- Scalable distributed architecture\n- Data consistency and reliability guarantees\n- Integration with popular machine learning and NLP frameworks\n\nTo learn more about Milvus, visit its official documentation: <https://milvus.io/docs>",
       "collection": "milvus_rag_collection",
       "sources": [
         {"document_name": "overview.md", "text": "Milvus is an open-source vector database built for AI applications and similarity search", "distance": 0.12, "metadata": {"source": "milvus_docs"}},

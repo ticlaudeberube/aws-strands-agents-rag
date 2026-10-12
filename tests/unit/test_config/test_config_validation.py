@@ -171,5 +171,15 @@ def test_settings():
         return 1
 
 
+def test_deployment_mode_is_single_source_of_truth():
+    """deployment_mode should be the only supported runtime switch."""
+    from src.config.settings import Settings
+
+    settings = Settings()
+
+    assert settings.deployment_mode in {"local", "serverless"}
+    assert not hasattr(settings, "use_agentcore")
+
+
 if __name__ == "__main__":
     sys.exit(test_settings())

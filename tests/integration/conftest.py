@@ -111,7 +111,21 @@ def api_server_available() -> bool:
 
 
 def pytest_collection_modifyitems(config, items):
-    """Skip API endpoint tests if API server is not running."""
+    """Mark integration tests and skip API endpoint tests if the server is down.
+
+    Every test collected under tests/integration/ is tagged with the
+    `integration` marker. The root conftest uses this marker to auto-skip
+    Milvus-dependent tests when Milvus is unreachable.
+    """
+    integration_dir = Path(__file__).parent.resolve()
+    for item in items:
+        try:
+            item_path = Path(str(item.fspath)).resolve()
+        except Exception:
+            continue
+        if integration_dir in item_path.parents or item_path == integration_dir:
+            item.add_marker(pytest.mark.integration)
+
     api_base = os.getenv("API_BASE", "http://localhost:8000")
     server_available = False
     try:

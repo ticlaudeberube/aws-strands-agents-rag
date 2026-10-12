@@ -79,4 +79,48 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-addopts = "--cov=src --cov-report=html"
+# Test discovery patterns
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+
+# Output + coverage options
+addopts = [
+    "-v",
+    "--strict-markers",
+    "--tb=short",
+    "--disable-warnings",
+    "-p", "no:warnings",
+    "--cov=src",
+    "--cov-report=html",
+]
+
+# Test paths
+testpaths = ["tests"]
+
+# Markers for test categorization
+markers = [
+    "unit: Unit tests",
+    "integration: Integration tests",
+    "async: Async tests",
+    "slow: Slow running tests",
+    "health: Health check tests",
+    "requires_milvus: Tests requiring a reachable Milvus server (auto-skipped when unavailable)",
+]
+
+[tool.coverage.run]
+source = ["src"]
+omit = [
+    "*/tests/*",
+    "*/__init__.py",
+    "*/config/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]

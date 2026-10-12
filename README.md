@@ -32,6 +32,14 @@ export DEPLOYMENT_MODE=serverless
 # fill in AWS / Bedrock / OpenSearch values in .env
 ```
 
+The AWS infrastructure is defined as Terraform under
+[`infrastructure/terraform/`](infrastructure/terraform/). It has been written and
+validated but **not yet deployed** — a one-time remote-state backend bootstrap
+(an S3 state bucket + DynamoDB lock table) is required before the first
+`terraform init`. The full prerequisites, backend bootstrap, and
+deploy/teardown workflow are documented in
+[infrastructure/terraform/DEPLOYMENT.md](infrastructure/terraform/DEPLOYMENT.md).
+
 ## Core runtime flow
 
 ```text
@@ -53,3 +61,11 @@ User query
 The source of truth for mode selection is `DEPLOYMENT_MODE` in `.env` and `src/config/settings.py`.
 
 See [docs/HOW_TO.md](docs/HOW_TO.md) and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the verified setup and architecture.
+
+## Deploying to AWS
+
+The serverless infrastructure (Terraform) and its deployment runbook live in
+[infrastructure/terraform/DEPLOYMENT.md](infrastructure/terraform/DEPLOYMENT.md).
+Start there before attempting a cloud deploy — it covers AWS prerequisites, the
+required remote-state backend bootstrap, Lambda packaging, and the
+`init → plan → apply` workflow.

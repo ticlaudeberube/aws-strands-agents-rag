@@ -153,7 +153,7 @@ deployment_mode: Literal["local", "serverless"] = Field(
 )
 ```
 
-> Compatibility note: the existing boolean `use_agentcore` setting is retained and derived from `deployment_mode` (`use_agentcore == (deployment_mode == "serverless")`) so existing configuration continues to work during migration. New code should read `deployment_mode`.
+> `deployment_mode` is the only supported runtime switch. New code should read `settings.deployment_mode` directly instead of relying on any legacy boolean alias.
 
 ### How the mode is detected
 

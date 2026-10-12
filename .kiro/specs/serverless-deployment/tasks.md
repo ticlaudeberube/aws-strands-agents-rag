@@ -23,9 +23,9 @@ Both modes are validated by a final integration/smoke task.
 ## Tasks
 
 - [x] 1. Settings and shared backend interfaces (local-preserving foundation)
-  - [x] 1.1 Add `deployment_mode` to settings with backward-compatible `use_agentcore` derivation
+  - [x] 1.1 Add `deployment_mode` to settings as the single source of truth
     - Add `deployment_mode: Literal["local", "serverless"]` (default `"local"`, alias `DEPLOYMENT_MODE`) to `src/config/settings.py`
-    - Derive `use_agentcore` from `deployment_mode` (`use_agentcore == (deployment_mode == "serverless")`) so existing config keeps working
+    - Keep the runtime switch simple: read `settings.deployment_mode` directly without a legacy boolean alias
     - Add serverless-only settings fields (Bedrock model IDs + `bedrock_model_override`, OpenSearch endpoint/index names, Redis endpoint/TTLs, DynamoDB table names, Secrets Manager keys) with safe defaults
     - Update `.env.example` with the new `DEPLOYMENT_MODE` and serverless variables (keep all local variables intact)
     - _Requirements: 1.2, 5.1, 5.4, 11.2_
@@ -244,22 +244,22 @@ Both modes are validated by a final integration/smoke task.
     - **Validates: Requirements 9.5**
     - File: `tests/test_indexing.py` (random document metadata)
 
-- [ ] 13. Terraform networking module (base infrastructure)
-  - [ ] 13.1 Scaffold root module and networking child module
+- [x] 13. Terraform networking module (base infrastructure)
+  - [x] 13.1 Scaffold root module and networking child module
     - Create `infrastructure/terraform/` root (`main.tf`, `variables.tf`, `outputs.tf`, `versions.tf`, `backend.tf`) with `required_version >= 1.6.0`, aws provider pinned `~> 5.60`, and S3+DynamoDB remote state/lock in `backend.tf`
     - Add `environments/{dev,staging,prod}.tfvars` with stage/model/node-type/capacity variables
     - Create `modules/networking/`: VPC, private subnets, VPC endpoints (OpenSearch Serverless, Bedrock, S3, DynamoDB, Secrets Manager), security groups (use the registry VPC module, pinned; use the Terraform MCP power for provider/module lookups)
     - Verify with `terraform fmt -check`, `terraform validate`, and `terraform plan -var-file=environments/dev.tfvars`
     - _Requirements: 11.1, 11.2, 11.7, 11.8_
 
-- [ ] 14. Terraform data module (DynamoDB, OpenSearch, Redis)
-  - [ ] 14.1 Implement the data child module
+- [x] 14. Terraform data module (DynamoDB, OpenSearch, Redis)
+  - [x] 14.1 Implement the data child module
     - Create `modules/data/`: two `aws_dynamodb_table` (PAY_PER_REQUEST, TTL on `ttl`), `aws_opensearchserverless_collection` (`rag-vectors`, VECTORSEARCH) with encryption/network/data-access policies and separate `rag-kb`/`rag-cache` indexes (768-dim, cosine, HNSW m=30/ef_construction=200, no public access), and `aws_elasticache_replication_group` (Redis, TLS) in private subnets
     - Verify with `terraform fmt -check`, `terraform validate`, `terraform plan -var-file=environments/dev.tfvars`
     - _Requirements: 4.1, 4.3, 4.5, 4.6, 3.3, 11.1, 11.6_
 
-- [ ] 15. Terraform compute module (Lambda + IAM)
-  - [ ] 15.1 Implement the compute child module
+- [x] 15. Terraform compute module (Lambda + IAM)
+  - [x] 15.1 Implement the compute child module
     - Create `modules/compute/`: `aws_lambda_function` for the chat handler (`agentcore_handler.lambda_handler`) and indexing handler (`indexing_handler.lambda_handler`) with VPC config attached to networking private subnets; least-privilege `aws_iam_role`/`aws_iam_policy`
     - Restrict IAM actions to the permitted set only (no `*`): Bedrock InvokeModel, DynamoDB CRUD+Query, ElastiCache Connect, `aoss:APIAccessAll`, S3 GetObject/ListBucket, Secrets Manager GetSecretValue; add Secrets Manager secrets referenced by the role; wire S3 `ObjectCreated` trigger for the indexing Lambda
     - Verify with `terraform fmt -check`, `terraform validate`, `terraform plan -var-file=environments/dev.tfvars`
@@ -270,8 +270,8 @@ Both modes are validated by a final integration/smoke task.
     - **Validates: Requirements 11.5**
     - File: `tests/test_iam_policy.py` (parse Terraform IAM HCL / `terraform plan` JSON, enumerate actions)
 
-- [ ] 16. Terraform api module (API Gateway + Cognito + WAF)
-  - [ ] 16.1 Implement the api child module
+- [x] 16. Terraform api module (API Gateway + Cognito + WAF)
+  - [x] 16.1 Implement the api child module
     - Create `modules/api/`: `POST /chat` (Lambda proxy) and `GET /health` (static 200 `{"status":"healthy"}`), Cognito user pool + client with JWT authorizer on `/chat`, password policy (≥12, upper, digit, special), 1-hour token expiry, CORS for the CloudFront origin (`Content-Type`, `Authorization`), and `aws_wafv2_web_acl` rate limit 100 rps → 429
     - Verify with `terraform fmt -check`, `terraform validate`, `terraform plan -var-file=environments/dev.tfvars`
     - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 7.1, 7.2, 7.3_
@@ -287,13 +287,13 @@ Both modes are validated by a final integration/smoke task.
     - **Validates: Requirements 6.6**
     - File: `tests/test_auth.py` (or `tests/test_api_gateway.py`) — random error bodies and 4xx/5xx codes
 
-- [ ] 17. Terraform frontend module and React serverless build
-  - [ ] 17.1 Implement the frontend child module
+- [x] 17. Terraform frontend module and React serverless build
+  - [x] 17.1 Implement the frontend child module
     - Create `modules/frontend/`: versioned/SSE `aws_s3_bucket` (documents + `/frontend/`) and `aws_cloudfront_distribution` (HTTPS-only redirect, default TTL 86400s, `no-store` for `index.html`, SPA fallback to `index.html` for non-asset paths)
     - Verify with `terraform fmt -check`, `terraform validate`, `terraform plan -var-file=environments/dev.tfvars`
     - _Requirements: 8.1, 8.2, 8.3, 8.5_
 
-  - [ ] 17.2 Add Cognito auth and API URL injection to the React frontend
+  - [x] 17.2 Add Cognito auth and API URL injection to the React frontend
     - In `chatbots/react-chatbot/`: add Amplify Auth / Cognito Hosted UI sign-in, hold JWT in memory (not localStorage), auto-refresh via refresh token and redirect to sign-in when invalid
     - Read API base URL from build-time `REACT_APP_API_URL`; remove hardcoded localhost from serverless builds; keep local-mode `REACT_APP_API_HOST`/`REACT_APP_API_PORT` behavior for dev
     - _Requirements: 7.4, 7.5, 8.4_
@@ -304,8 +304,8 @@ Both modes are validated by a final integration/smoke task.
     - **Property 24: React build artifacts never contain localhost references** → `tests/test_frontend_build.py`
     - **Validates: Requirements 8.3, 8.4, 8.5**
 
-- [ ] 18. Terraform observability module
-  - [ ] 18.1 Implement the observability child module
+- [x] 18. Terraform observability module
+  - [x] 18.1 Implement the observability child module
     - Create `modules/observability/`: `aws_cloudwatch_log_group` per Lambda, `aws_cloudwatch_metric_alarm` for `errors/total > 10` in 5 minutes, and X-Ray active tracing enabled on both Lambda functions
     - Compose all child modules in root `main.tf`; verify full-stack `terraform fmt -check`, `terraform validate`, `terraform plan -var-file=environments/dev.tfvars`
     - _Requirements: 12.3, 12.4, 11.1_

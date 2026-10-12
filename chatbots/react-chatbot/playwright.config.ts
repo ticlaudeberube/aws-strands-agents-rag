@@ -43,15 +43,15 @@ export default defineConfig({
   webServer: [
     {
       command: "npm start",
-      port: 3000,
-      timeout: 120000,
+      url: "http://127.0.0.1:3000",
+      timeout: 180000,
       reuseExistingServer: !process.env.CI,
     },
     {
-      command: "cd ../.. && python api_server.py",
-      port: 8000,
-      timeout: 120000,
-      reuseExistingServer: true, // Use existing API server
+      command: "cd ../.. && uv run python api_server.py",
+      url: "http://127.0.0.1:8000/health",
+      timeout: 180000,
+      reuseExistingServer: !process.env.CI,
     },
   ],
 

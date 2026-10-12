@@ -1,7 +1,7 @@
 # Hallucination Prevention - Todo List
 
-**Date Created**: April 18, 2026  
-**Related Issue**: Cached response for "What is Milvus?" contained inaccurate information (FIXED ✅)  
+**Date Created**: April 18, 2026
+**Related Issue**: Cached response for "What is Milvus?" contained inaccurate information (FIXED ✅)
 **Status**: In Progress
 
 ---

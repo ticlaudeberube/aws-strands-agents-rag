@@ -133,10 +133,10 @@ raise HTTPException(status_code=500, detail=error.model_dump())
 const handleError = async (response: Response) => {
   if (response.status === 400 || response.status === 500) {
     const error = await response.json();
-    
+
     // Show message to user
     showError(error.message);
-    
+
     // Show suggestion if available
     if (error.suggestion) {
       showHelper(error.suggestion);
@@ -149,23 +149,23 @@ const handleError = async (response: Response) => {
 // Route by category
 const handleError = async (response: Response) => {
   const error = await response.json();
-  
+
   switch (error.category) {
     case 'validation_error':
       // Highlight input field, show validation feedback
       updateInputFeedback(error.message);
       break;
-      
+
     case 'security_error':
       // Show security warning
       showSecurityAlert(error.message);
       break;
-      
+
     case 'service_error':
       // Show maintenance message
       showMaintenanceAlert(error.message, error.suggestion);
       break;
-      
+
     case 'system_error':
       // Show generic error
       showError('Something went wrong. Please try again.');
@@ -178,7 +178,7 @@ const handleError = async (response: Response) => {
 // Route by specific error code
 const handleError = async (response: Response) => {
   const error = await response.json();
-  
+
   // Get specific suggestion based on error type
   const suggestions: Record<string, string> = {
     'VALIDATION_MIN_LENGTH': 'Try typing a longer message',
@@ -187,7 +187,7 @@ const handleError = async (response: Response) => {
     'SERVICE_MILVUS_UNAVAILABLE': 'Database is down. Please check system status.',
     'SERVICE_OLLAMA_UNAVAILABLE': 'LLM service is down. Please check system status.',
   };
-  
+
   const suggestion = suggestions[error.error_code];
   if (suggestion) {
     showSuggestion(suggestion);
@@ -261,16 +261,16 @@ from src.config.settings import get_settings
 @app.post("/v1/chat/completions")
 async def chat_completions(request: ChatCompletionRequest):
     settings = get_settings()
-    
+
     # Extract user message
     user_message = extract_text_from_content(request.messages[-1].content)
-    
+
     # Sanitize
     sanitized = sanitize_user_input(user_message, settings)
-    
+
     # Validate
     is_valid, error_msg = validate_user_input(sanitized, settings)
-    
+
     if not is_valid:
         # Create and raise validation error
         error = create_validation_error(
@@ -282,7 +282,7 @@ async def chat_completions(request: ChatCompletionRequest):
             status_code=400,
             detail=error.model_dump()
         )
-    
+
     # Process valid input
     response = await agent.invoke(sanitized)
     return response

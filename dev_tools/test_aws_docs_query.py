@@ -6,7 +6,7 @@ WORKSPACE_ROOT = str(Path(__file__).parent.parent.resolve())
 if WORKSPACE_ROOT not in sys.path:
     sys.path.insert(0, WORKSPACE_ROOT)
 
-from dev_tools.skills import aws_docs_query
+from dev_tools.skills import aws_docs_query  # noqa: E402
 
 if __name__ == "__main__":
     query = "What is Amazon S3?"

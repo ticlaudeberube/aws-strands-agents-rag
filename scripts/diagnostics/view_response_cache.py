@@ -115,7 +115,7 @@ def view_response_cache(limit: int = 20, search_query: Optional[str] = None) -> 
                 # Split long responses into lines
                 words = response.split()
                 lines = []
-                current_line = []
+                current_line: list[str] = []
                 current_length = 0
 
                 for word in words:
@@ -156,7 +156,7 @@ def view_response_cache(limit: int = 20, search_query: Optional[str] = None) -> 
         print("=" * 100)
 
         # Analyze question types
-        topics = {}
+        topics: dict[str, int] = {}
         response_lengths = []
 
         for result in results:

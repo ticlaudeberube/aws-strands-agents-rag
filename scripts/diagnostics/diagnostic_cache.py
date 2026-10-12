@@ -11,7 +11,7 @@ Use Cases:
 
 import sys
 import time
-from typing import Any, Dict
+from typing import Any, Callable, Dict
 
 import requests
 
@@ -26,7 +26,7 @@ except ImportError as e:
 
 def check_api_endpoints(base_url: str = "http://localhost:8000") -> Dict[str, Any]:
     """Check API endpoint health."""
-    results = {}
+    results: Dict[str, Any] = {}
 
     endpoints = ["/health", "/metrics", "/v1/models", "/cache/stats"]
 
@@ -193,8 +193,12 @@ def main():
 
     # Override check function with custom URL
     global check_api_endpoints
-    original_check = check_api_endpoints
-    check_api_endpoints = lambda: original_check(args.api_url)
+    original_check: Callable[[str], Dict[str, Any]] = check_api_endpoints
+
+    def _check_with_url() -> Dict[str, Any]:
+        return original_check(args.api_url)
+
+    check_api_endpoints = _check_with_url
 
     quick_diagnostic()
 

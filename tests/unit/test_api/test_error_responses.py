@@ -1,7 +1,5 @@
 """Unit tests for global error response patterns."""
 
-import pytest
-
 from src.api.error_responses import (
     ErrorCategory,
     ErrorCode,

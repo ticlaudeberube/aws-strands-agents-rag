@@ -283,7 +283,7 @@ class RegressionTester:
         passed_tests = sum(1 for result in question_results if result.get("passed", False))
         total_tests = len(question_results)
 
-        overall_results = {
+        overall_results: dict[str, Any] = {
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
             "question_tests": {
                 "passed": passed_tests,
@@ -312,8 +312,9 @@ class RegressionTester:
             f"🔍 Data Integrity: {'✅ Good' if integrity_results.get('integrity_score', 0) > 0.8 else '🟡 Issues'}"
         )
 
-        status_icon = {"PASS": "🟢", "WARN": "🟡", "FAIL": "🔴"}[overall_results["overall_status"]]
-        print(f"\n{status_icon} OVERALL STATUS: {overall_results['overall_status']}")
+        status_box: str = overall_results["overall_status"]
+        status_icon = {"PASS": "🟢", "WARN": "🟡", "FAIL": "🔴"}[status_box]
+        print(f"\n{status_icon} OVERALL STATUS: {status_box}")
 
         if overall_results["overall_status"] == "FAIL":
             print("\n🚨 REGRESSION DETECTED - Investigation required!")

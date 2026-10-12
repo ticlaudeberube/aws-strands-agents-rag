@@ -6,10 +6,31 @@ hallucination by detecting queries about Pinecone, Weaviate, ChromaDB, etc.
 and properly routing them to web search or rejection messages.
 """
 
+from unittest.mock import patch
+
 import pytest
 
 from src.agents.strands_graph_agent import StrandsGraphRAGAgent, _is_competitor_database_query
 from src.config import Settings
+
+
+def _make_mock_agent() -> StrandsGraphRAGAgent:
+    """Create a StrandsGraphRAGAgent with all network calls mocked out."""
+    settings = Settings(
+        ollama_host="http://localhost:11434",
+        ollama_model="llama3.2",
+        ollama_embed_model="nomic-embed-text",
+        milvus_host="localhost",
+        milvus_port=19530,
+        milvus_db_name="test_db",
+    )
+    with (
+        patch("src.agents.strands_graph_agent.MilvusVectorDB"),
+        patch("src.agents.strands_graph_agent.OllamaClient"),
+        patch("src.agents.strands_graph_agent.MilvusResponseCache"),
+    ):
+        agent = StrandsGraphRAGAgent(settings=settings)
+    return agent
 
 
 class TestCompetitorDetection:
@@ -28,9 +49,9 @@ class TestCompetitorDetection:
         )
 
     @pytest.fixture
-    def agent(self, settings):
-        """Fixture providing initialized agent."""
-        return StrandsGraphRAGAgent(settings=settings)
+    def agent(self):
+        """Fixture providing a mocked agent (no real Milvus/Ollama connections)."""
+        return _make_mock_agent()
 
     # ======================================================================
     # DIRECT COMPETITOR NAME TESTS
@@ -338,9 +359,8 @@ class TestCompetitorDetectionParametrized:
 
     @pytest.fixture
     def agent(self):
-        """Fixture providing initialized agent."""
-        settings = Settings()
-        return StrandsGraphRAGAgent(settings=settings)
+        """Fixture providing a mocked agent (no real Milvus/Ollama connections)."""
+        return _make_mock_agent()
 
     @pytest.mark.parametrize(
         "competitor,query_template",

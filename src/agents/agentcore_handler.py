@@ -5,8 +5,6 @@ This file provides an AWS Lambda-compatible handler for running the AgentCore im
 of the RAG agent. It uses distributed cache/session analytics and delegates to shared logic modules.
 """
 
-from src.config.settings import get_settings
-
 # Import shared logic modules as needed (e.g., prompt formatting, retrieval, answer synthesis)
 # from src.tools import ...
 
@@ -16,7 +14,6 @@ from src.config.settings import get_settings
 
 def lambda_handler(event, context):
     """AWS Lambda entrypoint for AgentCore RAG agent."""
-    settings = get_settings()
     # agent = AgentCoreRAGAgent(settings)  # Instantiate AgentCore agent (to be implemented)
     # Route event to shared logic (e.g., answer_question, retrieve_documents, etc.)
     # Example:

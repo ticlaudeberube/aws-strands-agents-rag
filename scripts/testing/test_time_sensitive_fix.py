@@ -11,7 +11,7 @@ Use Cases:
 
 import sys
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any, Dict, List
 
 try:
@@ -27,13 +27,12 @@ class TimeSensitiveQueryTester:
     """Test suite for time-sensitive query detection and routing."""
 
     def __init__(self):
-        self.agent = StrandsGraphRAGAgent()
         self.settings = get_settings()
+        self.agent = StrandsGraphRAGAgent(settings=self.settings)
 
     def get_time_sensitive_queries(self) -> List[Dict[str, Any]]:
         """Get test queries that should trigger time-sensitive routing."""
         current_year = datetime.now().year
-        recent_date = datetime.now() - timedelta(days=30)
 
         return [
             {
@@ -110,7 +109,7 @@ class TimeSensitiveQueryTester:
         time_sensitive_queries = self.get_time_sensitive_queries()
         non_time_sensitive_queries = self.get_non_time_sensitive_queries()
 
-        results = {
+        results: dict[str, Any] = {
             "time_sensitive_tests": [],
             "non_time_sensitive_tests": [],
             "detection_accuracy": 0,
@@ -326,7 +325,7 @@ class TimeSensitiveQueryTester:
         integration_results = self.test_web_search_integration()
 
         # Compile overall results
-        overall_results = {
+        overall_results: Dict[str, Any] = {
             "timestamp": datetime.now().isoformat(),
             "detection": detection_results,
             "integration": integration_results,
@@ -344,14 +343,16 @@ class TimeSensitiveQueryTester:
         print("📊 TIME-SENSITIVE TEST SUMMARY")
         print("=" * 80)
 
-        accuracy = overall_results["summary"]["detection_accuracy"]
-        integration_ok = overall_results["summary"]["integration_working"]
+        summary: Dict[str, Any] = overall_results["summary"]
+        accuracy = summary["detection_accuracy"]
+        integration_ok = summary["integration_working"]
 
         print(f"🎯 Detection Accuracy: {accuracy:.1%}")
         print(f"🌐 Web Search Integration: {'✅ Working' if integration_ok else '❌ Issues'}")
 
-        status = overall_results["summary"]["overall_status"]
-        status_icon = {"PASS": "🟢", "WARN": "🟡", "FAIL": "🔴"}[status]
+        status: str = str(summary["overall_status"])
+        status_icons: dict[str, str] = {"PASS": "🟢", "WARN": "🟡", "FAIL": "🔴"}
+        status_icon = status_icons[status]
         print(f"\n{status_icon} OVERALL STATUS: {status}")
 
         if status == "FAIL":

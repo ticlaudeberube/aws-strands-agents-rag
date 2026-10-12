@@ -66,7 +66,7 @@ function ChatMessage({ message }) {
   }
 
   return (
-    <div 
+    <div
       className={`chat-message ${isUser ? 'user' : 'assistant'}`}
       data-testid={isUser ? 'user-message' : 'assistant-message'}
     >

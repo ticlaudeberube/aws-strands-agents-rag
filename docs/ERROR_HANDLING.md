@@ -143,10 +143,10 @@ Unexpected internal errors.
 // Assuming response is a validation error
 if (response.status === 400) {
   const error = await response.json();
-  
+
   // Show human-readable message
   showErrorUI(error.message);
-  
+
   // And optional suggestion
   if (error.suggestion) {
     showHelper(error.suggestion);
@@ -159,23 +159,23 @@ if (response.status === 400) {
 ```typescript
 const handleValidationError = (response) => {
   const error = response.data;
-  
+
   switch (error.category) {
     case 'validation_error':
       // Show input validation feedback
       updateErrorUI(error.message);
       break;
-      
+
     case 'security_error':
       // Show security warning
       showSecurityWarning(error.message);
       break;
-      
+
     case 'service_error':
       // Show maintenance message
       showMaintenanceMessage(error.suggestion);
       break;
-      
+
     case 'system_error':
       // Show generic error
       showError('Something went wrong. Please try again.');
@@ -189,20 +189,20 @@ const handleValidationError = (response) => {
 ```typescript
 if (response.status === 400) {
   const error = await response.json();
-  
+
   switch (error.error_code) {
     case 'VALIDATION_MIN_LENGTH':
     case 'VALIDATION_MAX_LENGTH':
       // Highlight input field
       inputField.classList.add('error-validation');
       break;
-      
+
     case 'SECURITY_SCRIPT_INJECTION':
     case 'SECURITY_JAVASCRIPT_PROTOCOL':
       // Show security warning with more aggressive UI
       showSecurityAlert();
       break;
-      
+
     case 'SERVICE_MILVUS_UNAVAILABLE':
       // Offer offline mode or retry
       showRetryOption();
@@ -221,7 +221,7 @@ if (error.details && error.details.length > 0) {
     console.log(`Field: ${detail.field}`);
     console.log(`Constraint: ${detail.constraint}`);
     console.log(`Expected: ${detail.constraint_value}`);
-    
+
     // Show specific field error
     showFieldError(detail.field, detail.constraint_value);
   });
@@ -305,13 +305,13 @@ if not milvus_available():
 async def chat_completions(request: ChatCompletionRequest):
     # Extract user message
     user_message = extract_text_from_content(request.messages[-1].content)
-    
+
     # Sanitize
     sanitized = sanitize_user_input(user_message, settings)
-    
+
     # Validate
     is_valid, error_msg = validate_user_input(sanitized, settings)
-    
+
     if not is_valid:
         # Extract error code from error message
         error = create_validation_error(
@@ -323,7 +323,7 @@ async def chat_completions(request: ChatCompletionRequest):
             status_code=400,
             detail=error.model_dump()
         )
-    
+
     # Process valid input
     return await agent.invoke(sanitized)
 ```
@@ -335,7 +335,7 @@ Validation limits are configurable via environment variables:
 **Backend (.env):**
 ```bash
 MIN_MESSAGE_LENGTH=2                   # Minimum message length
-MAX_MESSAGE_LENGTH=5000               # Maximum message length  
+MAX_MESSAGE_LENGTH=5000               # Maximum message length
 ENABLE_HTML_SANITIZATION=true        # Enable bleach sanitization
 ```
 
@@ -434,9 +434,9 @@ export interface ParsedError {
  */
 export const parseErrorResponse = (error: AxiosError): ParsedError | null => {
   if (!error.response?.data) return null;
-  
+
   const data = error.response.data as any;
-  
+
   // Check if it's already a GlobalErrorResponse
   if (data.error_code && data.category) {
     return {
@@ -448,7 +448,7 @@ export const parseErrorResponse = (error: AxiosError): ParsedError | null => {
       timestamp: data.timestamp || new Date().toISOString(),
     };
   }
-  
+
   // Fallback for legacy error format
   return {
     error_code: 'SYSTEM_INTERNAL_ERROR',
@@ -467,7 +467,7 @@ export const setupErrorInterceptor = (axiosInstance: any) => {
     (response) => response,
     (error: AxiosError) => {
       const parsedError = parseErrorResponse(error);
-      
+
       if (parsedError) {
         // Log structured error for debugging
         console.error('[API Error]', {
@@ -477,7 +477,7 @@ export const setupErrorInterceptor = (axiosInstance: any) => {
           timestamp: parsedError.timestamp,
         });
       }
-      
+
       return Promise.reject(parsedError || error);
     }
   );
@@ -485,12 +485,12 @@ export const setupErrorInterceptor = (axiosInstance: any) => {
 
 /**
  * Usage in component:
- * 
+ *
  * try {
  *   const response = await axiosClient.post('/v1/chat/completions', data);
  * } catch (error) {
  *   const parsed = error as ParsedError;
- *   
+ *
  *   if (parsed.category === 'validation_error') {
  *     showInputError(parsed.message);
  *   } else if (parsed.category === 'security_error') {
@@ -522,7 +522,7 @@ interface ErrorBannerProps {
 
 /**
  * Displays structured error responses with category-specific styling
- * 
+ *
  * Features:
  * - Color-coded by error category (red for security, orange for validation, etc.)
  * - Shows both message and suggestion
@@ -747,9 +747,9 @@ from pathlib import Path
 
 def setup_error_logging(log_dir: str = "logs"):
     """Configure structured logging for errors with context"""
-    
+
     Path(log_dir).mkdir(exist_ok=True)
-    
+
     # JSON formatter for machine-readable logs
     class JSONFormatter(logging.Formatter):
         def format(self, record):
@@ -762,7 +762,7 @@ def setup_error_logging(log_dir: str = "logs"):
                 "function": record.funcName,
                 "line": record.lineno,
             }
-            
+
             # Add error context if it's an exception
             if record.exc_info:
                 log_data["exception"] = {
@@ -770,14 +770,14 @@ def setup_error_logging(log_dir: str = "logs"):
                     "message": str(record.exc_info[1]),
                     "traceback": self.formatException(record.exc_info),
                 }
-            
+
             # Add custom attributes (error_code, error_category, etc.)
             for key, value in record.__dict__.items():
                 if key.startswith("error_"):
                     log_data[key] = value
-            
+
             return json.dumps(log_data)
-    
+
     # Error file handler (JSON format)
     error_handler = logging.handlers.RotatingFileHandler(
         f"{log_dir}/error.log",
@@ -786,7 +786,7 @@ def setup_error_logging(log_dir: str = "logs"):
     )
     error_handler.setLevel(logging.ERROR)
     error_handler.setFormatter(JSONFormatter())
-    
+
     # Validation file handler (JSON format)
     validation_handler = logging.handlers.RotatingFileHandler(
         f"{log_dir}/validation.log",
@@ -795,7 +795,7 @@ def setup_error_logging(log_dir: str = "logs"):
     )
     validation_handler.setLevel(logging.WARNING)
     validation_handler.setFormatter(JSONFormatter())
-    
+
     # Console handler (text format for development)
     console_handler = logging.StreamHandler()
     console_handler.setLevel(logging.INFO)
@@ -803,14 +803,14 @@ def setup_error_logging(log_dir: str = "logs"):
         "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )
     console_handler.setFormatter(console_formatter)
-    
+
     # Configure root logger
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.DEBUG)
     root_logger.addHandler(error_handler)
     root_logger.addHandler(validation_handler)
     root_logger.addHandler(console_handler)
-    
+
     return root_logger
 
 
@@ -823,7 +823,7 @@ def log_validation_error(
     user_input: str = None,
 ):
     """Log validation error with structured context"""
-    
+
     # Create logger with context
     extra = {
         "error_code": error_code,
@@ -832,7 +832,7 @@ def log_validation_error(
         "constraint": constraint,
         "input_length": len(user_input) if user_input else None,
     }
-    
+
     logger.warning(
         f"Validation failed: {message}",
         extra=extra,
@@ -847,14 +847,14 @@ def log_security_error(
     user_input: str = None,
 ):
     """Log security error with structured context"""
-    
+
     extra = {
         "error_code": error_code,
         "error_category": "security_error",
         "pattern_detected": pattern_detected,
         "input_length": len(user_input) if user_input else None,
     }
-    
+
     logger.warning(
         f"Security violation: {message}",
         extra=extra,
@@ -869,14 +869,14 @@ def log_service_error(
     recovery_action: str = None,
 ):
     """Log service error with structured context"""
-    
+
     extra = {
         "error_code": error_code,
         "error_category": "service_error",
         "service": service,
         "recovery_action": recovery_action,
     }
-    
+
     logger.error(
         f"Service error: {message}",
         extra=extra,
@@ -884,11 +884,11 @@ def log_service_error(
 
 
 # Usage in api_server.py:
-# 
+#
 # from src.config.logging_config import setup_error_logging, log_validation_error
-# 
+#
 # logger = setup_error_logging()
-# 
+#
 # if not is_valid:
 #     log_validation_error(
 #         logger,

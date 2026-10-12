@@ -101,7 +101,9 @@ def validate_prompts() -> bool:
 
     try:
         # Create agent instance to test integration
-        agent = StrandsGraphRAGAgent()
+        from src.config.settings import get_settings
+
+        agent = StrandsGraphRAGAgent(settings=get_settings())
         print("   ✅ Agent initialization: Success")
 
         # Check if agent has the expected structure

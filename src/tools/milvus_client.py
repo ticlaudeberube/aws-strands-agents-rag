@@ -214,9 +214,7 @@ class MilvusVectorDB:
                 }
             )
         logging.info(f"Inserting {len(data)} embeddings into '{collection_name}'")
-        result = self.client.insert(
-            collection_name=collection_name, data=data, db_name=self.db_name
-        )
+        self.client.insert(collection_name=collection_name, data=data, db_name=self.db_name)
         try:
             self.client.flush(collection_name=collection_name, db_name=self.db_name)
             logging.info(
@@ -233,3 +231,13 @@ class MilvusVectorDB:
         except Exception as e:
             logging.error(f"Failed to list collections: {e}")
             return []
+
+    def delete_collection(self, collection_name: str) -> bool:
+        """Drop a collection from the database."""
+        try:
+            self.client.drop_collection(collection_name=collection_name, db_name=self.db_name)
+            logging.info(f"Dropped collection: {collection_name}")
+            return True
+        except Exception as e:
+            logging.error(f"Failed to drop collection '{collection_name}': {e}")
+            raise

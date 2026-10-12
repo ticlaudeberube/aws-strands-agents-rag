@@ -68,7 +68,7 @@ repos:
         language: system
         types: [python]
 
-      # Type checking (must run before tests to catch type errors early)
+      # Type checking (runs on push, not every commit, to keep commits fast)
       - id: mypy
         name: mypy - Static type checker
         description: Type checks Python code for type safety
@@ -76,8 +76,11 @@ repos:
         language: system
         types: [python]
         pass_filenames: false
+        stages: [pre-push]
 
-      # Unit and integration tests (runs last, after type checking)
+      # Unit and integration tests (runs on push, not every commit)
+      # Milvus-dependent integration tests skip automatically when Milvus
+      # is unreachable (see tests/conftest.py).
       - id: pytest
         name: pytest - Test suite
         description: Runs unit and integration tests (excludes slow tests)
@@ -85,4 +88,4 @@ repos:
         language: system
         types: [python]
         pass_filenames: false
-        stages: [pre-commit]
+        stages: [pre-push]

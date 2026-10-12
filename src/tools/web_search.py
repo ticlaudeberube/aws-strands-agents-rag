@@ -2,17 +2,122 @@
 
 Supports multiple search providers:
 - Tavily: AI-optimized search (recommended, requires API key)
+
+Deployment modes
+----------------
+- ``local`` (default): the Tavily API key is read from ``settings.tavily_api_key``
+  (``.env`` / ``TAVILY_API_KEY``) exactly as before. No AWS SDK is imported.
+- ``serverless``: when ``settings.secrets_tavily_api_key`` names a Secrets Manager
+  secret, the key is resolved from AWS Secrets Manager once per Lambda cold start
+  and cached in the execution environment for the warm invocation (Requirement 10.1).
+  ``boto3`` is imported lazily inside the resolver so local mode never requires it.
 """
 
 import json
 import logging
 import os
+from datetime import datetime, timezone
 
 import requests
 
-from src.config.settings import get_settings
+from src.config.settings import Settings, get_settings
 
 logger = logging.getLogger(__name__)
+
+# Automatic web-search fallback threshold (Requirement 10.4). Mirrors
+# ``settings.web_search_fallback_threshold`` (default 0.15) so callers can import
+# the shared constant without re-deriving it.
+WEB_SEARCH_FALLBACK_THRESHOLD: float = Settings.model_fields[
+    "web_search_fallback_threshold"
+].default
+
+# Module-level cache for the resolved Tavily key. In a Lambda execution
+# environment this persists across warm invocations so Secrets Manager is only
+# called once per cold start (Requirement 10.1). The sentinel distinguishes
+# "never resolved" from "resolved to no key".
+_UNRESOLVED = object()
+_cached_tavily_api_key: object | str | None = _UNRESOLVED
+
+
+def _resolve_tavily_api_key(settings: Settings | None = None) -> str | None:
+    """Resolve the Tavily API key for the active deployment mode.
+
+    Local mode (default) reads ``settings.tavily_api_key`` (populated from the
+    ``.env`` / ``TAVILY_API_KEY`` environment variable) and never touches AWS.
+
+    Serverless mode fetches the key from AWS Secrets Manager when
+    ``settings.secrets_tavily_api_key`` is set, caching the resolved value at
+    module level so the lookup happens once per cold start. ``boto3`` is
+    imported lazily here so importing this module in local mode has no AWS
+    dependency.
+
+    Returns:
+        The Tavily API key, or ``None`` if it could not be resolved.
+    """
+    global _cached_tavily_api_key
+
+    if _cached_tavily_api_key is not _UNRESOLVED:
+        return _cached_tavily_api_key  # type: ignore[return-value]
+
+    settings = settings or get_settings()
+
+    # Serverless cold-start path: pull the key from Secrets Manager.
+    if settings.deployment_mode == "serverless" and settings.secrets_tavily_api_key:
+        key = _load_tavily_key_from_secrets_manager(
+            settings.secrets_tavily_api_key, settings.aws_region
+        )
+        _cached_tavily_api_key = key
+        return key
+
+    # Local mode (unchanged behavior): read from settings/.env.
+    _cached_tavily_api_key = settings.tavily_api_key
+    return settings.tavily_api_key
+
+
+def _load_tavily_key_from_secrets_manager(secret_id: str, region: str | None) -> str | None:
+    """Fetch the Tavily API key from AWS Secrets Manager (serverless only).
+
+    ``boto3`` is imported inside the function so local mode never needs it. The
+    secret value may be a raw string or a JSON document; when JSON, the common
+    key names (``TAVILY_API_KEY``, ``tavily_api_key``, ``api_key``) are tried.
+    """
+    try:
+        import boto3  # imported lazily; serverless-only dependency
+
+        client = boto3.client("secretsmanager", region_name=region)
+        response = client.get_secret_value(SecretId=secret_id)
+        secret_string: str | None = response.get("SecretString")
+        if not secret_string:
+            logger.error("[TAVILY] Secrets Manager returned no SecretString for %s", secret_id)
+            return None
+
+        secret_string = secret_string.strip()
+        if secret_string.startswith("{"):
+            try:
+                data = json.loads(secret_string)
+                for name in ("TAVILY_API_KEY", "tavily_api_key", "api_key"):
+                    if data.get(name):
+                        return str(data[name])
+                logger.error("[TAVILY] No recognized Tavily key field in secret %s", secret_id)
+                return None
+            except json.JSONDecodeError:
+                # Not actually JSON; fall through and treat as a raw string.
+                pass
+
+        return secret_string
+    except Exception as e:  # pragma: no cover - exercised in serverless env
+        logger.error(
+            "[TAVILY] Failed to load Tavily API key from Secrets Manager (%s): %s",
+            secret_id,
+            e,
+        )
+        return None
+
+
+def reset_tavily_api_key_cache() -> None:
+    """Reset the cached Tavily key (test helper / forced cold-start simulation)."""
+    global _cached_tavily_api_key
+    _cached_tavily_api_key = _UNRESOLVED
 
 
 class TavilySearchClient:
@@ -30,10 +135,18 @@ class TavilySearchClient:
             timeout: Request timeout in seconds (falls back to settings.web_search_timeout)
         """
         # Load defaults from settings
+        settings = get_settings()
         if timeout is None:
-            timeout = get_settings().web_search_timeout
+            timeout = settings.web_search_timeout
 
-        self.api_key = api_key or os.environ.get("TAVILY_API_KEY")
+        # Key resolution order:
+        #   1. Explicit api_key argument (callers / tests)
+        #   2. TAVILY_API_KEY env var (preserves prior local behavior exactly)
+        #   3. Deployment-mode resolver: local -> settings.tavily_api_key;
+        #      serverless -> Secrets Manager (cached once per cold start)
+        self.api_key = (
+            api_key or os.environ.get("TAVILY_API_KEY") or _resolve_tavily_api_key(settings)
+        )
         self.timeout = timeout
         self.tavily_url = "https://api.tavily.com/search"
         self.session = requests.Session()
@@ -105,13 +218,23 @@ class TavilySearchClient:
                 logger.warning(f"[TAVILY] No results field in response: {list(data.keys())}")
                 return [], "no_results"
 
+            retrieved_at = datetime.now(timezone.utc).isoformat()
             results = []
             for result in data.get("results", []):
+                # Per the shared response schema (design "Response Schema
+                # (both modes)") every web source must carry a non-empty `url`
+                # and `timestamp`. Tavily results without a URL are not usable
+                # as citable sources, so they are skipped (Requirement 10.5).
+                url = (result.get("url") or "").strip()
+                if not url:
+                    logger.debug("[TAVILY] Skipping result with empty URL: %s", result.get("title"))
+                    continue
                 results.append(
                     {
                         "title": result.get("title", ""),
                         "snippet": result.get("content", ""),
-                        "url": result.get("url", ""),
+                        "url": url,
+                        "timestamp": retrieved_at,
                         "source": "Tavily",
                         "score": result.get("score", 0),
                     }

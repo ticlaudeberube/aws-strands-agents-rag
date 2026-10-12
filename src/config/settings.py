@@ -1,8 +1,9 @@
 """Configuration settings for the application."""
 
 import os
+from typing import Any, Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings
 
 
@@ -81,11 +82,90 @@ class Settings(BaseSettings):
     milvus_ivf_nlist: int = int(os.getenv("MILVUS_IVF_NLIST", "128"))  # IVF_FLAT nlist parameter
 
     # Deployment Mode
+    # Single source of truth for selecting backends. "local" wires Ollama +
+    # Milvus + FastAPI; "serverless" wires Bedrock + OpenSearch + Lambda.
+    deployment_mode: Literal["local", "serverless"] = Field(
+        default="local",
+        validation_alias="DEPLOYMENT_MODE",
+        description=(
+            'Deployment mode: "local" (Ollama + Milvus + FastAPI) or '
+            '"serverless" (Bedrock + OpenSearch + Lambda).'
+        ),
+    )
+    # Backward-compatible boolean. Retained so existing code reading
+    # `settings.use_agentcore` keeps working. It is derived from
+    # `deployment_mode` (use_agentcore == (deployment_mode == "serverless")).
+    # If only the legacy USE_AGENTCORE env var is set (and DEPLOYMENT_MODE is
+    # not), its value seeds deployment_mode so old configs still select the
+    # serverless/AgentCore path.
     use_agentcore: bool = Field(
         default=False,
         validation_alias="USE_AGENTCORE",
-        description="Set to True to use AgentCore (serverless/cloud) mode; False for local Strands agent.",
+        description="Derived from deployment_mode; True in serverless/AgentCore mode, False locally.",
     )
+
+    @staticmethod
+    def _coerce_bool(value: Any) -> bool:
+        """Interpret a raw config value as a boolean the way pydantic does."""
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return bool(value)
+        if isinstance(value, str):
+            return value.strip().lower() in {"1", "true", "yes", "on", "t", "y"}
+        return bool(value)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _promote_legacy_use_agentcore(cls, data: Any) -> Any:
+        """Backward-compatibility bridge for the legacy ``USE_AGENTCORE`` flag.
+
+        ``deployment_mode`` is the single source of truth. If an existing
+        config supplies only the legacy ``USE_AGENTCORE`` flag (and does not
+        set ``DEPLOYMENT_MODE``), promote the mode to ``"serverless"`` so old
+        configurations keep selecting the serverless/AgentCore path.
+
+        This runs in ``before`` mode so the decision is based on what the
+        config *sources* actually provided (env vars, ``.env`` file, init
+        kwargs) rather than on resolved defaults. The raw input ``data`` dict
+        is keyed by the alias/field names that were supplied by a source;
+        fields that fall back to their default are absent from it, which makes
+        it the reliable signal that ``model_fields_set`` and ``os.getenv``
+        cannot provide (the latter does not see ``.env`` file values).
+        """
+        if not isinstance(data, dict):
+            return data
+
+        def _provided(*keys: str) -> bool:
+            return any(k in data for k in keys)
+
+        def _get(*keys: str) -> Any:
+            for k in keys:
+                if k in data:
+                    return data[k]
+            return None
+
+        deployment_mode_provided = _provided("deployment_mode", "DEPLOYMENT_MODE")
+        use_agentcore_provided = _provided("use_agentcore", "USE_AGENTCORE")
+
+        if not deployment_mode_provided and use_agentcore_provided:
+            if cls._coerce_bool(_get("use_agentcore", "USE_AGENTCORE")):
+                # Write using the field's validation alias so the value is
+                # accepted (the field only permits the DEPLOYMENT_MODE alias).
+                data["DEPLOYMENT_MODE"] = "serverless"
+
+        return data
+
+    @model_validator(mode="after")
+    def _sync_use_agentcore(self) -> "Settings":
+        """Re-derive ``use_agentcore`` from the authoritative deployment_mode.
+
+        ``use_agentcore == (deployment_mode == "serverless")`` always holds, so
+        existing code reading ``settings.use_agentcore`` keeps working and the
+        two settings can never disagree.
+        """
+        object.__setattr__(self, "use_agentcore", self.deployment_mode == "serverless")
+        return self
 
     # AgentCore Distributed Cache/Session Analytics (for Lambda/Bedrock)
     redis_cache_enabled: bool = Field(
@@ -131,6 +211,119 @@ class Settings(BaseSettings):
         default=False,
         validation_alias="ENABLE_QUESTION_ANALYTICS",
         description="Enable question analytics for AgentCore sessions.",
+    )
+
+    # ------------------------------------------------------------------
+    # Serverless Mode Configuration (deployment_mode == "serverless")
+    # ------------------------------------------------------------------
+    # All serverless fields have safe defaults so that importing/instantiating
+    # Settings in local mode never requires any AWS configuration.
+
+    # Bedrock (LLM inference + embeddings)
+    bedrock_inference_model_id: str = Field(
+        default="anthropic.claude-3-haiku-20240307-v1:0",
+        validation_alias="BEDROCK_INFERENCE_MODEL_ID",
+        description="Default Bedrock model ID used for answer generation.",
+    )
+    bedrock_embedding_model_id: str = Field(
+        default="amazon.titan-embed-text-v1",
+        validation_alias="BEDROCK_EMBEDDING_MODEL_ID",
+        description="Bedrock model ID used for query/document embeddings (1536-dim).",
+    )
+    bedrock_model_override: str | None = Field(
+        default=None,
+        validation_alias="BEDROCK_MODEL_OVERRIDE",
+        description="Optional Bedrock model ID that overrides the default inference model.",
+    )
+    bedrock_embedding_dim: int = Field(
+        default=1536,
+        validation_alias="BEDROCK_EMBEDDING_DIM",
+        description="Raw embedding dimension returned by the Bedrock embedding model.",
+    )
+    bedrock_pca_target_dim: int = Field(
+        default=768,
+        validation_alias="BEDROCK_PCA_TARGET_DIM",
+        description=(
+            "Target embedding dimension after PCA reduction, matching the OpenSearch "
+            "768-dim k-NN index (and the local nomic-embed-text:v1.5 dimension)."
+        ),
+    )
+    bedrock_pca_matrix_uri: str | None = Field(
+        default=None,
+        validation_alias="BEDROCK_PCA_MATRIX_URI",
+        description=(
+            "Location of the pre-computed PCA projection matrix "
+            "(e.g. s3://bucket/key.npy or a local .npy path). When unset, a "
+            "deterministic built-in projection derived from the matrix dimensions is used."
+        ),
+    )
+
+    # OpenSearch Serverless (vector store + Layer 4 semantic cache)
+    opensearch_endpoint: str | None = Field(
+        default=None,
+        validation_alias="OPENSEARCH_ENDPOINT",
+        description="OpenSearch Serverless collection endpoint (HTTPS, VPC).",
+    )
+    opensearch_kb_index: str = Field(
+        default="rag-kb",
+        validation_alias="OPENSEARCH_KB_INDEX",
+        description="OpenSearch index name for the knowledge base documents.",
+    )
+    opensearch_cache_index: str = Field(
+        default="rag-cache",
+        validation_alias="OPENSEARCH_CACHE_INDEX",
+        description="OpenSearch index name for the Layer 4 semantic response cache.",
+    )
+
+    # ElastiCache Redis (Layer 2 embedding cache / Layer 3 search result cache)
+    redis_endpoint: str | None = Field(
+        default=None,
+        validation_alias="REDIS_ENDPOINT",
+        description="ElastiCache Redis endpoint (TLS) for distributed cache in serverless mode.",
+    )
+    redis_embedding_ttl: int = Field(
+        default=3600,
+        validation_alias="REDIS_EMBEDDING_TTL",
+        description="TTL in seconds for Layer 2 embedding cache entries (default 1 hour).",
+    )
+    redis_search_ttl: int = Field(
+        default=86400,
+        validation_alias="REDIS_SEARCH_TTL",
+        description="TTL in seconds for Layer 3 search result cache entries (default 24 hours).",
+    )
+
+    # Document indexing pipeline (shared chunking bound)
+    max_chunk_length: int = Field(
+        default=400,
+        validation_alias="MAX_CHUNK_LENGTH",
+        description=(
+            "Maximum number of tokens per document chunk, shared by the local "
+            "document loaders and the serverless indexing pipeline (Requirement 9.2)."
+        ),
+    )
+
+    # DynamoDB (session history + indexing analytics)
+    dynamodb_session_table: str | None = Field(
+        default=None,
+        validation_alias="DYNAMODB_SESSION_TABLE",
+        description="DynamoDB table storing conversation history (TTL 24h).",
+    )
+    dynamodb_analytics_table: str | None = Field(
+        default=None,
+        validation_alias="DYNAMODB_ANALYTICS_TABLE",
+        description="DynamoDB table storing per-query/indexing analytics.",
+    )
+
+    # Secrets Manager (secret identifiers resolved at Lambda cold start)
+    secrets_tavily_api_key: str | None = Field(
+        default=None,
+        validation_alias="SECRETS_TAVILY_API_KEY",
+        description="Secrets Manager secret name/ARN holding the Tavily API key.",
+    )
+    secrets_redis_credentials: str | None = Field(
+        default=None,
+        validation_alias="SECRETS_REDIS_CREDENTIALS",
+        description="Secrets Manager secret name/ARN holding Redis credentials.",
     )
 
     # Retrieval Tuning (Phase 3B)

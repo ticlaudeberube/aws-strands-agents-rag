@@ -51,12 +51,18 @@ from pydantic import BaseModel, Field
 from strands import Agent
 from strands.tools import tool
 
-from src.agents import prompts
+from src.agents import prompts, rag_routing
 from src.agents.decorators import retry_with_backoff
 from src.agents.node_config import NodeConfigManager
 from src.agents.node_metrics import GraphMetrics, NodeMetrics
 from src.config import Settings
-from src.tools import MilvusResponseCache, MilvusVectorDB, OllamaClient, WebSearchClient
+from src.tools import (
+    InMemoryCache,
+    MilvusResponseCache,
+    MilvusVectorDB,
+    OllamaClient,
+    WebSearchClient,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -784,51 +790,209 @@ def _is_question_in_scope(question: str, ollama_client: OllamaClient, settings: 
 # ============================================================================
 
 
+def _build_serverless_backends(
+    settings: Settings,
+    bedrock_client: Any | None = None,
+    opensearch_client: Any | None = None,
+    redis_cache: Any | None = None,
+) -> tuple[Any, Any, Any, Any]:
+    """Resolve the serverless-mode backend set (Bedrock + OpenSearch + Redis).
+
+    Returns ``(llm, vector_store, cache, semantic_cache)`` where the Layer 4
+    semantic cache is served by the OpenSearch ``rag-cache`` index (the same
+    client as the vector store, via its ``search_semantic_cache`` /
+    ``store_semantic_cache`` methods).
+
+    Backend selection by mode (serverless):
+
+    - ``llm``           -> :class:`~src.tools.bedrock_client.BedrockClient`
+      (``claude-3-haiku`` generation, ``titan-embed-text-v1`` embeddings with
+      1536->768 PCA).
+    - ``vector_store``  -> :class:`~src.tools.opensearch_client.OpenSearchClient`
+      (``rag-kb`` k-NN index).
+    - ``cache``         -> :class:`~src.tools.redis_cache.RedisCache`
+      (ElastiCache Layer 2/3).
+    - ``semantic_cache``-> the same ``OpenSearchClient`` (``rag-cache`` index,
+      Layer 4).
+
+    Injection-first construction
+    ----------------------------
+    Pre-built instances (passed by the Lambda handler or tests) are always used
+    as-is. Only when an instance is **not** injected is a default constructed
+    from ``settings``. ``BedrockClient`` and ``RedisCache`` defer their AWS
+    client/connection creation until first use (``boto3`` / ``redis`` are
+    imported lazily), so constructing them never requires the serverless SDKs to
+    be installed. ``OpenSearchClient`` eagerly builds its ``opensearch-py``
+    client on construction; if the dependency is absent (or the endpoint is not
+    configured) a clear :class:`RuntimeError` is raised naming the missing piece
+    and pointing at the inject-a-client remedy, rather than an opaque import
+    error.
+    """
+    from src.tools.bedrock_client import BedrockClient
+    from src.tools.opensearch_client import OpenSearchClient
+    from src.tools.redis_cache import RedisCache
+
+    # Bedrock + Redis defer their SDK import / connection to first use, so a
+    # default instance can always be constructed without boto3/redis present.
+    llm = bedrock_client if bedrock_client is not None else BedrockClient(settings)
+    cache = redis_cache if redis_cache is not None else RedisCache(settings)
+
+    # OpenSearch is the one client that eagerly builds its transport on
+    # construction. Prefer the injected instance; otherwise construct a default
+    # and translate a missing-dependency / unconfigured-endpoint failure into a
+    # clear, actionable error.
+    if opensearch_client is not None:
+        vector_store = opensearch_client
+    else:
+        try:
+            vector_store = OpenSearchClient(settings)
+        except (ImportError, ValueError) as exc:
+            raise RuntimeError(
+                "Could not construct a default OpenSearchClient for serverless "
+                "mode. Install the serverless extra (opensearch-py) and set "
+                "OPENSEARCH_ENDPOINT, or pass a pre-built opensearch_client to "
+                f"create_rag_graph(). (Original error: {exc})"
+            ) from exc
+
+    # Serverless L4 semantic cache is the OpenSearch rag-cache index, served by
+    # the same OpenSearch client (search_semantic_cache / store_semantic_cache).
+    semantic_cache = vector_store
+
+    logger.info("Serverless backends resolved: Bedrock + OpenSearch + Redis")
+    return llm, vector_store, cache, semantic_cache
+
+
 def create_rag_graph(
     settings: Settings,
     fast_model_id: str | None = None,
     rag_model_id: str | None = None,
+    # --- Dual-mode backend injection points -------------------------------
+    # Local Mode backends
+    ollama_client: OllamaClient | None = None,
     milvus_client: MilvusVectorDB | None = None,
+    # Serverless Mode backends (constructed in later tasks 4/5/6; accepted here
+    # as pre-built instances so the module imports and local mode works without
+    # the serverless client modules being present).
+    bedrock_client: Any | None = None,
+    opensearch_client: Any | None = None,
+    redis_cache: Any | None = None,
 ):
-    """Create a refactored Strands Graph-based RAG Agent.
+    """Create the dual-mode Strands Graph-based RAG Agent.
+
+    This is the single wiring point for both deployment modes. It reads
+    ``settings.deployment_mode`` **once** at construction time and injects the
+    mode-appropriate backend clients into the RAG worker. ``TopicChecker`` and
+    ``SecurityChecker`` are backend-agnostic (pure in-process keyword/pattern
+    matching) and behave identically in both modes.
 
     The graph implements three specialized nodes:
-    1. Topic Checker (fast, ~3B parameter model)
-    2. Security Checker (fast, ~3B parameter model)
-    3. RAG Worker (powerful, ~8B+ parameter model)
+    1. Topic Checker (fast, backend-agnostic scope keyword matching)
+    2. Security Checker (fast, backend-agnostic injection/jailbreak matching)
+    3. RAG Worker (retrieval + generation through the injected backends)
+
+    Backend wiring by mode:
+
+    - ``deployment_mode == "local"`` (default): ``OllamaClient`` +
+      ``MilvusVectorDB`` + ``InMemoryCache`` (L1/L2/L3) +
+      ``MilvusResponseCache`` (L4 semantic cache). This path is byte-for-byte
+      equivalent to the previous behavior driven by ``api_server.py``.
+    - ``deployment_mode == "serverless"``: ``BedrockClient`` +
+      ``OpenSearchClient`` + ``RedisCache`` (OpenSearch ``rag-cache`` index as
+      the L4 semantic cache). These clients are built in later tasks; this
+      factory accepts pre-constructed instances and only attempts to construct
+      defaults lazily, raising a clear ``NotImplementedError`` if a required
+      serverless client has not yet been provided.
 
     Args:
-        settings: Application configuration
-        fast_model_id: Model ID for topic/security checkers (default: ollama_model from settings)
-        rag_model_id: Model ID for RAG worker (default: ollama_model from settings)
-        milvus_client: Optional pre-initialized Milvus client (creates new if None)
+        settings: Application configuration (``settings.deployment_mode`` selects
+            the backend set).
+        fast_model_id: Model ID for topic/security checker agents
+            (default: ``settings.ollama_model``). Local-mode only.
+        rag_model_id: Model ID for the RAG worker agent
+            (default: ``settings.ollama_model``). Local-mode only.
+        ollama_client: Optional pre-initialized Ollama client (local mode).
+            Created from settings when ``None``.
+        milvus_client: Optional pre-initialized Milvus client (local mode).
+            Created from settings when ``None``.
+        bedrock_client: Optional pre-initialized Bedrock client (serverless mode).
+        opensearch_client: Optional pre-initialized OpenSearch client
+            (serverless mode).
+        redis_cache: Optional pre-initialized Redis cache (serverless mode).
 
     Returns:
-        Configured GraphBuilder instance
+        A graph configuration dict containing the Strands agents, nodes, and
+        routing functions.
     """
 
-    # Initialize backend systems
-    ollama_client = OllamaClient(
-        host=settings.ollama_host,
-        timeout=settings.ollama_timeout,
-        pool_size=settings.ollama_pool_size,
-    )
+    # Read the deployment mode ONCE at construction. The node logic never
+    # re-checks the mode per request.
+    deployment_mode = settings.deployment_mode
 
-    vector_db = milvus_client or MilvusVectorDB(
-        host=settings.milvus_host,
-        port=settings.milvus_port,
-        db_name=settings.milvus_db_name,
-        user=settings.milvus_user,
-        password=settings.milvus_password,
-        timeout=settings.milvus_timeout,
-        pool_size=settings.milvus_pool_size,
-    )
+    # The backend handles consumed by the RAG worker tools. These are populated
+    # per mode below. ``cache`` conforms to the CacheBackend protocol and
+    # ``semantic_cache`` to the SemanticCache protocol so the worker can consume
+    # them through the shared interfaces regardless of mode.
+    cache: Any
+    semantic_cache: Any
+
+    if deployment_mode == "serverless":
+        llm, vector_store, cache, semantic_cache = _build_serverless_backends(
+            settings,
+            bedrock_client=bedrock_client,
+            opensearch_client=opensearch_client,
+            redis_cache=redis_cache,
+        )
+        # The RAG worker tools below are written against the local
+        # Ollama/Milvus clients; the serverless backends are wired into the
+        # shared routing in a later task (8.1). Keep local names bound to the
+        # serverless clients so the shared node closures resolve consistently.
+        ollama_runtime = llm
+        vector_db = vector_store
+    else:  # "local"
+        # Local Mode: Ollama + Milvus + InMemoryCache + MilvusResponseCache.
+        # Prefer injected instances (tests / reuse); otherwise construct from
+        # settings exactly as before so local behavior is unchanged.
+        ollama_runtime = ollama_client or OllamaClient(
+            host=settings.ollama_host,
+            timeout=settings.ollama_timeout,
+            pool_size=settings.ollama_pool_size,
+        )
+
+        vector_db = milvus_client or MilvusVectorDB(
+            host=settings.milvus_host,
+            port=settings.milvus_port,
+            db_name=settings.milvus_db_name,
+            user=settings.milvus_user,
+            password=settings.milvus_password,
+            timeout=settings.milvus_timeout,
+            pool_size=settings.milvus_pool_size,
+        )
+
+        # Shared-interface backends for the local hot cache (L1/L2/L3) and the
+        # persistent L4 semantic cache. Wired here so the shared routing (task
+        # 8.1) can consume them through CacheBackend / SemanticCache; the
+        # existing node logic below is unchanged, preserving current behavior.
+        cache = InMemoryCache(ttl=settings.embedding_cache_ttl)
+        semantic_cache = MilvusResponseCache(
+            vector_db=vector_db,
+            embedding_dim=settings.response_cache_embedding_dim,
+            distance_threshold=settings.response_cache_threshold,
+        )
+
+    # The RAG worker tools and node closures below operate against the local
+    # Ollama/Milvus client surface. In local mode these are the real local
+    # clients; the serverless branch binds the serverless clients to the same
+    # names for later wiring in task 8.1.
+    ollama_client = ollama_runtime
 
     # Use provided model IDs or fall back to settings
     fast_model = fast_model_id or settings.ollama_model
     rag_model = rag_model_id or settings.ollama_model
 
-    logger.info(f"Creating RAG Graph with models: fast={fast_model}, rag={rag_model}")
+    logger.info(
+        f"Creating RAG Graph (mode={deployment_mode}) with models: "
+        f"fast={fast_model}, rag={rag_model}"
+    )
 
     # Initialize web search client (only if enabled)
     web_search = None
@@ -1220,7 +1384,7 @@ def create_rag_graph(
     # Build the graph with real Strands agent instances and routing functions
     # Actual execution uses agent.invoke() calls with conditional routing
 
-    graph_config = {
+    graph_config: dict[str, Any] = {
         "nodes": {
             "topic_check": topic_check_node,
             "security_check": security_check_node,
@@ -1298,6 +1462,55 @@ def create_rag_graph(
     # RETURN CONFIG WITH REAL STRANDS AGENTS
     # ========================================================================
 
+    # ========================================================================
+    # SHARED RAGWORKER ROUTING (Cache → KB → Web Search)
+    # ========================================================================
+    # The shared, backend-agnostic routing (``route_rag_query``) honours the
+    # three-tier decisions identically in both modes: 0.92 semantic threshold,
+    # temporal-keyword cache bypass, 0.15 web-search fallback, force_web_search,
+    # empty-answer fallback, and graceful degradation on Redis/OpenSearch
+    # unavailability (Requirements 2.1-2.6, 3.6, 3.7). It is bound here to the
+    # mode-appropriate backends and the configured thresholds so the Lambda
+    # handler (serverless) can invoke it after TopicChecker/SecurityChecker pass
+    # without re-reading settings or re-constructing clients.
+    #
+    # The KB index differs by mode: the serverless OpenSearch KB index
+    # (``settings.opensearch_kb_index``, default ``rag-kb``) vs. the local
+    # Milvus collection (``milvus_docs``). Local Mode continues to drive answers
+    # through ``StrandsGraphRAGAgent.answer_question`` (unchanged); the shared
+    # route is additionally exposed for parity and testing.
+    kb_index = settings.opensearch_kb_index if deployment_mode == "serverless" else "milvus_docs"
+
+    def shared_route(
+        question: str,
+        top_k: int = rag_routing.DEFAULT_TOP_K,
+        force_web_search: bool = False,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        metric_emitter: Any | None = None,
+    ) -> rag_routing.RoutingResult:
+        """Route a validated query through the shared Cache → KB → Web pipeline.
+
+        Thin binding over :func:`src.agents.rag_routing.route_rag_query` that
+        injects the mode-appropriate backends and configured thresholds.
+        """
+        return rag_routing.route_rag_query(
+            question,
+            llm=ollama_client,
+            vector_store=vector_db,
+            cache=cache,
+            semantic_cache=semantic_cache,
+            web_search=web_search,
+            kb_index=kb_index,
+            top_k=top_k,
+            force_web_search=force_web_search,
+            semantic_threshold=settings.response_cache_threshold,
+            web_fallback_threshold=settings.web_search_fallback_threshold,
+            temperature=(temperature if temperature is not None else settings.ollama_temperature),
+            max_tokens=max_tokens,
+            metric_emitter=metric_emitter,
+        )
+
     graph_config = {
         "strands_agents": {
             "topic_agent": topic_agent,
@@ -1316,10 +1529,27 @@ def create_rag_graph(
             "check_topic_pass": check_topic_pass,
             "check_security_pass": check_security_pass,
         },
+        # Dual-mode wiring metadata. The mode is read once above; these injected
+        # backend handles are exposed so the shared routing (task 8.1) and the
+        # Lambda handler can consume them through the shared interfaces without
+        # re-reading settings.deployment_mode or re-constructing clients.
+        "deployment_mode": deployment_mode,
+        "backends": {
+            "llm": ollama_client,
+            "vector_store": vector_db,
+            "cache": cache,
+            "semantic_cache": semantic_cache,
+            "web_search": web_search,
+        },
+        "kb_index": kb_index,
+        # Shared, backend-agnostic RAGWorker routing honouring the three-tier
+        # decisions (Requirements 2.1-2.6, 3.6, 3.7). Invoked by the serverless
+        # Lambda handler after the TopicChecker/SecurityChecker nodes pass.
+        "shared_route": shared_route,
     }
 
     logger.info(
-        "✓ RAG Graph created with Strands agents: "
+        f"✓ RAG Graph created (mode={deployment_mode}) with Strands agents: "
         "TopicChecker → SecurityChecker → RAGWorker (3-node architecture)"
     )
 

@@ -1,10 +1,19 @@
 """Tools module for agents."""
 
+from .in_memory_cache import InMemoryCache
+from .interfaces import (
+    CacheBackend,
+    LLMClient,
+    SemanticCache,
+    SemanticCacheAdapter,
+    VectorStore,
+    VectorStoreAdapter,
+)
 from .milvus_client import MilvusVectorDB
 from .ollama_client import OllamaClient
 from .response_cache import MilvusResponseCache
+from .tool_registry import ToolDefinition, ToolRegistry, get_registry, reset_registry
 from .web_search import WebSearchClient
-from .tool_registry import ToolRegistry, ToolDefinition, get_registry, reset_registry
 
 __all__ = [
     "MilvusVectorDB",
@@ -15,4 +24,11 @@ __all__ = [
     "ToolDefinition",
     "get_registry",
     "reset_registry",
+    "InMemoryCache",
+    "CacheBackend",
+    "LLMClient",
+    "SemanticCache",
+    "SemanticCacheAdapter",
+    "VectorStore",
+    "VectorStoreAdapter",
 ]

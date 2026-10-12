@@ -1,5 +1,6 @@
 """Pytest configuration and shared fixtures."""
 
+import os
 import socket
 import sys
 from functools import lru_cache
@@ -9,6 +10,38 @@ import pytest
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
+
+# ---------------------------------------------------------------------------
+# Hypothesis profiles
+#
+# Property-based tests (feature: serverless-deployment) can be slow when run
+# with Hypothesis' default of 100 examples per property across dozens of
+# properties. We register named profiles and select one via the
+# HYPOTHESIS_PROFILE environment variable so the suite runs fast locally while
+# still allowing a thorough CI run.
+#
+#   fast  (default) -> 20 examples, no deadline  -> quick local iteration
+#   dev             -> 50 examples               -> balanced
+#   ci              -> 200 examples              -> thorough pre-merge run
+#
+# Override at runtime, e.g.:
+#   HYPOTHESIS_PROFILE=ci pytest
+# ---------------------------------------------------------------------------
+try:
+    from hypothesis import HealthCheck, settings
+
+    settings.register_profile("fast", max_examples=20, deadline=None)
+    settings.register_profile("dev", max_examples=50, deadline=None)
+    settings.register_profile(
+        "ci",
+        max_examples=200,
+        deadline=None,
+        suppress_health_check=[HealthCheck.too_slow],
+    )
+    settings.load_profile(os.getenv("HYPOTHESIS_PROFILE", "fast"))
+except ImportError:
+    # Hypothesis not installed yet; property tests will add it as a dependency.
+    pass
 
 from src.agents.strands_graph_agent import StrandsGraphRAGAgent
 from src.config.settings import Settings

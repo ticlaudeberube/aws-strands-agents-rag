@@ -177,8 +177,8 @@ Both modes are validated by a final integration/smoke task.
     - **Validates: Requirements 10.3, 10.5**
     - File: `tests/test_routing.py` (random queries + Tavily mocked, random result sets)
 
-- [ ] 10. Lambda chat handler (`agentcore_handler.py`)
-  - [ ] 10.1 Implement request parsing, validation, and `top_k` guard
+- [x] 10. Lambda chat handler (`agentcore_handler.py`)
+  - [x] 10.1 Implement request parsing, validation, and `top_k` guard
     - Replace the stub in `src/agents/agentcore_handler.py`: parse body extracting `question`, `session_id`, optional `force_web_search`, optional `top_k`
     - Return HTTP 400 for malformed JSON (`BAD_REQUEST`), missing `question` (`MISSING_FIELD`), and `top_k` outside [1,50] (`INVALID_TOP_K`) before invoking any agent node
     - _Requirements: 1.1, 4.4_
@@ -189,7 +189,7 @@ Both modes are validated by a final integration/smoke task.
     - **Validates: Requirements 1.1, 4.4**
     - File: `tests/test_handler_parsing.py`
 
-  - [ ] 10.3 Implement DynamoDB session load/persist and graph invocation
+  - [x] 10.3 Implement DynamoDB session load/persist and graph invocation
     - Add a `DynamoDBClient` helper (session + analytics tables); load history via `query(session_id, ScanIndexForward=True, Limit=20)`; invoke the serverless graph via `create_rag_graph`
     - Persist Q/A to the session table with `ttl = floor(now) + 86400`; degrade gracefully on read/write failures per the error table
     - _Requirements: 1.3, 1.4_
@@ -199,7 +199,7 @@ Both modes are validated by a final integration/smoke task.
     - **Validates: Requirements 1.4**
     - File: `tests/test_handler_session.py` (random Q/A strings, timestamps)
 
-  - [ ] 10.5 Implement structured error handling and HTTP 500 envelope
+  - [x] 10.5 Implement structured error handling and HTTP 500 envelope
     - Catch unhandled exceptions, log full stack trace, emit `errors/total`, return HTTP 500 with `{error_code, message}`
     - Map documented conditions (`LLM_ERROR`, `INTERNAL_ERROR`, etc.) per the error-handling table
     - _Requirements: 1.5, 6.6_
@@ -209,7 +209,7 @@ Both modes are validated by a final integration/smoke task.
     - **Validates: Requirements 1.5**
     - File: `tests/test_handler_errors.py` (random exception types/messages)
 
-  - [ ] 10.7 Implement structured JSON logging and custom CloudWatch metrics
+  - [x] 10.7 Implement structured JSON logging and custom CloudWatch metrics
     - Emit log fields `request_id`, `session_id`, `tier_used`, `latency_ms`, `cache_hit`, `error_code`, and `cold_start=true` on cold start
     - Emit metrics `cache/hit_rate`, `cache/miss_rate`, `rag/latency_p50`, `rag/latency_p99`, `websearch/invocation_count`, `errors/total`; enable X-Ray tracing hooks
     - _Requirements: 12.1, 12.2, 12.5_
@@ -219,11 +219,11 @@ Both modes are validated by a final integration/smoke task.
     - **Validates: Requirements 12.1, 12.5**
     - File: `tests/test_handler_logging.py` (random cold/warm, success/error invocations)
 
-- [ ] 11. Checkpoint - serverless handler end-to-end (mocked backends)
+- [x] 11. Checkpoint - serverless handler end-to-end (mocked backends)
   - Ensure all handler and routing tests pass, ask the user if questions arise.
 
-- [ ] 12. Document indexing pipeline Lambda
-  - [ ] 12.1 Implement shared chunking and the indexing handler
+- [x] 12. Document indexing pipeline Lambda
+  - [x] 12.1 Implement shared chunking and the indexing handler
     - Ensure the shared chunking function enforces ≤ 400-token chunks (used by local loaders and the pipeline)
     - Create `src/indexing/indexing_handler.py`: S3 `ObjectCreated` handler that downloads, chunks, embeds via `BedrockClient`, indexes into `rag-kb`, and records `{doc_key, s3_uri, chunk_count, indexed_at}` in the analytics table
     - Implement idempotent skip on matching `(key, etag)` with `indexing/document_skipped` log and `indexing/skip_enforcement_failure` defect metric

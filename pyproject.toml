@@ -72,13 +72,18 @@ warn_unused_configs = true
 disallow_untyped_defs = false
 exclude = []
 
-# Ignore missing type stubs for libraries without types-* packages
+# Ignore optional serverless/loader imports that are environment-dependent or
+# intentionally not installed in the default developer setup.
 [[tool.mypy.overrides]]
 module = [
     "bleach",
     "boto3",
     "boto3.*",
     "msgpack",
+    "msgpack.*",
+    "redis",
+    "redis.*",
+    "document_loaders.*",
     "aws_xray_sdk",
     "aws_xray_sdk.*",
 ]

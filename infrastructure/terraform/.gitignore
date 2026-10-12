@@ -1,0 +1,23 @@
+# Local .terraform directories (provider plugins, downloaded modules)
+**/.terraform/*
+
+# Terraform state and backups
+*.tfstate
+*.tfstate.*
+
+# Crash log files
+crash.log
+crash.*.log
+
+# Plan output files
+*.tfplan
+
+# CLI configuration files
+.terraformrc
+terraform.rc
+
+# NOTE: .terraform.lock.hcl IS committed on purpose to pin provider versions.
+
+# Generated Lambda packaging artifacts (compute module placeholder zip + any
+# CI-built deployment zips). CI builds the real artifact at deploy time.
+modules/compute/build/

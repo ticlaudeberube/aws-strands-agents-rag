@@ -123,6 +123,51 @@ Responses show badges indicating the source type:
 - Click to instantly load cached answer
 - Managed by semantic similarity search
 
+## Configuration (Local vs Serverless)
+
+The same source serves both modes; which environment variables you set decides
+the behavior. The resolution logic lives in `src/config/api.js`.
+
+### Environment variables
+
+| Variable | Mode | Purpose |
+|----------|------|---------|
+| `REACT_APP_API_HOST` | Local | API host for local dev (default `localhost`) |
+| `REACT_APP_API_PORT` | Local | API port for local dev (default `8000`) |
+| `REACT_APP_API_URL` | Serverless | Full HTTPS API Gateway base URL. When set, used **verbatim** and the localhost host/port fallback is ignored (Requirement 8.4) |
+| `REACT_APP_AUTH_ENABLED` | Serverless | Set `true` to force Cognito auth on. Auth is also auto-enabled when a user pool id is present |
+| `REACT_APP_USER_POOL_ID` | Serverless | Cognito User Pool id |
+| `REACT_APP_USER_POOL_CLIENT_ID` | Serverless | Cognito User Pool app client id |
+| `REACT_APP_AWS_REGION` | Serverless | AWS region of the user pool |
+
+### Local mode (default)
+
+Leave the serverless variables unset. The app builds `http://${REACT_APP_API_HOST}:${REACT_APP_API_PORT}`
+(defaults to `http://localhost:8000`) and runs with **no authentication** —
+exactly as before.
+
+### Serverless mode
+
+Set `REACT_APP_API_URL` and the Cognito variables (or `REACT_APP_AUTH_ENABLED=true`).
+In this mode:
+
+- Sign-in uses **AWS Amplify Auth** against the Cognito user pool.
+- The JWT access token is held **in memory only** (never `localStorage` /
+  `sessionStorage`) to prevent XSS token theft (Requirement 7.4). See
+  `src/auth/tokenStore.js`.
+- Requests to `/chat` carry `Authorization: Bearer <token>` via
+  `src/auth/authFetch.js`.
+- On an expired/invalid token (HTTP 401) the app silently refreshes using the
+  Cognito refresh token and retries once; if the refresh token is also invalid
+  or absent, the user is redirected to the Cognito sign-in page (Requirement 7.5).
+
+Auth code is isolated under `src/auth/` and the `aws-amplify` SDK is loaded
+dynamically, so it is tree-shakeable and does not run in local mode.
+
+> **Note:** serverless builds must not contain hardcoded `localhost` references
+> (Property 24). The only `localhost` default lives in the local-dev branch of
+> `src/config/api.js`, which is never reached when `REACT_APP_API_URL` is set.
+
 ## Deployment
 
 This React app can be deployed in multiple ways:

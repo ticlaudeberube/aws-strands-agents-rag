@@ -3,11 +3,16 @@ import './App.css';
 import MessageContainer from './components/MessageContainer';
 import ChatInput from './components/ChatInput';
 import CachedResponsesList from './components/CachedResponsesList';
+import { API_BASE_URL, isAuthEnabled } from './config/api';
+import { authFetch } from './auth/authFetch';
+import { ensureSignedIn } from './auth/cognito';
 
-// API Configuration from environment variables
-const API_HOST = process.env.REACT_APP_API_HOST || 'localhost';
-const API_PORT = process.env.REACT_APP_API_PORT || '8000';
-const API_BASE_URL = `http://${API_HOST}:${API_PORT}`;
+// API base URL + auth behavior are resolved in src/config/api.js:
+//   - Serverless builds set REACT_APP_API_URL (full HTTPS API Gateway URL) and
+//     Cognito env vars -> auth enabled, JWT held in memory and attached via
+//     authFetch on the /chat request.
+//   - Local dev leaves those unset -> API_BASE_URL falls back to
+//     REACT_APP_API_HOST/REACT_APP_API_PORT (localhost:8000) and no auth runs.
 
 // Helper function to create consistent timing objects (DRY principle)
 const createTimingData = (totalTimeMs = 0, responseType = 'rag', isCached = false) => ({
@@ -56,8 +61,16 @@ function App() {
 
   // Check API status on mount
   useEffect(() => {
-    checkApiStatus();
-    loadCachedResponses(); // Load cached responses on app startup
+    const init = async () => {
+      // Serverless mode: establish a Cognito session (silent refresh) before
+      // hitting the API. No-op in local mode where auth is disabled.
+      if (isAuthEnabled()) {
+        await ensureSignedIn();
+      }
+      checkApiStatus();
+      loadCachedResponses(); // Load cached responses on app startup
+    };
+    init();
   }, []);
 
   const checkApiStatus = async () => {
@@ -141,7 +154,11 @@ function App() {
         console.log('🌐 FORCE WEB SEARCH ACTIVE - Searching web only (no KB)');
       }
 
-      const response = await fetch(url, {
+      // Use authFetch for the authenticated /chat endpoint: in serverless mode
+      // it attaches the in-memory Cognito JWT (Authorization: Bearer <token>)
+      // and transparently refreshes/redirects on 401; in local mode it is a
+      // plain fetch passthrough with no auth header.
+      const response = await authFetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

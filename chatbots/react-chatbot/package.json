@@ -4,11 +4,12 @@
   "description": "React chatbot for Milvus RAG with streaming responses",
   "private": true,
   "dependencies": {
-  "@types/dompurify": "^3.0.5",
-  "dompurify": "^3.4.0",
-  "react": "^18.2.0",
-  "react-dom": "^18.2.0",
-  "react-scripts": "5.0.1"
+    "@types/dompurify": "^3.0.5",
+    "aws-amplify": "^6.22.1",
+    "dompurify": "^3.4.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-scripts": "^0.0.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.48.0",

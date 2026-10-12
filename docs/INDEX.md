@@ -1,58 +1,23 @@
 # Documentation Index
 
-Quick navigation for committed documentation in this project.
+This is the current, active documentation set for the project.
 
-**Quick Start By Role:**
-- **New Developer**: Start with [README.md](../README.md) → [GETTING_STARTED.md](#getting-started--quick-reference) → [ARCHITECTURE.md](#system-architecture--development)
-- **API Developer**: [API_SERVER.md](#api--integration) → [ARCHITECTURE.md](#system-architecture--development)
-- **Feature Developer**: [DEVELOPMENT.md](#system-architecture--development) → [ARCHITECTURE.md](#system-architecture--development)
-- **DevOps/Deployment**: [GETTING_STARTED.md](#getting-started--quick-reference) → [REACT_DEPLOYMENT.md](#deployment)
+## Start here
 
----
+- [README.md](../README.md) — project overview and quick links
+- [HOW_TO.md](HOW_TO.md) — practical setup and usage guide
+- [GETTING_STARTED.md](GETTING_STARTED.md) — installation and environment setup
+- [ARCHITECTURE.md](ARCHITECTURE.md) — mode selection and runtime flow
+- [API_SERVER.md](API_SERVER.md) — API contract and sample requests
+- [CHATBOT_GUI_FEATURES.md](CHATBOT_GUI_FEATURES.md) — chatbot UI behavior and feature reference
 
-## 🚀 Recent Updates
+## Quick decisions
 
-**Infrastructure Status Analysis (Apr 12, 2026)**: Added comprehensive analysis of actual implementation status vs documentation claims. Verified that core monitoring, retry logic, and health checks are actively working in production, while advanced features (circuit breakers, tracing) are production-ready frameworks. See [INFRASTRUCTURE_IMPLEMENTATION_STATUS.md](INFRASTRUCTURE_IMPLEMENTATION_STATUS.md).
+- Local development: use `DEPLOYMENT_MODE=local`
+- AWS deployment: use `DEPLOYMENT_MODE=serverless`
+- Need runtime behavior details: read [API_SERVER.md](API_SERVER.md)
+- Need architecture context: read [ARCHITECTURE.md](ARCHITECTURE.md)
 
-**Strands Core Agent (Apr 16, 2026)**: Moved specialized Strands agent and all related components (skills, MCP server, demo, documentation) from production directories to `dev_tools/` to establish clear architectural separation. The complete development utility suite now includes StrandsCoreAgent, DocumentationSkill, ProgrammingSkill, CoreAgentMCPServer, and comprehensive examples. See `dev_tools/README.md` and `dev_tools/DOCUMENTATION.md`.
+## Notes
 
-**Graph Agent Architecture (Mar 5, 2026)**: Migrated to 3-node graph-based `StrandsGraphRAGAgent` with pattern-matching security detection. All 77 tests passing. See [ARCHITECTURE.md](ARCHITECTURE.md) and [tests/README.md](../tests/README.md) for details.
-
-**Test Suite Migration (Mar 5, 2026)**: Updated test suite to use new graph agent. 48% code coverage across 619/1303 statements. See [tests/README.md](../tests/README.md) for test statistics.
-
-**Cache System Optimized (Mar 7, 2026)**: Semantic response caching provides <50ms cache hits vs 1-15s full generation. See [CACHING_STRATEGY.md](CACHING_STRATEGY.md).
-
----
-
-## 📚 Committed Documentation Files
-
-### System Architecture & Development
-- **[IMPLEMENTATION_ARCHITECTURE.md](IMPLEMENTATION_ARCHITECTURE.md)** - Complete RAG system implementation documentation with infrastructure components
-- **[INFRASTRUCTURE_IMPLEMENTATION_STATUS.md](INFRASTRUCTURE_IMPLEMENTATION_STATUS.md)** - Actual implementation status vs documentation claims
-- **[DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md)** - Quick API reference and usage patterns for developers
-- **[ARCHITECTURE.md](ARCHITECTURE.md)** - Three-tier system architecture (Cache → KB → Web Search), dual-mode (Strands/AgentCore) architecture, and component details
-- **[QUERY_ROUTING.md](QUERY_ROUTING.md)** - Complete query routing paths, validation layers, and decision logic
-- **[AWS_ARCHITECTURE.md](AWS_ARCHITECTURE.md)** - AWS deployment architectures (ECS/Fargate, Lambda + AgentCore)
-- **[DEVELOPMENT.md](DEVELOPMENT.md)** - Development guidelines and patterns
-- **[dev_tools/AGENT_OVERVIEW.md](../dev_tools/AGENT_OVERVIEW.md)** - Complete guide: StrandsCoreAgent purpose, capabilities, and benefits over standard GitHub Copilot
-- **[dev_tools/README.md](../dev_tools/README.md)** - Development utility suite architecture and integration guide
-- **[CACHING_STRATEGY.md](CACHING_STRATEGY.md)** - Current semantic response cache implementation (single-layer Milvus)
-- **[CACHING_STRATEGY_IMPROVEMENTS.md](CACHING_STRATEGY_IMPROVEMENTS.md)** - 11 caching improvements for container-based deployment
-- **[AGENTCORE_CACHING_STRATEGY.md](AGENTCORE_CACHING_STRATEGY.md)** - Caching strategy for serverless AgentCore deployment
-
-### Getting Started & Quick Reference
-- **[GETTING_STARTED.md](GETTING_STARTED.md)** - Installation, setup, and dual-mode deployment guide (Strands/local and AgentCore/cloud)
-- **[STRANDS_QUICK_REFERENCE.md](STRANDS_QUICK_REFERENCE.md)** - Quick reference for common tasks
-
-### API & Integration
-- **[API_SERVER.md](API_SERVER.md)** - REST API and MCP server endpoints
-
-### Performance
-- **[MODEL_PERFORMANCE_COMPARISON.md](MODEL_PERFORMANCE_COMPARISON.md)** - Model benchmarking and performance analysis
-
-### Deployment
-- **[REACT_DEPLOYMENT.md](REACT_DEPLOYMENT.md)** - React chatbot deployment (Local, Docker, Serverless)
-
----
-
-**Note**: This index documents only committed/staged documentation files in docs/ + README.md at root (14 total).
+This index intentionally excludes historical or implementation-archive documents that no longer reflect the current code or configuration.

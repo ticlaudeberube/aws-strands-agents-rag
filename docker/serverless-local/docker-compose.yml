@@ -1,0 +1,75 @@
+# Local backing services for running SERVERLESS MODE on a developer machine
+# (Option A: real Bedrock + local OpenSearch + local Redis).
+#
+# This stands up the two stateful backends the serverless graph needs, as close
+# as practical to the cloud equivalents, WITHOUT any AWS deploy:
+#
+#   * opensearch  — stand-in for Amazon OpenSearch Serverless (rag-kb / rag-cache
+#                   k-NN indexes). Security plugin DISABLED so the local client
+#                   connects over plain HTTP with no SigV4/basic auth.
+#   * redis       — stand-in for ElastiCache Redis (L2/L3 cache). Plain TCP, no
+#                   TLS, so the runner injects a redis client with ssl=False.
+#
+# Bedrock has no local equivalent and is called for real (see
+# scripts/run_serverless_local.py). Ports are chosen to avoid colliding with the
+# Local Mode Milvus stack (19530/9091/9000/9001) which may be running too.
+services:
+  opensearch:
+    container_name: rag-serverless-opensearch
+    image: opensearchproject/opensearch:2.17.1
+    environment:
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+      # Disable the security plugin: local-only, no TLS, no auth. This is why
+      # the runner can talk to it with a plain http client.
+      - DISABLE_SECURITY_PLUGIN=true
+      - DISABLE_INSTALL_DEMO_CONFIG=true
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    ports:
+      - "9200:9200"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    mem_limit: 2g
+    networks:
+      - rag-serverless
+
+  redis:
+    container_name: rag-serverless-redis
+    image: redis:7.4-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    mem_limit: 512m
+    networks:
+      - rag-serverless
+
+  dynamodb:
+    container_name: rag-serverless-dynamodb
+    image: amazon/dynamodb-local:2.5.2
+    # In-memory DynamoDB Local on port 8001 (8000 is taken by the API server).
+    command: ["-jar", "DynamoDBLocal.jar", "-inMemory", "-port", "8001"]
+    ports:
+      - "8001:8001"
+    mem_limit: 512m
+    networks:
+      - rag-serverless
+
+networks:
+  rag-serverless:
+    driver: bridge

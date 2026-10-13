@@ -295,6 +295,7 @@ resource "aws_lambda_function" "chat" {
   role          = aws_iam_role.lambda_exec.arn
   handler       = "agentcore_handler.lambda_handler"
   runtime       = "python3.12"
+  architectures = ["arm64"]
   memory_size   = var.lambda_memory_size
   timeout       = var.chat_timeout
 
@@ -332,6 +333,7 @@ resource "aws_lambda_function" "indexing" {
   role          = aws_iam_role.lambda_exec.arn
   handler       = "indexing_handler.lambda_handler"
   runtime       = "python3.12"
+  architectures = ["arm64"]
   memory_size   = var.lambda_memory_size
   timeout       = var.indexing_timeout
 

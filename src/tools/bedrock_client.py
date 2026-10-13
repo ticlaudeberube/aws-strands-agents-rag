@@ -11,9 +11,11 @@ Design reference: serverless-deployment design, section "2b. BedrockClient".
 Responsibilities (Requirements 5.1-5.6):
 
 - ``generate(prompt, model_id=None, temperature=0.3, max_tokens=1024)`` invokes
-  Anthropic Claude via the Bedrock Messages API. The default inference model is
-  ``anthropic.claude-3-haiku-20240307-v1:0`` (Req 5.1), overridable per call via
-  ``model_id`` and globally via ``settings.bedrock_model_override`` (Req 5.4).
+  the configured chat model via the Bedrock **Converse** API. Converse uses a
+  single model-agnostic request/response format, so the client works unchanged
+  across Anthropic Claude, Amazon Nova, and Meta Llama; the model is selected by
+  ``model_id`` per call, by ``settings.bedrock_model_override`` globally
+  (Req 5.4), or defaults to ``settings.bedrock_inference_model_id`` (Req 5.1).
 - ``embed_text(text)`` invokes ``amazon.titan-embed-text-v1`` (1536-dim, Req 5.2)
   then applies a deterministic 1536->768 PCA projection (Req 5.3) so the vectors
   align with the 768-dim OpenSearch k-NN index.
@@ -133,27 +135,22 @@ class BedrockClient:
         # Fall back to the exception class name for non-botocore errors.
         return type(exc).__name__ in _THROTTLING_ERROR_CODES
 
-    def _invoke_with_retry(self, body: dict, model_id: str) -> dict:
-        """Invoke a Bedrock model, retrying on throttling with exponential backoff.
+    def _call_with_retry(self, func: Any, model_id: str, op: str) -> Any:
+        """Invoke a Bedrock operation ``func``, retrying on throttling.
 
         Retries up to :data:`_RETRY_MAX_ATTEMPTS` (3) times after the initial
         attempt, sleeping 500ms, 1000ms, then 2000ms between attempts (Req 5.5).
-        Non-throttling errors propagate immediately.
+        Non-throttling errors propagate immediately. ``func`` is a zero-arg
+        callable performing a single Bedrock API call; ``op`` names the
+        operation for log messages.
         """
         attempt = 0
         while True:
             try:
-                response = self.client.invoke_model(
-                    modelId=model_id,
-                    body=json.dumps(body),
-                    accept="application/json",
-                    contentType="application/json",
-                )
-                raw = response["body"].read()
-                return json.loads(raw)  # type: ignore[no-any-return]
+                return func()
             except Exception as exc:  # noqa: BLE001 - re-raised below if not throttling
                 if not self._is_throttling_error(exc):
-                    logger.error(f"Bedrock invoke failed ({model_id}): {exc}")
+                    logger.error(f"Bedrock {op} failed ({model_id}): {exc}")
                     raise
                 if attempt >= _RETRY_MAX_ATTEMPTS:
                     logger.error(
@@ -168,6 +165,53 @@ class BedrockClient:
                 )
                 time.sleep(delay)
                 attempt += 1
+
+    def _invoke_model_json(self, body: dict, model_id: str) -> dict:
+        """Invoke a model via ``invoke_model`` and return the parsed JSON body.
+
+        Used for the embedding model (Titan), which is not a Converse-capable
+        chat model. Retries on throttling via :meth:`_call_with_retry`.
+        """
+
+        def _do() -> dict:
+            response = self.client.invoke_model(
+                modelId=model_id,
+                body=json.dumps(body),
+                accept="application/json",
+                contentType="application/json",
+            )
+            raw = response["body"].read()
+            return json.loads(raw)  # type: ignore[no-any-return]
+
+        return self._call_with_retry(_do, model_id, "invoke_model")
+
+    def _converse(
+        self,
+        model_id: str,
+        prompt: str,
+        temperature: float,
+        max_tokens: int,
+    ) -> dict:
+        """Invoke a chat model via the Bedrock ``converse`` API.
+
+        The Converse API uses a single, model-agnostic request/response shape
+        that works across Anthropic Claude, Amazon Nova, Meta Llama, and other
+        chat models, so the client is not tied to any one provider's native
+        ``invoke_model`` body format. Retries on throttling via
+        :meth:`_call_with_retry`.
+        """
+
+        def _do() -> dict:
+            return self.client.converse(  # type: ignore[no-any-return]
+                modelId=model_id,
+                messages=[{"role": "user", "content": [{"text": prompt}]}],
+                inferenceConfig={
+                    "temperature": temperature,
+                    "maxTokens": max_tokens,
+                },
+            )
+
+        return self._call_with_retry(_do, model_id, "converse")
 
     # ------------------------------------------------------------------
     # Generation (Req 5.1, 5.4, 5.5)
@@ -205,19 +249,12 @@ class BedrockClient:
         model_id = self._resolve_model_id(model)
         tokens = max_tokens if (max_tokens is not None and max_tokens > 0) else 1024
 
-        body = {
-            "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": tokens,
-            "temperature": temperature,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": [{"type": "text", "text": prompt}],
-                }
-            ],
-        }
-
-        result = self._invoke_with_retry(body, model_id)
+        result = self._converse(
+            model_id=model_id,
+            prompt=prompt,
+            temperature=temperature,
+            max_tokens=tokens,
+        )
         return self._extract_text(result)
 
     def _resolve_model_id(self, model: str | None) -> str:
@@ -235,16 +272,26 @@ class BedrockClient:
 
     @staticmethod
     def _extract_text(result: dict) -> str:
-        """Extract answer text from an Anthropic Messages API response body."""
-        content = result.get("content", [])
+        """Extract answer text from a Bedrock ``converse`` response.
+
+        The Converse response shape is model-agnostic:
+        ``{"output": {"message": {"role": "assistant", "content": [{"text": ...}]}}}``.
+        All text blocks are concatenated. Defensive fallbacks cover alternate
+        shapes so a malformed/unexpected body degrades to an empty string rather
+        than raising.
+        """
+        output = result.get("output", {})
+        message = output.get("message", {}) if isinstance(output, dict) else {}
+        content = message.get("content", []) if isinstance(message, dict) else []
         if isinstance(content, list):
             parts = [
                 block.get("text", "")
                 for block in content
-                if isinstance(block, dict) and block.get("type", "text") == "text"
+                if isinstance(block, dict) and "text" in block
             ]
-            return "".join(parts)
-        # Defensive fallback for alternate response shapes.
+            if parts:
+                return "".join(parts)
+        # Defensive fallbacks for alternate/legacy response shapes.
         if isinstance(content, str):
             return content
         return result.get("completion", "")  # type: ignore[no-any-return]
@@ -274,7 +321,7 @@ class BedrockClient:
         model_id = model or self.embedding_model_id
 
         body = {"inputText": text}
-        result = self._invoke_with_retry(body, model_id)
+        result = self._invoke_model_json(body, model_id)
 
         raw_vector = result.get("embedding", [])
         return self._reduce_dimensions(raw_vector)

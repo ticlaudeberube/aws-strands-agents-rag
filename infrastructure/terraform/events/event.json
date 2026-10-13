@@ -1,0 +1,26 @@
+{
+  "version": "2.0",
+  "routeKey": "POST /chat",
+  "rawPath": "/chat",
+  "rawQueryString": "",
+  "headers": {
+    "content-type": "application/json",
+    "accept": "application/json"
+  },
+  "requestContext": {
+    "apiId": "local-test-api",
+    "domainName": "localhost",
+    "http": {
+      "method": "POST",
+      "path": "/chat",
+      "protocol": "HTTP/1.1",
+      "sourceIp": "127.0.0.1",
+      "userAgent": "sam-local-invoke"
+    },
+    "requestId": "local-invoke-0001",
+    "routeKey": "POST /chat",
+    "stage": "$default"
+  },
+  "body": "{\"question\": \"What is this project about?\", \"session_id\": \"local-test-session\", \"top_k\": 5, \"force_web_search\": false}",
+  "isBase64Encoded": false
+}

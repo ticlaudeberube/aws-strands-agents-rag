@@ -19,6 +19,11 @@ API Gateway + DynamoDB + ElastiCache Redis + Cognito + CloudFront + S3).
 - The **Terraform remote-state backend does not exist yet** (see below). This is
   the one manual bootstrap step you must do before the first real `init`.
 
+> **Before deploying, review [docs/AWS_DEPLOYMENT_GAPS.md](../../docs/AWS_DEPLOYMENT_GAPS.md)**
+> — it tracks the known blockers (dead/gated Bedrock model, Lambda package
+> rebuild, state-backend bootstrap, project-Region mismatch, AOSS data-access
+> policy, KB population) that must be addressed for a working AWS deploy.
+
 To just check the config compiles (no AWS needed):
 
 ```bash
@@ -157,13 +162,29 @@ the deployment artifact from `src/` (chat handler
 `indexing_handler.lambda_handler`) and pass it in. Example (adjust to your
 packaging/CI):
 
+The Lambda functions run on the **arm64** (Graviton2) architecture, so the
+deployment package must contain arm64-compatible wheels. Build with pip's
+`--platform manylinux2014_aarch64` so native extensions (pydantic-core, hiredis,
+etc.) match the runtime regardless of the build host's CPU:
+
 ```bash
 # illustrative — wire this into CI
-pip install -r requirements.txt -t build/
+pip install \
+  --platform manylinux2014_aarch64 \
+  --implementation cp \
+  --python-version 3.12 \
+  --only-binary=:all: \
+  --target build/ \
+  -r requirements.txt
 cp -r src build/
 ( cd build && zip -r ../lambda.zip . )
 # then pass -var "lambda_package_path=../../lambda.zip" (+ source_code_hash) on apply
 ```
+
+> If you build on an x86_64 host (or on an Apple Silicon Mac targeting a
+> different arch), the `--platform` flags above pull the correct arm64 wheels
+> without emulation. Only fall back to a QEMU/Docker arm64 builder if a required
+> dependency ships no `manylinux2014_aarch64` wheel.
 
 ---
 
@@ -205,6 +226,70 @@ Per-environment variables live in `environments/{dev,staging,prod}.tfvars`
 - Upload source documents to `s3://<documents_bucket_id>/documents/` to trigger
   the indexing Lambda, which creates the OpenSearch `rag-kb` / `rag-cache`
   indexes on first use.
+
+---
+
+## Local testing with the AWS SAM CLI
+
+The AWS SAM CLI can invoke the Terraform-defined Lambda functions **locally**
+inside a Docker container using the Terraform hook (`--hook-name terraform`),
+without deploying anything. This is useful for exercising the chat handler's
+request parsing/validation and (with AWS credentials + reachable services) a
+full RAG round-trip.
+
+### Prerequisites
+- **Docker** running (`docker ps` works).
+- **AWS SAM CLI** `>= 1.47.0` (the Terraform hook requirement). Install on macOS
+  with `brew install aws-sam-cli` or the official standalone pkg from the
+  [AWS SAM CLI releases](https://github.com/aws/aws-sam-cli/releases/latest).
+  Verify with `sam --version`.
+- Run all commands **from this directory** (`infrastructure/terraform/`) so the
+  hook finds the `.tf` files.
+
+### How the Terraform hook works
+On each `sam local` command, SAM runs a "prepare hook": `terraform init`, a plan
+to JSON, and a generated metadata file it uses to locate each function's
+handler, runtime, and environment variables. If it reports *"Unresolvable
+attributes discovered … run terraform apply to resolve them"*, that is because
+several values come from other modules at apply time — run `terraform apply`
+(against a real backend) first, then re-run the SAM command.
+
+### Invoke the chat function
+
+A sample API Gateway v2 proxy event lives at [`events/event.json`](./events/README.md):
+
+```bash
+sam local invoke --hook-name terraform \
+  module.compute.aws_lambda_function.chat \
+  -e events/event.json
+```
+
+The two Lambda resource addresses are:
+
+| Resource address | Handler | Trigger |
+|------------------|---------|---------|
+| `module.compute.aws_lambda_function.chat` | `agentcore_handler.lambda_handler` | API Gateway `POST /chat` |
+| `module.compute.aws_lambda_function.indexing` | `indexing_handler.lambda_handler` | S3 `ObjectCreated` under `documents/` |
+
+See [`events/README.md`](./events/README.md) for the chat payload fields and how
+to generate an S3 event for the indexing function.
+
+### ⚠️ Caveats for this project
+- **Placeholder package**: the compute module validates against a tiny
+  placeholder zip, **not** the real `src/` code (see Step 2). To invoke the
+  actual handler locally, build the real artifact and point the hook at it via
+  the `lambda_package_path` / `lambda_source_code_hash` variables.
+- **arm64 runtime**: both functions are `arm64`. On an `x86_64` host, run
+  `docker run --rm --privileged multiarch/qemu-user-static --reset -p yes` once
+  so Docker can run arm64 containers.
+- **Live backing services**: the handler reaches Bedrock, OpenSearch Serverless,
+  ElastiCache Redis, DynamoDB, and Secrets Manager using the env vars Terraform
+  injects. A full chat invocation needs valid AWS credentials and reachable
+  endpoints. The HTTP 400 validation path (malformed body / missing `question`)
+  returns before any of those are touched, so it is the easiest no-dependency
+  smoke test.
+- The `GET /health` route is a MOCK integration (no Lambda), so it is not
+  invokable via `sam local invoke`.
 
 ---
 

@@ -6,14 +6,14 @@ test.describe('RAG Chatbot - Basic Functionality & Badge Display (Updated)', () 
     await page.goto('http://localhost:3000');
 
     // Verify initial assistant message is visible
-    const welcomeMessage = page.locator('text=Milvus documentation assistant');
+    const welcomeMessage = page.locator('text=vector database documentation assistant');
     await expect(welcomeMessage).toBeVisible();
 
     // Verify initial message shows '🔍 KB' badge indicating knowledge base source
     const initialBadge = page.locator('.timing-info .generated-badge, :text("🔍 KB")').first();
     await expect(initialBadge).toBeVisible();
 
-    // Milvus may be down while the API itself remains reachable.
+    // The vector database may be down while the API itself remains reachable.
     const apiStatus = page.getByText(/API (Connected|Warning)/);
     await expect(apiStatus).toBeVisible();
 
@@ -22,7 +22,7 @@ test.describe('RAG Chatbot - Basic Functionality & Badge Display (Updated)', () 
     await expect(cacheButton).toBeVisible();
 
     // Verify all input elements are enabled
-    const inputField = page.getByRole('textbox', { name: 'Ask about Milvus...' });
+    const inputField = page.getByRole('textbox', { name: 'Ask about vector databases...' });
     const webSearchButton = page.locator('button:text("🌐")');
 
     await expect(inputField).toBeEnabled();
@@ -36,7 +36,7 @@ test.describe('RAG Chatbot - Basic Functionality & Badge Display (Updated)', () 
     await page.goto('http://localhost:3000');
 
     // Type a fresh query in the input field
-    const inputField = page.getByRole('textbox', { name: 'Ask about Milvus...' });
+    const inputField = page.getByRole('textbox', { name: 'Ask about vector databases...' });
     await inputField.fill('What is vector indexing?');
 
     // Verify send button becomes enabled when text is entered
@@ -65,7 +65,7 @@ test.describe('RAG Chatbot - Basic Functionality & Badge Display (Updated)', () 
 
     // Wait for response to complete (input re-enables)
     await page.waitForFunction(() => {
-      const input = document.querySelector('textarea[name="Ask about Milvus..."], textarea.chat-input');
+      const input = document.querySelector('textarea[name="Ask about vector databases..."], textarea.chat-input');
       return input && !input.hasAttribute('disabled');
     }, { timeout: 45000 });
 
@@ -80,7 +80,7 @@ test.describe('RAG Chatbot - Basic Functionality & Badge Display (Updated)', () 
   test('should handle streaming responses with consistent badges', async ({ page }) => {
     await page.goto('http://localhost:3000');
 
-    const inputField = page.getByRole('textbox', { name: 'Ask about Milvus...' });
+    const inputField = page.getByRole('textbox', { name: 'Ask about vector databases...' });
     const sendButton = page.getByRole('button', { name: '➤' });
 
     // Send a query that triggers streaming response
@@ -99,7 +99,7 @@ test.describe('RAG Chatbot - Basic Functionality & Badge Display (Updated)', () 
 
     // Wait for streaming to complete (input re-enables)
     await page.waitForFunction(() => {
-      const input = document.querySelector('textarea[name="Ask about Milvus..."], textarea.chat-input');
+      const input = document.querySelector('textarea[name="Ask about vector databases..."], textarea.chat-input');
       return input && !input.hasAttribute('disabled');
     }, { timeout: 60000 });
 
@@ -116,7 +116,7 @@ test.describe('RAG Chatbot - Basic Functionality & Badge Display (Updated)', () 
   test('should display cached response badge correctly', async ({ page }) => {
     await page.goto('http://localhost:3000');
 
-    const inputField = page.getByRole('textbox', { name: 'Ask about Milvus...' });
+    const inputField = page.getByRole('textbox', { name: 'Ask about vector databases...' });
     const sendButton = page.getByRole('button', { name: '➤' });
 
     // First, send a fresh query
@@ -125,7 +125,7 @@ test.describe('RAG Chatbot - Basic Functionality & Badge Display (Updated)', () 
 
     // Wait for first response to complete
     await page.waitForFunction(() => {
-      const input = document.querySelector('textarea[name="Ask about Milvus..."], textarea.chat-input');
+      const input = document.querySelector('textarea[name="Ask about vector databases..."], textarea.chat-input');
       return input && !input.hasAttribute('disabled');
     }, { timeout: 45000 });
 
@@ -139,7 +139,7 @@ test.describe('RAG Chatbot - Basic Functionality & Badge Display (Updated)', () 
 
     // Wait for cached response
     await page.waitForFunction(() => {
-      const input = document.querySelector('textarea[name="Ask about Milvus..."], textarea.chat-input');
+      const input = document.querySelector('textarea[name="Ask about vector databases..."], textarea.chat-input');
       return input && !input.hasAttribute('disabled');
     }, { timeout: 15000 });
 

@@ -18,8 +18,8 @@ Use this when you want to run the app on a laptop or dev machine.
 
 - `FastAPI` app via `api_server.py`
 - `Ollama` for LLM and embeddings
-- `Milvus` for document vector search
-- Docker for local Milvus startup
+- A vector DB for document search (the current local provider is Milvus)
+- Docker Compose for the current local vector DB service
 
 ### Serverless mode
 
@@ -44,7 +44,7 @@ cp .env.example .env
 DEPLOYMENT_MODE=local
 ```
 
-3. Start the local Milvus stack:
+3. Start the local vector DB stack:
 
 ```bash
 cd docker
@@ -136,7 +136,7 @@ Use these files as the authoritative reference. Do not rely on older historical 
 - Confirm `DEPLOYMENT_MODE` matches your intended environment.
 - Confirm the app boots with `python api_server.py`.
 - Confirm `curl http://localhost:8000/health` returns the server status.
-- Confirm local mode has Ollama and Milvus available.
+- Confirm local mode has Ollama and its configured vector DB available.
 - Confirm serverless mode has AWS and OpenSearch settings configured.
 
 This keeps the documentation grounded in real runtime behavior instead of legacy design notes.

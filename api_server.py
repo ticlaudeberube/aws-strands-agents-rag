@@ -147,7 +147,7 @@ class Message(BaseModel):
     Example:
     {
         "role": "user",
-        "content": [{"text": "What is Milvus?"}],
+        "content": [{"text": "What is a vector database?"}],
         "timestamp": "2025-02-28T12:34:56Z"
     }
     """
@@ -222,7 +222,7 @@ async def lifespan(app: FastAPI):
     try:
         # Load settings
         settings = get_settings()
-        logger.info(f"Settings loaded: {settings.milvus_host}:{settings.milvus_port}")
+        logger.info(f"Vector database endpoint: {settings.milvus_host}:{settings.milvus_port}")
 
         # Initialize StrandsGraphRAGAgent (Graph-based architecture)
         logger.info("\nInitializing StrandsGraphRAGAgent (Graph-based)...")
@@ -230,7 +230,7 @@ async def lifespan(app: FastAPI):
 
         if strands_agent.initialization_error:
             logger.warning(
-                "✓ StrandsGraphRAGAgent initialized in DEGRADED MODE (Milvus unavailable)"
+                "✓ StrandsGraphRAGAgent initialized in DEGRADED MODE (vector database unavailable)"
             )
             logger.warning(f"  Reason: {strands_agent.initialization_error}")
             logger.warning(
@@ -281,7 +281,7 @@ async def lifespan(app: FastAPI):
             if not strands_agent.initialization_error:
                 logger.info("\nCache warmup disabled (ENABLE_CACHE_WARMUP=false)")
             else:
-                logger.info("\nCache warmup skipped (Milvus unavailable)")
+                logger.info("\nCache warmup skipped (vector database unavailable)")
 
         logger.info("\n" + "=" * 70)
         logger.info("Server ready! Using StrandsGraphRAGAgent (Graph-based architecture)")
@@ -299,17 +299,17 @@ async def lifespan(app: FastAPI):
         # Check if it's a Milvus connection error - show user-friendly message but allow graceful degradation
         if "Milvus connection failed" in str(e) or "Cannot connect to Milvus" in str(e):
             logger.error("\n" + "=" * 70)
-            logger.error("⚠️  Warning: Milvus vector database is not running")
+            logger.error("⚠️  Warning: The local vector database is not running")
             logger.error("=" * 70)
             logger.error("\nServer starting in DEGRADED MODE:")
             logger.error("  ✓ Validation and security checks will work")
             logger.error("  ⚠️  Knowledge base search will be unavailable")
             logger.error("  ✓ Web search will still work if enabled")
-            logger.error("\nTo enable full functionality, start Milvus:")
+            logger.error("\nTo enable full functionality, start the configured vector database:")
             logger.error("  1. Make sure Docker is running")
             logger.error("  2. cd docker")
             logger.error("  3. docker-compose up -d")
-            logger.error("\nTo check Milvus status:")
+            logger.error("\nTo check vector database status:")
             logger.error("  docker-compose ps")
             logger.error("=" * 70 + "\n")
             # Don't set strands_agent to None - let it continue in degraded mode
@@ -385,7 +385,7 @@ def cleanup_resources() -> None:
             if hasattr(strands_agent, "close"):
                 strands_agent.close()
             logger.info("✓ StrandsRAGAgent cleaned up")
-            logger.info("✓ Milvus connection closed")
+            logger.info("✓ Vector database connection closed")
             logger.info("✓ Ollama session closed")
         except Exception as e:
             logger.warning(f"Error closing StrandsRAGAgent: {e}")
@@ -660,13 +660,13 @@ async def root():
             "mcp_support": "Enabled (Phase 2)",
             "skill_system": "Enabled (progressive tool disclosure)",
             "auto_cache_warming": "Enabled on startup",
-            "semantic_caching": "Enabled (Milvus response cache)",
+            "semantic_caching": "Enabled (vector database response cache)",
             "performance": "99.9% speedup on cached queries",
         },
         "architecture": {
             "agent": "StrandsRAGAgent (Phase 2)",
             "mcp_server": "RAGAgentMCPServer",
-            "vector_db": "Milvus",
+            "vector_db": "Local vector database",
             "llm": "Ollama (local inference)",
         },
     }
@@ -674,14 +674,14 @@ async def root():
 
 @app.get("/health", tags=["health"])
 async def health():
-    """Health check endpoint, including Milvus availability for local mode."""
+    """Health check endpoint, including local vector database availability."""
     try:
         s = settings if settings else get_settings()
         current_agent = strands_agent
         vector_db = getattr(current_agent, "vector_db", None)
-        milvus_available = False
+        vector_db_available = False
         warning = (
-            "Milvus is unavailable. Knowledge-base search and "
+            "The vector database is unavailable. Knowledge-base search and "
             "persistent cached questions are unavailable."
         )
 
@@ -689,17 +689,17 @@ async def health():
             try:
                 vector_db.client.list_collections(db_name=s.milvus_db_name)
             except Exception as e:
-                logger.warning("Milvus health check failed: %s", e)
+                logger.warning("Vector database health check failed: %s", e)
             else:
-                milvus_available = True
+                vector_db_available = True
 
         return {
-            "status": "ok" if milvus_available else "warning",
+            "status": "ok" if vector_db_available else "warning",
             "model": "rag-agent",
             "ollama": s.ollama_host,
-            "milvus": f"{s.milvus_host}:{s.milvus_port}",
-            "milvus_available": milvus_available,
-            "warning": None if milvus_available else warning,
+            "vector_db": f"{s.milvus_host}:{s.milvus_port}",
+            "vector_db_available": vector_db_available,
+            "warning": None if vector_db_available else warning,
             "web_search_enabled": bool(s.tavily_api_key and s.tavily_api_key.strip()),
         }
     except Exception as e:
@@ -722,20 +722,22 @@ async def health_detailed():
         if ollama_available:
             ollama_models = current_agent.ollama_client.get_available_models()
 
-        # Check Milvus
+        # Check the configured vector database.
         try:
-            milvus_collections = current_agent.vector_db.client.list_collections(
+            vector_db_collections = current_agent.vector_db.client.list_collections(
                 db_name=current_settings.milvus_db_name
             )
-            milvus_status = "healthy"
-            milvus_col_count = len(milvus_collections)
+            vector_db_status = "healthy"
+            vector_db_collection_count = len(vector_db_collections)
         except Exception as e:
-            milvus_status = "unhealthy"
-            milvus_col_count = 0
-            logger.warning(f"Milvus health check failed: {e}")
+            vector_db_status = "unhealthy"
+            vector_db_collection_count = 0
+            logger.warning(f"Vector database health check failed: {e}")
 
         return {
-            "status": "ok",
+            "status": (
+                "ok" if ollama_status == "healthy" and vector_db_status == "healthy" else "warning"
+            ),
             "services": {
                 "ollama": {
                     "status": ollama_status,
@@ -743,12 +745,12 @@ async def health_detailed():
                     "timeout": current_settings.ollama_timeout,
                     "models_available": ollama_models,
                 },
-                "milvus": {
-                    "status": milvus_status,
+                "vector_db": {
+                    "status": vector_db_status,
                     "host": current_settings.milvus_host,
                     "port": current_settings.milvus_port,
                     "database": current_settings.milvus_db_name,
-                    "collections": milvus_col_count,
+                    "collections": vector_db_collection_count,
                 },
             },
             "caches": {
@@ -785,9 +787,10 @@ async def health_ollama():
         raise HTTPException(status_code=503, detail=f"Ollama health check failed: {str(e)}")
 
 
-@app.get("/health/milvus", tags=["health"])
-async def health_milvus():
-    """Health check for Milvus service."""
+@app.get("/health/vector-db", tags=["health"])
+@app.get("/health/milvus", tags=["health"], deprecated=True, include_in_schema=False)
+async def health_vector_db():
+    """Health check for the configured local vector database."""
     try:
         current_agent = await get_or_init_agent()
         current_settings = settings if settings else get_settings()
@@ -797,7 +800,7 @@ async def health_milvus():
         )
 
         return {
-            "service": "milvus",
+            "service": "vector_db",
             "status": "healthy",
             "host": current_settings.milvus_host,
             "port": current_settings.milvus_port,
@@ -806,8 +809,10 @@ async def health_milvus():
             "collection_count": len(collections),
         }
     except Exception as e:
-        logger.error(f"Milvus health check failed: {e}")
-        raise HTTPException(status_code=503, detail=f"Milvus health check failed: {str(e)}")
+        logger.error(f"Vector database health check failed: {e}")
+        raise HTTPException(
+            status_code=503, detail=f"Vector database health check failed: {str(e)}"
+        )
 
 
 @app.get("/metrics", tags=["monitoring"])
@@ -1907,7 +1912,7 @@ async def get_cached_questions_v1():
 
     Returns:
         JSON with questions array, each containing:
-        - id: Question ID (Milvus entity ID as string)
+        - id: Question ID (vector database entity ID as string)
         - question: The question text
 
     Note: Deduplicates identical questions, returning only the latest cached entry.

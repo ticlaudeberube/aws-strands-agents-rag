@@ -13,7 +13,7 @@ test("should display welcome message on load", async ({ page }) => {
 
   // Verify initial assistant message is visible
   const welcomeMessage = await page.locator(
-    "text=Milvus documentation assistant",
+    "text=vector database documentation assistant",
   );
   await expect(welcomeMessage).toBeVisible();
 });

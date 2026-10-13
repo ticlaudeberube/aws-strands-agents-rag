@@ -83,12 +83,12 @@ class Settings(BaseSettings):
 
     # Deployment Mode
     # Single source of truth for selecting backends. "local" wires Ollama +
-    # Milvus + FastAPI; "serverless" wires Bedrock + OpenSearch + Lambda.
+    # Ollama + local vector DB + FastAPI; "serverless" wires Bedrock + OpenSearch + Lambda.
     deployment_mode: Literal["local", "serverless"] = Field(
         default="local",
         validation_alias="DEPLOYMENT_MODE",
         description=(
-            'Deployment mode: "local" (Ollama + Milvus + FastAPI) or '
+            'Deployment mode: "local" (Ollama + vector DB + FastAPI) or '
             '"serverless" (Bedrock + OpenSearch + Lambda).'
         ),
     )

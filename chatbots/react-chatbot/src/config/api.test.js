@@ -40,6 +40,13 @@ describe('config/api', () => {
     expect(getApiBaseUrl()).toBe('https://abc.execute-api.us-east-1.amazonaws.com/prod');
   });
 
+  test('detects serverless mode from the configured API URL without requiring auth', () => {
+    process.env.REACT_APP_API_URL = 'https://api.example.com';
+    const { isAuthEnabled, isServerlessMode } = require('./api');
+    expect(isAuthEnabled()).toBe(false);
+    expect(isServerlessMode()).toBe(true);
+  });
+
   test('serverless API URL has a trailing slash trimmed and no localhost', () => {
     process.env.REACT_APP_API_URL = 'https://abc.execute-api.us-east-1.amazonaws.com/prod/';
     const { getApiBaseUrl } = require('./api');

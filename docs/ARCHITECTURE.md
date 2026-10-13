@@ -2,7 +2,7 @@
 
 The current codebase supports two deployment modes with the same core Strands workflow:
 
-- Local mode: FastAPI + Ollama + Milvus
+- Local mode: FastAPI + Ollama + vector DB
 - Serverless AWS mode: Lambda + AgentCore + Bedrock + OpenSearch Serverless
 
 ## Shared workflow
@@ -18,6 +18,9 @@ User query
 ```
 
 The Strands graph is the shared application flow. The difference between modes is the backend wiring, not the agent logic itself.
+The graph uses a vector-store role rather than requiring one vendor's product.
+The current adapters are Milvus for local mode and OpenSearch Serverless for
+AWS mode; another provider needs a compatible adapter and configuration.
 
 ## Local mode
 
@@ -25,8 +28,8 @@ Local mode is the default path for development and debugging.
 
 - FastAPI app in `api_server.py`
 - Ollama for LLM and embeddings
-- Milvus for vector retrieval
-- Docker for Milvus startup and local data access
+- A vector DB for retrieval; the current local adapter uses Milvus
+- Docker Compose for the current Milvus-backed local stack
 
 ## Serverless AWS mode
 
@@ -61,7 +64,7 @@ This is the actual source of truth in the current project. There is no supported
 
 Use local mode when:
 - you are developing locally
-- you want Ollama/Milvus only
+- you want Ollama with the currently configured Milvus vector DB
 - you need offline or quick demos
 
 Use serverless mode when:

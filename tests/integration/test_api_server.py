@@ -27,7 +27,7 @@ class TestAPIHealth:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["status"] == "ok" or data["status"] == "error"  # Either is valid
+        assert data["status"] in {"ok", "warning", "error"}
 
 
 class TestAPIModels:

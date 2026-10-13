@@ -2,7 +2,7 @@
 
 A dual-mode RAG system that currently supports both local development and AWS serverless deployment.
 
-- Local: FastAPI + Ollama + Milvus
+- Local: FastAPI + Ollama + a vector DB (currently Milvus)
 - Serverless AWS: Lambda + AgentCore + Bedrock + OpenSearch Serverless
 
 ## Start here
@@ -55,7 +55,7 @@ User query
 
 | Mode | Use case | Active stack |
 |------|----------|--------------|
-| Local | development and debugging | FastAPI, Ollama, Milvus |
+| Local | development and debugging | FastAPI, Ollama, vector DB (currently Milvus) |
 | Serverless AWS | production deployment | Lambda, AgentCore, Bedrock, OpenSearch |
 
 The source of truth for mode selection is `DEPLOYMENT_MODE` in `.env` and `src/config/settings.py`.

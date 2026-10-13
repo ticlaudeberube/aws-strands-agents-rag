@@ -70,7 +70,7 @@ test.describe("RAG Chatbot - API Status & Health", () => {
     expect(typeof isVisible).toBe("boolean");
   });
 
-  test("should warn when Milvus is unavailable without marking the API offline", async ({
+  test("should warn when the vector database is unavailable without marking the API offline", async ({
     page,
   }) => {
     await page.route("**/health", (route) =>
@@ -79,9 +79,9 @@ test.describe("RAG Chatbot - API Status & Health", () => {
         contentType: "application/json",
         body: JSON.stringify({
           status: "warning",
-          milvus_available: false,
+          vector_db_available: false,
           warning:
-            "Milvus is unavailable. Knowledge-base search and persistent cached questions are unavailable.",
+            "The vector database is unavailable. Knowledge-base search and persistent cached questions are unavailable.",
           web_search_enabled: false,
         }),
       }),
@@ -91,9 +91,9 @@ test.describe("RAG Chatbot - API Status & Health", () => {
 
     await expect(page.getByText("API Warning")).toBeVisible();
     await expect(
-      page.getByRole("status").filter({ hasText: "Milvus is unavailable" }),
+      page.getByRole("status").filter({ hasText: "vector database is unavailable" }),
     ).toBeVisible();
-    await page.locator("textarea.chat-input").fill("What is Milvus?");
+    await page.locator("textarea.chat-input").fill("What is a vector database?");
     await expect(page.locator("button.send-btn")).toBeEnabled();
   });
 

@@ -1,6 +1,6 @@
-# Milvus RAG Chatbot (React)
+# Vector Database RAG Chatbot (React)
 
-A self-contained React chatbot interface for the Milvus RAG system with real-time response streaming.
+A self-contained React chatbot interface for the vector database RAG system with real-time response streaming. The current local deployment uses Milvus.
 
 ## Features
 
@@ -278,7 +278,7 @@ The API server already has CORS enabled. If you get CORS errors:
 ### Slow Responses
 - Check API server logs for bottlenecks
 - Verify you have embeddings cached (run the same question twice)
-- Check if Ollama and Milvus are running
+- Check if Ollama and the configured vector DB (Milvus in the current local stack) are running
 
 ## Building for Production
 

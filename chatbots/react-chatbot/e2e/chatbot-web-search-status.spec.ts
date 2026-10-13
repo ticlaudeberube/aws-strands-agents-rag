@@ -10,7 +10,7 @@ test.describe('RAG Chatbot - Web Search & API Status (Updated)', () => {
 
     // When API is connected, all buttons should be enabled
     const cacheButton = page.locator('button:text("💾 Cache On")');
-    const inputField = page.getByRole('textbox', { name: 'Ask about Milvus...' });
+    const inputField = page.getByRole('textbox', { name: 'Ask about vector databases...' });
 
     await expect(cacheButton).toBeEnabled();
     await expect(inputField).toBeEnabled();
@@ -68,7 +68,7 @@ test.describe('RAG Chatbot - Web Search & API Status (Updated)', () => {
     await page.goto('http://localhost:3000');
 
     const webSearchButton = page.locator('button:text("🌐")');
-    const inputField = page.getByRole('textbox', { name: 'Ask about Milvus...' });
+    const inputField = page.getByRole('textbox', { name: 'Ask about vector databases...' });
 
     if (await webSearchButton.isVisible()) {
       // Enable web search
@@ -86,7 +86,7 @@ test.describe('RAG Chatbot - Web Search & API Status (Updated)', () => {
 
       // Wait for response
       await page.waitForFunction(() => {
-        const input = document.querySelector('textarea[name="Ask about Milvus..."], textarea.chat-input');
+        const input = document.querySelector('textarea[name="Ask about vector databases..."], textarea.chat-input');
         return input && !input.hasAttribute('disabled');
       }, { timeout: 60000 });
 
@@ -115,7 +115,7 @@ test.describe('RAG Chatbot - Web Search & API Status (Updated)', () => {
   test('should handle time-sensitive queries appropriately', async ({ page }) => {
     await page.goto('http://localhost:3000');
 
-    const inputField = page.getByRole('textbox', { name: 'Ask about Milvus...' });
+    const inputField = page.getByRole('textbox', { name: 'Ask about vector databases...' });
     const sendButton = page.getByRole('button', { name: '➤' });
 
     // Send a time-sensitive query
@@ -124,7 +124,7 @@ test.describe('RAG Chatbot - Web Search & API Status (Updated)', () => {
 
     // Wait for response
     await page.waitForFunction(() => {
-      const input = document.querySelector('textarea[name="Ask about Milvus..."], textarea.chat-input');
+      const input = document.querySelector('textarea[name="Ask about vector databases..."], textarea.chat-input');
       return input && !input.hasAttribute('disabled');
     }, { timeout: 60000 });
 
@@ -184,7 +184,7 @@ test.describe('RAG Chatbot - Web Search & API Status (Updated)', () => {
     await expect(page.getByText(/API (Connected|Warning|Offline)/)).toBeVisible();
 
     // Interface should be functional after health check
-    const inputField = page.getByRole('textbox', { name: 'Ask about Milvus...' });
+    const inputField = page.getByRole('textbox', { name: 'Ask about vector databases...' });
     await expect(inputField).toBeEnabled();
   });
 
@@ -210,7 +210,7 @@ test.describe('RAG Chatbot - Web Search & API Status (Updated)', () => {
       await webSearchButton.click();
     } else {
       // Web search not available - should not break interface
-      const inputField = page.getByRole('textbox', { name: 'Ask about Milvus...' });
+      const inputField = page.getByRole('textbox', { name: 'Ask about vector databases...' });
       await expect(inputField).toBeEnabled();
 
       // Time-sensitive queries should show appropriate warnings
@@ -220,7 +220,7 @@ test.describe('RAG Chatbot - Web Search & API Status (Updated)', () => {
 
       // Should get either regular response or system warning
       await page.waitForFunction(() => {
-        const input = document.querySelector('textarea[name="Ask about Milvus..."], textarea.chat-input');
+        const input = document.querySelector('textarea[name="Ask about vector databases..."], textarea.chat-input');
         return input && !input.hasAttribute('disabled');
       }, { timeout: 30000 });
 
@@ -242,7 +242,7 @@ test.describe('RAG Chatbot - Web Search & API Status (Updated)', () => {
     await expect(initialStatus).toBeVisible();
 
     // Send a query
-    const inputField = page.getByRole('textbox', { name: 'Ask about Milvus...' });
+    const inputField = page.getByRole('textbox', { name: 'Ask about vector databases...' });
     await inputField.fill('Test status consistency');
 
     const sendButton = page.getByRole('button', { name: '➤' });
@@ -254,7 +254,7 @@ test.describe('RAG Chatbot - Web Search & API Status (Updated)', () => {
 
     // Wait for response to complete
     await page.waitForFunction(() => {
-      const input = document.querySelector('textarea[name="Ask about Milvus..."], textarea.chat-input');
+      const input = document.querySelector('textarea[name="Ask about vector databases..."], textarea.chat-input');
       return input && !input.hasAttribute('disabled');
     }, { timeout: 60000 });
 
@@ -277,7 +277,7 @@ test.describe('RAG Chatbot - Web Search & API Status (Updated)', () => {
     await expect(connectedStatus).toBeVisible();
 
     // Test that interface remains functional during normal operation
-    const inputField = page.getByRole('textbox', { name: 'Ask about Milvus...' });
+    const inputField = page.getByRole('textbox', { name: 'Ask about vector databases...' });
     await expect(inputField).toBeEnabled();
 
     // Send test query to verify API is working
@@ -289,7 +289,7 @@ test.describe('RAG Chatbot - Web Search & API Status (Updated)', () => {
 
       // Should get response (API is working)
       await page.waitForFunction(() => {
-        const input = document.querySelector('textarea[name="Ask about Milvus..."], textarea.chat-input');
+        const input = document.querySelector('textarea[name="Ask about vector databases..."], textarea.chat-input');
         return input && !input.hasAttribute('disabled');
       }, { timeout: 60000 });
 

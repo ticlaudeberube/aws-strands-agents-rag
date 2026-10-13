@@ -10,7 +10,7 @@ class RetreivalSkill:
     """Skill for searching and retrieving documents.
 
     This skill provides tools for semantic search and document retrieval
-    from the Milvus vector database.
+    from the configured vector database.
     """
 
     # Skill documentation (would be extended with markdown in production)
@@ -26,7 +26,7 @@ class RetreivalSkill:
     - **list_collections**: List all available collections
 
     ## Use Cases
-    - User asks "What is Milvus?" → retrieve_documents searches for answers
+    - User asks a question → retrieve_documents searches the knowledge base
     - User wants docs from specific source → search_by_source filters results
     - User wants to see available data → list_collections shows options
     """
@@ -49,7 +49,7 @@ class RetreivalSkill:
                 parameters={
                     "collection_name": {
                         "type": "string",
-                        "description": "Name of the collection to search (e.g., 'milvus_docs', 'knowledge_base')",
+                        "description": "Name of the collection or index to search",
                     },
                     "query": {
                         "type": "string",
@@ -87,7 +87,7 @@ class RetreivalSkill:
                     },
                     "source": {
                         "type": "string",
-                        "description": "Source to filter by (e.g., 'milvus_docs')",
+                        "description": "Source to filter by",
                     },
                     "top_k": {
                         "type": "integer",

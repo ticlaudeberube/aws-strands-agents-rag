@@ -4,7 +4,7 @@ test.describe('RAG Chatbot - Performance & Badge Consistency (Updated)', () => {
   test('should maintain badge consistency across response types', async ({ page }) => {
     await page.goto('http://localhost:3000');
 
-    const inputField = page.getByRole('textbox', { name: 'Ask about Milvus...' });
+    const inputField = page.getByRole('textbox', { name: 'Ask about vector databases...' });
     const sendButton = page.getByRole('button', { name: '➤' });
 
     // Test 1: Fresh Knowledge Base Response
@@ -12,7 +12,7 @@ test.describe('RAG Chatbot - Performance & Badge Consistency (Updated)', () => {
     await sendButton.click();
 
     await page.waitForFunction(() => {
-      const input = document.querySelector('textarea[name="Ask about Milvus..."], textarea.chat-input');
+      const input = document.querySelector('textarea[name="Ask about vector databases..."], textarea.chat-input');
       return input && !input.hasAttribute('disabled');
     }, { timeout: 60000 });
 
@@ -25,7 +25,7 @@ test.describe('RAG Chatbot - Performance & Badge Consistency (Updated)', () => {
     await sendButton.click();
 
     await page.waitForFunction(() => {
-      const input = document.querySelector('textarea[name="Ask about Milvus..."], textarea.chat-input');
+      const input = document.querySelector('textarea[name="Ask about vector databases..."], textarea.chat-input');
       return input && !input.hasAttribute('disabled');
     }, { timeout: 30000 });
 
@@ -40,7 +40,7 @@ test.describe('RAG Chatbot - Performance & Badge Consistency (Updated)', () => {
   test('should display timing metadata consistently', async ({ page }) => {
     await page.goto('http://localhost:3000');
 
-    const inputField = page.getByRole('textbox', { name: 'Ask about Milvus...' });
+    const inputField = page.getByRole('textbox', { name: 'Ask about vector databases...' });
     const sendButton = page.getByRole('button', { name: '➤' });
 
     // Send query and verify timing metadata
@@ -48,7 +48,7 @@ test.describe('RAG Chatbot - Performance & Badge Consistency (Updated)', () => {
     await sendButton.click();
 
     await page.waitForFunction(() => {
-      const input = document.querySelector('textarea[name="Ask about Milvus..."], textarea.chat-input');
+      const input = document.querySelector('textarea[name="Ask about vector databases..."], textarea.chat-input');
       return input && !input.hasAttribute('disabled');
     }, { timeout: 60000 });
 
@@ -74,7 +74,7 @@ test.describe('RAG Chatbot - Performance & Badge Consistency (Updated)', () => {
   test('should handle rapid successive queries properly', async ({ page }) => {
     await page.goto('http://localhost:3000');
 
-    const inputField = page.getByRole('textbox', { name: 'Ask about Milvus...' });
+    const inputField = page.getByRole('textbox', { name: 'Ask about vector databases...' });
     const sendButton = page.getByRole('button', { name: '➤' });
 
     const queries = [
@@ -92,7 +92,7 @@ test.describe('RAG Chatbot - Performance & Badge Consistency (Updated)', () => {
 
       // Wait for this response to complete before sending next
       await page.waitForFunction(() => {
-        const input = document.querySelector('textarea[name="Ask about Milvus..."], textarea.chat-input');
+        const input = document.querySelector('textarea[name="Ask about vector databases..."], textarea.chat-input');
         return input && !input.hasAttribute('disabled');
       }, { timeout: 60000 });
 
@@ -120,7 +120,7 @@ test.describe('RAG Chatbot - Performance & Badge Consistency (Updated)', () => {
   test('should respond within acceptable time limits', async ({ page }) => {
     await page.goto('http://localhost:3000');
 
-    const inputField = page.getByRole('textbox', { name: 'Ask about Milvus...' });
+    const inputField = page.getByRole('textbox', { name: 'Ask about vector databases...' });
     const sendButton = page.getByRole('button', { name: '➤' });
 
     // Measure response time for typical query
@@ -131,7 +131,7 @@ test.describe('RAG Chatbot - Performance & Badge Consistency (Updated)', () => {
 
     // Wait for response to complete
     await page.waitForFunction(() => {
-      const input = document.querySelector('textarea[name="Ask about Milvus..."], textarea.chat-input');
+      const input = document.querySelector('textarea[name="Ask about vector databases..."], textarea.chat-input');
       return input && !input.hasAttribute('disabled');
     }, { timeout: 60000 });
 
@@ -152,7 +152,7 @@ test.describe('RAG Chatbot - Performance & Badge Consistency (Updated)', () => {
   test('should cache responses for improved performance', async ({ page }) => {
     await page.goto('http://localhost:3000');
 
-    const inputField = page.getByRole('textbox', { name: 'Ask about Milvus...' });
+    const inputField = page.getByRole('textbox', { name: 'Ask about vector databases...' });
     const sendButton = page.getByRole('button', { name: '➤' });
 
     const testQuery = 'What is approximate nearest neighbor search?';
@@ -163,7 +163,7 @@ test.describe('RAG Chatbot - Performance & Badge Consistency (Updated)', () => {
     await sendButton.click();
 
     await page.waitForFunction(() => {
-      const input = document.querySelector('textarea[name="Ask about Milvus..."], textarea.chat-input');
+      const input = document.querySelector('textarea[name="Ask about vector databases..."], textarea.chat-input');
       return input && !input.hasAttribute('disabled');
     }, { timeout: 60000 });
 
@@ -179,7 +179,7 @@ test.describe('RAG Chatbot - Performance & Badge Consistency (Updated)', () => {
     await sendButton.click();
 
     await page.waitForFunction(() => {
-      const input = document.querySelector('textarea[name="Ask about Milvus..."], textarea.chat-input');
+      const input = document.querySelector('textarea[name="Ask about vector databases..."], textarea.chat-input');
       return input && !input.hasAttribute('disabled');
     }, { timeout: 30000 });
 
@@ -198,7 +198,7 @@ test.describe('RAG Chatbot - Performance & Badge Consistency (Updated)', () => {
   test('should handle streaming responses without badge issues', async ({ page }) => {
     await page.goto('http://localhost:3000');
 
-    const inputField = page.getByRole('textbox', { name: 'Ask about Milvus...' });
+    const inputField = page.getByRole('textbox', { name: 'Ask about vector databases...' });
     const sendButton = page.getByRole('button', { name: '➤' });
 
     // Send query that likely triggers streaming
@@ -215,7 +215,7 @@ test.describe('RAG Chatbot - Performance & Badge Consistency (Updated)', () => {
 
     // Wait for streaming to complete
     await page.waitForFunction(() => {
-      const input = document.querySelector('textarea[name="Ask about Milvus..."], textarea.chat-input');
+      const input = document.querySelector('textarea[name="Ask about vector databases..."], textarea.chat-input');
       return input && !input.hasAttribute('disabled');
     }, { timeout: 90000 });
 
@@ -233,7 +233,7 @@ test.describe('RAG Chatbot - Performance & Badge Consistency (Updated)', () => {
   test('should maintain interface responsiveness during processing', async ({ page }) => {
     await page.goto('http://localhost:3000');
 
-    const inputField = page.getByRole('textbox', { name: 'Ask about Milvus...' });
+    const inputField = page.getByRole('textbox', { name: 'Ask about vector databases...' });
     const sendButton = page.getByRole('button', { name: '➤' });
     const cacheButton = page.locator('button:text("💾 Cache On")');
 
@@ -252,7 +252,7 @@ test.describe('RAG Chatbot - Performance & Badge Consistency (Updated)', () => {
 
     // Wait for processing to complete
     await page.waitForFunction(() => {
-      const input = document.querySelector('textarea[name="Ask about Milvus..."], textarea.chat-input');
+      const input = document.querySelector('textarea[name="Ask about vector databases..."], textarea.chat-input');
       return input && !input.hasAttribute('disabled');
     }, { timeout: 90000 });
 
@@ -269,7 +269,7 @@ test.describe('RAG Chatbot - Performance & Badge Consistency (Updated)', () => {
     await page.goto('http://localhost:3000');
 
     // Test that badge system doesn't get confused with multiple rapid interactions
-    const inputField = page.getByRole('textbox', { name: 'Ask about Milvus...' });
+    const inputField = page.getByRole('textbox', { name: 'Ask about vector databases...' });
     const sendButton = page.getByRole('button', { name: '➤' });
 
     // Send first query
@@ -278,7 +278,7 @@ test.describe('RAG Chatbot - Performance & Badge Consistency (Updated)', () => {
 
     // Wait for first response
     await page.waitForFunction(() => {
-      const input = document.querySelector('textarea[name="Ask about Milvus..."], textarea.chat-input');
+      const input = document.querySelector('textarea[name="Ask about vector databases..."], textarea.chat-input');
       return input && !input.hasAttribute('disabled');
     }, { timeout: 60000 });
 
@@ -288,7 +288,7 @@ test.describe('RAG Chatbot - Performance & Badge Consistency (Updated)', () => {
 
     // Wait for second response
     await page.waitForFunction(() => {
-      const input = document.querySelector('textarea[name="Ask about Milvus..."], textarea.chat-input');
+      const input = document.querySelector('textarea[name="Ask about vector databases..."], textarea.chat-input');
       return input && !input.hasAttribute('disabled');
     }, { timeout: 60000 });
 

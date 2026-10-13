@@ -4,7 +4,7 @@ test.describe('RAG Chatbot - Cache Management & Badge Consistency (Updated)', ()
   test('should show consistent badges for fresh vs cached responses', async ({ page }) => {
     await page.goto('http://localhost:3000');
 
-    const inputField = page.getByRole('textbox', { name: 'Ask about Milvus...' });
+    const inputField = page.getByRole('textbox', { name: 'Ask about vector databases...' });
     const sendButton = page.getByRole('button', { name: '➤' });
 
     // Send a unique fresh query to ensure it's not cached
@@ -14,7 +14,7 @@ test.describe('RAG Chatbot - Cache Management & Badge Consistency (Updated)', ()
 
     // Wait for fresh response to complete
     await page.waitForFunction(() => {
-      const input = document.querySelector('textarea[name="Ask about Milvus..."], textarea.chat-input');
+      const input = document.querySelector('textarea[name="Ask about vector databases..."], textarea.chat-input');
       return input && !input.hasAttribute('disabled');
     }, { timeout: 60000 });
 
@@ -28,7 +28,7 @@ test.describe('RAG Chatbot - Cache Management & Badge Consistency (Updated)', ()
 
     // Wait for cached response
     await page.waitForFunction(() => {
-      const input = document.querySelector('textarea[name="Ask about Milvus..."], textarea.chat-input');
+      const input = document.querySelector('textarea[name="Ask about vector databases..."], textarea.chat-input');
       return input && !input.hasAttribute('disabled');
     }, { timeout: 30000 });
 
@@ -60,7 +60,7 @@ test.describe('RAG Chatbot - Cache Management & Badge Consistency (Updated)', ()
       await expect(noCacheButton).toBeVisible();
 
       // Send a query with cache disabled
-      const inputField = page.getByRole('textbox', { name: 'Ask about Milvus...' });
+      const inputField = page.getByRole('textbox', { name: 'Ask about vector databases...' });
       await inputField.fill('What is Milvus collection?');
 
       const sendButton = page.getByRole('button', { name: '➤' });
@@ -68,7 +68,7 @@ test.describe('RAG Chatbot - Cache Management & Badge Consistency (Updated)', ()
 
       // Wait for response
       await page.waitForFunction(() => {
-        const input = document.querySelector('textarea[name="Ask about Milvus..."], textarea.chat-input');
+        const input = document.querySelector('textarea[name="Ask about vector databases..."], textarea.chat-input');
         return input && !input.hasAttribute('disabled');
       }, { timeout: 60000 });
 
@@ -88,7 +88,7 @@ test.describe('RAG Chatbot - Cache Management & Badge Consistency (Updated)', ()
   test('should disable cache toggle during processing', async ({ page }) => {
     await page.goto('http://localhost:3000');
 
-    const inputField = page.getByRole('textbox', { name: 'Ask about Milvus...' });
+    const inputField = page.getByRole('textbox', { name: 'Ask about vector databases...' });
     const sendButton = page.getByRole('button', { name: '➤' });
     const cacheButton = page.locator('button:text("💾 Cache On")');
 
@@ -104,7 +104,7 @@ test.describe('RAG Chatbot - Cache Management & Badge Consistency (Updated)', ()
 
     // Wait for response to complete
     await page.waitForFunction(() => {
-      const input = document.querySelector('textarea[name="Ask about Milvus..."], textarea.chat-input');
+      const input = document.querySelector('textarea[name="Ask about vector databases..."], textarea.chat-input');
       return input && !input.hasAttribute('disabled');
     }, { timeout: 60000 });
 
@@ -166,7 +166,7 @@ test.describe('RAG Chatbot - Cache Management & Badge Consistency (Updated)', ()
         await page.waitForTimeout(3000);
 
         // Check if system handled the cached question appropriately
-        const inputField = page.getByRole('textbox', { name: 'Ask about Milvus...' });
+        const inputField = page.getByRole('textbox', { name: 'Ask about vector databases...' });
 
         // Interface should remain functional even if individual cached responses have issues
         await expect(inputField).toBeVisible();
@@ -179,7 +179,7 @@ test.describe('RAG Chatbot - Cache Management & Badge Consistency (Updated)', ()
       }
 
       // Verify interface remains functional
-      const inputField = page.getByRole('textbox', { name: 'Ask about Milvus...' });
+      const inputField = page.getByRole('textbox', { name: 'Ask about vector databases...' });
       await expect(inputField).toBeVisible();
 
       // User should be able to type new queries regardless of cached question issues
@@ -201,7 +201,7 @@ test.describe('RAG Chatbot - Cache Management & Badge Consistency (Updated)', ()
       const initialCount = parseInt(initialText?.match(/\((\d+)\)/)?.[1] || '0');
 
       // Send a new unique query to potentially add to cache
-      const inputField = page.getByRole('textbox', { name: 'Ask about Milvus...' });
+      const inputField = page.getByRole('textbox', { name: 'Ask about vector databases...' });
       const uniqueQuery = `Test cache count ${Date.now()}`;
       await inputField.fill(uniqueQuery);
 
@@ -210,7 +210,7 @@ test.describe('RAG Chatbot - Cache Management & Badge Consistency (Updated)', ()
 
       // Wait for response to complete
       await page.waitForFunction(() => {
-        const input = document.querySelector('textarea[name="Ask about Milvus..."], textarea.chat-input');
+        const input = document.querySelector('textarea[name="Ask about vector databases..."], textarea.chat-input');
         return input && !input.hasAttribute('disabled');
       }, { timeout: 60000 });
 
@@ -232,7 +232,7 @@ test.describe('RAG Chatbot - Cache Management & Badge Consistency (Updated)', ()
   test('should handle cache operations during high activity', async ({ page }) => {
     await page.goto('http://localhost:3000');
 
-    const inputField = page.getByRole('textbox', { name: 'Ask about Milvus...' });
+    const inputField = page.getByRole('textbox', { name: 'Ask about vector databases...' });
     const sendButton = page.getByRole('button', { name: '➤' });
 
     // Send multiple queries in sequence to test cache stability
@@ -248,7 +248,7 @@ test.describe('RAG Chatbot - Cache Management & Badge Consistency (Updated)', ()
 
       // Wait for each response to complete before next
       await page.waitForFunction(() => {
-        const input = document.querySelector('textarea[name="Ask about Milvus..."], textarea.chat-input');
+        const input = document.querySelector('textarea[name="Ask about vector databases..."], textarea.chat-input');
         return input && !input.hasAttribute('disabled');
       }, { timeout: 60000 });
 

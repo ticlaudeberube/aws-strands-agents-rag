@@ -50,7 +50,7 @@ python chatbot/interactive_chat.py
 ### Requirements
 
 Before running the chatbot, ensure:
-1. **Milvus is running** - Start with `docker-compose up -d` in the docker directory
+1. **The vector DB is running** - The current local provider is Milvus; start it with `docker-compose up -d` in the docker directory
 2. **Ollama is installed and running** - Make sure Ollama is available at the configured host (default: http://localhost:11434)
 3. **Documents are loaded** - Follow the [GETTING_STARTED.md](../docs/GETTING_STARTED.md) guide to:
    - Load sample documents with `python document-loaders/add_sample_docs.py`, OR
@@ -59,7 +59,7 @@ Before running the chatbot, ensure:
 
 ### Features
 
-- **Interactive Q&A** - Ask questions about the Milvus documentation
+- **Interactive Q&A** - Ask questions about vector databases and RAG using the configured knowledge base
 - **RAG-based answers** - Answers are grounded in the loaded documentation
 - **Real-time responses** - Get immediate answers using Ollama
 
@@ -101,8 +101,8 @@ The chatbot uses settings from your `.env` file:
 - Ensure Ollama is running: `ollama serve`
 - Check `OLLAMA_HOST` in `.env` matches your setup
 
-**"Failed to connect to Milvus"**
-- Start Milvus: `cd docker && docker-compose up -d`
+**"Vector database unavailable"** (the current local provider reports a Milvus connection error)
+- Start the configured local vector DB: `cd docker && docker-compose up -d`
 - Wait for services to initialize (30-60 seconds)
 
 **"No results found"**

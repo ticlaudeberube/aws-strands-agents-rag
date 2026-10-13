@@ -15,7 +15,7 @@ Read this top-to-bottom before your first deploy. The ordering matters.
 ## 0. TL;DR — what's done, what's left
 
 Done:
-- Application code for both modes (local Ollama/Milvus/FastAPI + serverless
+- Application code for both modes (local Ollama/vector DB/FastAPI + serverless
   Bedrock/OpenSearch/Lambda), selected by `DEPLOYMENT_MODE`.
 - Full Terraform stack under `infrastructure/terraform/` (six modules:
   networking, data, compute, api, frontend, observability).

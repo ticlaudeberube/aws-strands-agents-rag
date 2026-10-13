@@ -3,7 +3,7 @@ import './App.css';
 import MessageContainer from './components/MessageContainer';
 import ChatInput from './components/ChatInput';
 import CachedResponsesList from './components/CachedResponsesList';
-import { API_BASE_URL, isAuthEnabled } from './config/api';
+import { API_BASE_URL, isAuthEnabled, isServerlessMode } from './config/api';
 import { authFetch } from './auth/authFetch';
 import { ensureSignedIn } from './auth/cognito';
 
@@ -38,7 +38,7 @@ function App() {
   const [messages, setMessages] = useState([
     {
       id: 1,
-      text: "Hi! I'm a Milvus documentation assistant. Ask me anything about Milvus, vectors, or RAG systems.",
+      text: "Hi! I'm a vector database documentation assistant. Ask me about vector search, embeddings, or RAG systems.",
       role: 'assistant',
       isStreaming: false,
       sources: [],
@@ -69,7 +69,9 @@ function App() {
         await ensureSignedIn();
       }
       checkApiStatus();
-      loadCachedResponses(); // Load cached responses on app startup
+      if (!isServerlessMode()) {
+        loadCachedResponses();
+      }
     };
     init();
   }, []);
@@ -85,11 +87,12 @@ function App() {
           setWebSearchEnabled(false);
           return;
         }
-        const milvusUnavailable = data.milvus_available === false || data.status === 'warning';
-        setApiStatus(milvusUnavailable ? 'warning' : 'connected');
+        const vectorDbUnavailable =
+          data.vector_db_available === false || data.status === 'warning';
+        setApiStatus(vectorDbUnavailable ? 'warning' : 'connected');
         setApiWarning(
-          milvusUnavailable
-            ? data.warning || 'Milvus is unavailable. Knowledge-base search and persistent cached questions are unavailable.'
+          vectorDbUnavailable
+            ? data.warning || 'The vector database is unavailable. Knowledge-base search and persistent cached questions are unavailable.'
             : ''
         );
         setWebSearchEnabled(data.web_search_enabled || false);
@@ -415,6 +418,9 @@ function App() {
         }
         return newMessages;
       });
+      if (!bypassCache && !forceWebSearch && !isServerlessMode()) {
+        await loadCachedResponses();
+      }
     } catch (error) {
       console.error('Error:', error);
       // TODO: Implement structured GlobalErrorResponse parsing
@@ -453,7 +459,7 @@ function App() {
 
   const handleClearChat = () => {
     setMessages([
-      createMessage("Chat cleared! Ask me anything about Milvus.", 'assistant'),
+      createMessage("Chat cleared! Ask me about vector databases, vector search, or RAG systems.", 'assistant'),
     ]);
   };
 
@@ -540,8 +546,8 @@ function App() {
           <div className="chat-container">
             <div className="chat-header">
               <div className="header-content">
-                <h1>🔍 Milvus RAG Chatbot</h1>
-                <p>Ask questions about Milvus documentation</p>
+                <h1>🔍 Vector Database RAG Chatbot</h1>
+                <p>Ask questions about vector databases, vector search, and RAG</p>
               </div>
               <div className="header-controls">
                 <div className={`api-status ${apiStatus}`}>
@@ -605,7 +611,7 @@ function App() {
                 placeholder={
                   apiStatus === 'error'
                     ? 'API not available - start the API server'
-                    : 'Ask about Milvus...'
+                    : 'Ask about vector databases...'
                 }
               />
 

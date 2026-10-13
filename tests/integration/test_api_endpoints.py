@@ -110,7 +110,8 @@ class TestHealthCheckEndpoint:
             "status": "ok",
             "model": "rag-agent",
             "ollama": "http://localhost:11434",
-            "milvus": "localhost:19530",
+            "vector_db": "localhost:19530",
+            "vector_db_available": True,
             "web_search_enabled": True,
         }
 
@@ -121,17 +122,23 @@ class TestHealthCheckEndpoint:
 
     def test_health_status_values(self):
         """Verify health status has valid values."""
-        valid_statuses = ["ok", "degraded", "error"]
+        valid_statuses = ["ok", "warning", "error"]
         test_status = "ok"
 
         assert test_status in valid_statuses
 
     def test_health_includes_service_endpoints(self):
         """Verify health check includes service endpoint information."""
-        health = {"status": "ok", "ollama": "http://localhost:11434", "milvus": "localhost:19530"}
+        health = {
+            "status": "ok",
+            "ollama": "http://localhost:11434",
+            "vector_db": "localhost:19530",
+            "vector_db_available": True,
+        }
 
         assert "ollama" in health
-        assert "milvus" in health
+        assert "vector_db" in health
+        assert "vector_db_available" in health
 
 
 # ============================================================================

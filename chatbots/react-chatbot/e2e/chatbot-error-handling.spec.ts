@@ -4,7 +4,7 @@ test.describe('RAG Chatbot - Error Handling & Warning Messages (Updated)', () =>
   test('should display system warning banners correctly', async ({ page }) => {
     await page.goto('http://localhost:3000');
 
-    const inputField = page.getByRole('textbox', { name: 'Ask about Milvus...' });
+    const inputField = page.getByRole('textbox', { name: 'Ask about vector databases...' });
     const sendButton = page.getByRole('button', { name: '➤' });
 
     // Send a time-sensitive query when web search might be disabled
@@ -13,7 +13,7 @@ test.describe('RAG Chatbot - Error Handling & Warning Messages (Updated)', () =>
 
     // Wait for response to process
     await page.waitForFunction(() => {
-      const input = document.querySelector('textarea[name="Ask about Milvus..."], textarea.chat-input');
+      const input = document.querySelector('textarea[name="Ask about vector databases..."], textarea.chat-input');
       return input && !input.hasAttribute('disabled');
     }, { timeout: 30000 });
 
@@ -41,7 +41,7 @@ test.describe('RAG Chatbot - Error Handling & Warning Messages (Updated)', () =>
   test('should display out-of-scope warning correctly', async ({ page }) => {
     await page.goto('http://localhost:3000');
 
-    const inputField = page.getByRole('textbox', { name: 'Ask about Milvus...' });
+    const inputField = page.getByRole('textbox', { name: 'Ask about vector databases...' });
     const sendButton = page.getByRole('button', { name: '➤' });
 
     // Send an out-of-scope query
@@ -50,7 +50,7 @@ test.describe('RAG Chatbot - Error Handling & Warning Messages (Updated)', () =>
 
     // Wait for response
     await page.waitForFunction(() => {
-      const input = document.querySelector('textarea[name="Ask about Milvus..."], textarea.chat-input');
+      const input = document.querySelector('textarea[name="Ask about vector databases..."], textarea.chat-input');
       return input && !input.hasAttribute('disabled');
     }, { timeout: 30000 });
 
@@ -75,7 +75,7 @@ test.describe('RAG Chatbot - Error Handling & Warning Messages (Updated)', () =>
     // Simulate conditions that might cause errors
     // We can't easily simulate true errors, so we test the display behavior
 
-    const inputField = page.getByRole('textbox', { name: 'Ask about Milvus...' });
+    const inputField = page.getByRole('textbox', { name: 'Ask about vector databases...' });
     const sendButton = page.getByRole('button', { name: '➤' });
 
     // Send a query that might cause processing issues
@@ -112,7 +112,7 @@ test.describe('RAG Chatbot - Error Handling & Warning Messages (Updated)', () =>
       await expect(apiStatus).toBeVisible();
 
       // Verify interface is functional when API is connected
-      const inputField = page.getByRole('textbox', { name: 'Ask about Milvus...' });
+      const inputField = page.getByRole('textbox', { name: 'Ask about vector databases...' });
       const cacheButton = page.locator('button:text("💾 Cache On")');
       const webSearchButton = page.locator('button:text("🌐")');
 
@@ -125,7 +125,7 @@ test.describe('RAG Chatbot - Error Handling & Warning Messages (Updated)', () =>
     }
 
     // Test what happens when trying to send a message (should work normally)
-    const inputField = page.getByRole('textbox', { name: 'Ask about Milvus...' });
+    const inputField = page.getByRole('textbox', { name: 'Ask about vector databases...' });
     await inputField.fill('Test connection');
 
     const sendButton = page.getByRole('button', { name: '➤' });
@@ -147,7 +147,7 @@ test.describe('RAG Chatbot - Error Handling & Warning Messages (Updated)', () =>
     await page.goto('http://localhost:3000');
 
     // Test system warning scenario
-    const inputField = page.getByRole('textbox', { name: 'Ask about Milvus...' });
+    const inputField = page.getByRole('textbox', { name: 'Ask about vector databases...' });
     await inputField.fill('Tell me about recent AI news');
 
     const sendButton = page.getByRole('button', { name: '➤' });
@@ -155,7 +155,7 @@ test.describe('RAG Chatbot - Error Handling & Warning Messages (Updated)', () =>
 
     // Wait for response
     await page.waitForFunction(() => {
-      const input = document.querySelector('textarea[name="Ask about Milvus..."], textarea.chat-input');
+      const input = document.querySelector('textarea[name="Ask about vector databases..."], textarea.chat-input');
       return input && !input.hasAttribute('disabled');
     }, { timeout: 30000 });
 
@@ -191,7 +191,7 @@ test.describe('RAG Chatbot - Error Handling & Warning Messages (Updated)', () =>
     await page.goto('http://localhost:3000');
 
     // Even if errors occur, basic interface should remain functional
-    const inputField = page.getByRole('textbox', { name: 'Ask about Milvus...' });
+    const inputField = page.getByRole('textbox', { name: 'Ask about vector databases...' });
     const cacheButton = page.locator('button:text("💾 Cache On")');
     const cachedQuestionsButton = page.locator('button:text("▲ Answered Questions")');
 

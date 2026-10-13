@@ -1,8 +1,8 @@
 // Centralized API + mode configuration.
 //
 // This module is the SINGLE source of truth for the API base URL and for
-// deciding whether the app runs in serverless mode (Cognito auth enabled) or
-// local-dev mode (no auth). Keeping all of this in one place is what lets the
+// deciding whether the app runs in serverless mode (a configured API Gateway
+// URL) or local-dev mode. Keeping all of this in one place is what lets the
 // serverless build stay free of hardcoded "localhost" references
 // (see Property 24: "React build artifacts never contain localhost references").
 //
@@ -44,12 +44,20 @@ function buildLocalApiBaseUrl() {
  * @returns {string}
  */
 export function getApiBaseUrl() {
-  if (SERVERLESS_API_URL && SERVERLESS_API_URL.trim()) {
+  if (isServerlessMode()) {
     // Use the serverless URL verbatim, only trimming a trailing slash so that
     // callers can safely concatenate `${base}/path`.
     return SERVERLESS_API_URL.trim().replace(/\/+$/, '');
   }
   return buildLocalApiBaseUrl();
+}
+
+/**
+ * Whether this build targets a serverless API rather than the local API.
+ * @returns {boolean}
+ */
+export function isServerlessMode() {
+  return Boolean(SERVERLESS_API_URL && SERVERLESS_API_URL.trim());
 }
 
 /**

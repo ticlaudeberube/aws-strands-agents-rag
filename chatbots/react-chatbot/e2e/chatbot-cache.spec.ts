@@ -38,6 +38,50 @@ test.describe("RAG Chatbot - Cache Management", () => {
     await expect(page.locator(".cache-drawer")).toHaveCount(0);
   });
 
+  test("should refresh answered questions after a successful local response", async ({
+    page,
+  }) => {
+    let questionListRequests = 0;
+    let responseCompleted = false;
+    await page.route("**/v1/cache/questions", (route) => {
+      questionListRequests += 1;
+      const questions = responseCompleted
+        ? [{ id: "cached-question-1", question: "What is a vector DB?" }]
+        : [];
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          questions,
+          count: questions.length,
+        }),
+      });
+    });
+    await page.route("**/v1/chat/completions**", (route) => {
+      responseCompleted = true;
+      return route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body: [
+          'data: {"choices":[{"delta":{"content":"A vector DB stores vector embeddings."}}]}',
+          'data: {"choices":[{"delta":{}}],"timing":{"response_type":"rag"}}',
+          "data: [STREAM_END]",
+          "",
+        ].join("\n\n"),
+      });
+    });
+
+    await page.goto("/");
+    await expect(page.locator("button.cache-drawer-btn")).toHaveCount(0);
+    await sendMessage(page, "What is a vector DB?");
+
+    await expect(page.locator("button.cache-drawer-btn")).toBeVisible();
+    await expect(page.locator(".response-question")).toContainText(
+      "What is a vector DB?",
+    );
+    expect(questionListRequests).toBeGreaterThan(1);
+  });
+
   test("should toggle cache", async ({ page }) => {
     await setupPage(page);
     // Verify cache button exists

@@ -4,7 +4,7 @@ This project supports two active deployment modes, selected by `DEPLOYMENT_MODE`
 
 ## Deployment modes
 
-- `DEPLOYMENT_MODE=local` — FastAPI + Ollama + Milvus
+- `DEPLOYMENT_MODE=local` — FastAPI + Ollama + vector DB
 - `DEPLOYMENT_MODE=serverless` — Lambda + AgentCore + Bedrock + OpenSearch Serverless
 
 ## Local quick start
@@ -92,7 +92,7 @@ The app does not rely on a legacy `use_agentcore` flag. The supported switch is 
 
 ## What is actually supported
 
-- Local mode uses Ollama and Milvus.
+- Local mode uses Ollama and the configured vector DB.
 - Serverless mode uses Bedrock, OpenSearch, Redis/DynamoDB, and AWS Lambda/AgentCore patterns.
 - Web search is optional and controlled by the current Tavily configuration.
 - The Strands graph remains the shared business flow: TopicChecker → SecurityChecker → RAGWorker.

@@ -187,7 +187,7 @@ class RAGAgentMCPServer:
         return {
             "name": "RAG Agent MCP Server",
             "version": "1.0.0",
-            "description": "MCP server for RAG agent with Milvus vector database and Ollama LLM",
+            "description": "MCP server for RAG agent with a vector database and Ollama LLM",
             "tools_count": len(self.registry.list_tools()),
             "skills_count": len(self.registry.list_skills()),
             "skills": self.registry.list_skills(),

@@ -35,7 +35,7 @@ import hashlib
 import json
 import logging
 import time
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Callable, TypeVar
 
 from src.agents import prompts
 from src.config.settings import Settings, get_settings
@@ -44,6 +44,8 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
     import numpy as np
 
 logger = logging.getLogger(__name__)
+
+_T = TypeVar("_T")
 
 # Backoff schedule for throttling retries: 500ms, 1000ms, 2000ms (Req 5.5).
 _RETRY_BASE_DELAY = 0.5
@@ -135,7 +137,7 @@ class BedrockClient:
         # Fall back to the exception class name for non-botocore errors.
         return type(exc).__name__ in _THROTTLING_ERROR_CODES
 
-    def _call_with_retry(self, func: Any, model_id: str, op: str) -> Any:
+    def _call_with_retry(self, func: Callable[[], _T], model_id: str, op: str) -> _T:
         """Invoke a Bedrock operation ``func``, retrying on throttling.
 
         Retries up to :data:`_RETRY_MAX_ATTEMPTS` (3) times after the initial

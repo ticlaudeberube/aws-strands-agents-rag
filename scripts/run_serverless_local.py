@@ -30,6 +30,10 @@ import logging
 import os
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from src.tools.dynamodb_client import DynamoDBClient
 
 # Ensure the repo root is importable when launched directly as a script.
 _REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -97,7 +101,7 @@ def build_local_redis_cache(settings):
     return RedisCache(settings, client=raw)
 
 
-def build_local_dynamodb_client(settings):
+def build_local_dynamodb_client(settings) -> DynamoDBClient | None:
     """Build a DynamoDBClient pointed at the local DynamoDB container.
 
     Injects a boto3 DynamoDB *resource* configured with the local endpoint, so

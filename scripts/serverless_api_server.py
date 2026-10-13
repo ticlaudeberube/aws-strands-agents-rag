@@ -30,6 +30,10 @@ import logging
 import os
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from src.config.settings import Settings
 
 # Ensure the repo root is importable regardless of how this script is launched
 # (e.g. `python scripts/serverless_api_server.py` from the repo root), so the
@@ -157,7 +161,7 @@ class ServerlessAgentShim:
     serverless Cache -> KB -> (Web) pipeline, not a reimplementation.
     """
 
-    def __init__(self, settings):
+    def __init__(self, settings: Settings):
         from src.agents.strands_graph_agent import create_rag_graph
         from src.tools.bedrock_client import BedrockClient
 
@@ -463,7 +467,9 @@ def main() -> int:
 
     # Replace the module globals the FastAPI app/handlers read, and neutralise
     # the Local-Mode lifespan so it does not try to build Ollama/Milvus.
-    api_server.strands_agent = shim
+    # ServerlessAgentShim is a duck-typed drop-in for the StrandsGraphRAGAgent
+    # the handlers expect, so the monkeypatch is intentional.
+    api_server.strands_agent = shim  # type: ignore[assignment]
     api_server.settings = settings
     api_server.initialization_error = None
 

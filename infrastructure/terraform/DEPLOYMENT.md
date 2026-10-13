@@ -159,32 +159,35 @@ underpins. (Not yet written — a TODO if you prefer this over Option A.)
 The compute module validates against a placeholder zip. For a real deploy, build
 the deployment artifact from `src/` (chat handler
 `agentcore_handler.lambda_handler` + indexing handler
-`indexing_handler.lambda_handler`) and pass it in. Example (adjust to your
-packaging/CI):
+`indexing_handler.lambda_handler`) and pass it in.
 
 The Lambda functions run on the **arm64** (Graviton2) architecture, so the
-deployment package must contain arm64-compatible wheels. Build with pip's
-`--platform manylinux2014_aarch64` so native extensions (pydantic-core, hiredis,
-etc.) match the runtime regardless of the build host's CPU:
+package must contain arm64-compatible wheels. A ready-made build script does
+this (pulling `manylinux2014_aarch64` wheels so native extensions match the
+runtime regardless of the build host's CPU):
 
 ```bash
-# illustrative — wire this into CI
-pip install \
-  --platform manylinux2014_aarch64 \
-  --implementation cp \
-  --python-version 3.12 \
-  --only-binary=:all: \
-  --target build/ \
-  -r requirements.txt
-cp -r src build/
-( cd build && zip -r ../lambda.zip . )
-# then pass -var "lambda_package_path=../../lambda.zip" (+ source_code_hash) on apply
+# Builds infrastructure/lambda/dist/lambda.zip (+ .sha256) from src/ and the
+# serverless-runtime deps in infrastructure/lambda/requirements-lambda.txt.
+infrastructure/lambda/build_lambda_package.sh
+
+# Then pass both to Terraform on apply:
+terraform apply -var-file=environments/dev.tfvars \
+  -var "lambda_package_path=$(pwd)/../lambda/dist/lambda.zip" \
+  -var "lambda_source_code_hash=$(cat ../lambda/dist/lambda.zip.sha256)"
 ```
 
-> If you build on an x86_64 host (or on an Apple Silicon Mac targeting a
-> different arch), the `--platform` flags above pull the correct arm64 wheels
-> without emulation. Only fall back to a QEMU/Docker arm64 builder if a required
-> dependency ships no `manylinux2014_aarch64` wheel.
+In CI this is automated: the **build-lambda** job in
+[`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) runs the same
+script and uploads `lambda.zip` + `lambda.zip.sha256` as the `lambda-package`
+artifact, so the Converse-API `BedrockClient` and all `src/` changes ship to
+Lambda rather than the placeholder.
+
+> The package is the serverless-runtime subset (see
+> `requirements-lambda.txt`) — not the full project deps — so Local-Mode-only
+> libraries (ollama, pymilvus, fastapi, uvicorn) are excluded to keep it small
+> and avoid arm64-wheel issues. The `--platform` flags pull the correct arm64
+> wheels without emulation on any host.
 
 ---
 

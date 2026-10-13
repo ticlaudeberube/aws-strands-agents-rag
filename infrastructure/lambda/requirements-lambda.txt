@@ -1,0 +1,37 @@
+# Runtime dependencies for the SERVERLESS Lambda deployment package.
+#
+# This is intentionally the serverless-runtime subset — NOT the full project
+# dependency set. Local-Mode-only deps (ollama, pymilvus, fastapi, uvicorn) are
+# excluded to keep the package small and avoid arm64-wheel issues; the Lambda
+# handlers (agentcore_handler, indexing_handler) and the shared src/ code they
+# import only use the libraries below.
+#
+# CI builds these for linux/arm64 (Graviton2) — see .github/workflows/ci.yml
+# and infrastructure/terraform/DEPLOYMENT.md Step 2. Keep in sync with the
+# "dependencies" / "serverless" extras in pyproject.toml.
+
+# Agent framework + models
+strands-agents>=1.27.0
+
+# AWS SDK (Bedrock, DynamoDB, Secrets Manager, S3)
+boto3>=1.34.0
+
+# OpenSearch Serverless vector store + L4 cache
+opensearch-py>=2.4.0
+
+# ElastiCache Redis (L2/L3 cache) + serialization
+redis>=5.0.0
+msgpack>=1.0.0
+
+# Settings / validation
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+python-dotenv>=1.0.0
+
+# Embedding dimensionality reduction (PCA projection) and HTTP
+numpy<2.0
+requests>=2.31.0
+httpx>=0.25.0
+
+# Input sanitization (shared with Local Mode handler path)
+bleach>=6.3.0

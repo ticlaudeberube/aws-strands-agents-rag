@@ -80,7 +80,7 @@ variable "redis_port" {
 variable "bedrock_inference_model_id" {
   description = "Bedrock inference (generation) model ID."
   type        = string
-  default     = "anthropic.claude-3-haiku-20240307-v1:0"
+  default     = "amazon.nova-lite-v1:0"
 }
 
 variable "bedrock_embedding_model_id" {

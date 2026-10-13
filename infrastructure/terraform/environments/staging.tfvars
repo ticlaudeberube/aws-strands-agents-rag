@@ -2,7 +2,7 @@
 stage      = "staging"
 aws_region = "us-east-1"
 
-bedrock_inference_model_id = "anthropic.claude-3-haiku-20240307-v1:0"
+bedrock_inference_model_id = "amazon.nova-lite-v1:0"
 bedrock_embedding_model_id = "amazon.titan-embed-text-v1"
 bedrock_model_override     = ""
 

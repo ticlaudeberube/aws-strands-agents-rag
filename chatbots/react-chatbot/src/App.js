@@ -6,6 +6,13 @@ import CachedResponsesList from './components/CachedResponsesList';
 import { API_BASE_URL, isAuthEnabled, isServerlessMode } from './config/api';
 import { authFetch } from './auth/authFetch';
 import { ensureSignedIn } from './auth/cognito';
+import { serverlessChat } from './config/serverlessChat';
+
+// Stable per-browser-session id so serverless multi-turn history (DynamoDB)
+// accumulates across messages. Local mode ignores this.
+const CHAT_SESSION_ID =
+  (typeof crypto !== 'undefined' && crypto.randomUUID && crypto.randomUUID()) ||
+  `sess-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
 // API base URL + auth behavior are resolved in src/config/api.js:
 //   - Serverless builds set REACT_APP_API_URL (full HTTPS API Gateway URL) and
@@ -169,6 +176,41 @@ function App() {
           content: [{ text: text }],  // Strands standard: wrap in ContentBlock
           timestamp: new Date().toISOString(),
         }]);
+
+      // ---- Serverless mode: single-JSON POST /chat (no SSE) --------------
+      // The deployed Lambda returns one JSON body, not an OpenAI/SSE stream, so
+      // branch here and finalize the message from that response. Local-dev
+      // streaming below is unchanged.
+      if (isServerlessMode()) {
+        console.log('☁️ Serverless mode: POST /chat (single JSON response)');
+        const result = await serverlessChat({
+          baseUrl: API_BASE_URL,
+          question: text,
+          sessionId: CHAT_SESSION_ID,
+          forceWebSearch,
+          temperature: 0.1,
+          doFetch: authFetch,
+        });
+
+        const totalTimeMs = Date.now() - startTime;
+        const isCached = result.responseType === 'cached';
+        setMessages((prev) => {
+          const newMessages = [...prev];
+          const idx = newMessages.findIndex((m) => m.id === assistantMessageId);
+          if (idx !== -1) {
+            newMessages[idx].text = result.answer || '(no content generated)';
+            newMessages[idx].sources = [...result.sources];
+            newMessages[idx].timing = createTimingData(
+              totalTimeMs,
+              result.responseType,
+              isCached
+            );
+            newMessages[idx].isStreaming = false;
+          }
+          return newMessages;
+        });
+        return; // serverless path complete
+      }
 
       const url = new URL(`${API_BASE_URL}/v1/chat/completions`);
       if (bypassCache) {

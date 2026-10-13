@@ -5,7 +5,7 @@ import { waitForAppReady } from "./utils";
  * E2E tests for RAG Chatbot - API Status & Health Features
  *
  * Tests API status and health check functionality:
- * - API status indicator (Connected/Checking/Offline)
+ * - API status indicator (Connected/Warning/Checking/Offline)
  * - Health check on app mount
  * - Web search capability detection from health response
  * - Error handling and failure states
@@ -45,10 +45,10 @@ test.describe("RAG Chatbot - API Status & Health", () => {
       )
       .catch(() => {});
 
-    // Look for "Connected" text
-    const connectedText = page.locator("text=Connected");
+    // The API may report a warning when its local Milvus dependency is down.
+    const connectedText = page.getByText(/API (Connected|Warning)/);
 
-    // If status is shown, should be "Connected" since API is running
+    // Either state means the API is reachable.
     const isPresent = await connectedText.isVisible().catch(() => false);
 
     if (isPresent) {
@@ -68,6 +68,33 @@ test.describe("RAG Chatbot - API Status & Health", () => {
     // It's valid if not present (check too fast)
     const isVisible = await statusChecking.isVisible().catch(() => false);
     expect(typeof isVisible).toBe("boolean");
+  });
+
+  test("should warn when Milvus is unavailable without marking the API offline", async ({
+    page,
+  }) => {
+    await page.route("**/health", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          status: "warning",
+          milvus_available: false,
+          warning:
+            "Milvus is unavailable. Knowledge-base search and persistent cached questions are unavailable.",
+          web_search_enabled: false,
+        }),
+      }),
+    );
+
+    await page.goto("/");
+
+    await expect(page.getByText("API Warning")).toBeVisible();
+    await expect(
+      page.getByRole("status").filter({ hasText: "Milvus is unavailable" }),
+    ).toBeVisible();
+    await page.locator("textarea.chat-input").fill("What is Milvus?");
+    await expect(page.locator("button.send-btn")).toBeEnabled();
   });
 
   test("should perform health check on app mount", async ({ page }) => {
@@ -156,7 +183,7 @@ test.describe("RAG Chatbot - API Status & Health", () => {
       (await offlineText.isVisible().catch(() => false)) ||
       (await offlineIcon.isVisible().catch(() => false)) ||
       (await page
-        .locator("text=Connected")
+        .locator("text=API Connected, text=API Warning")
         .isVisible()
         .catch(() => false));
 
@@ -386,7 +413,7 @@ test.describe("RAG Chatbot - API Status & Health", () => {
     });
 
     // Status should still be good
-    const statusConnected = page.locator("text=Connected");
+    const statusConnected = page.locator("text=API Connected, text=API Warning");
     const statusVisible = await statusConnected.isVisible().catch(() => false);
 
     // Status should either show Connected or no error

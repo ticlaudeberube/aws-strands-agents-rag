@@ -1,11 +1,11 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('RAG Chatbot - Web Search & API Status (Updated)', () => {
-  test('should display API connected state correctly', async ({ page }) => {
+  test('should display a reachable API state correctly', async ({ page }) => {
     await page.goto('http://localhost:3000');
 
-    // Verify API status shows 'API Connected'
-    const apiStatus = page.locator('text=API Connected');
+    // Milvus may be down while the API itself remains reachable.
+    const apiStatus = page.getByText(/API (Connected|Warning)/);
     await expect(apiStatus).toBeVisible();
 
     // When API is connected, all buttons should be enabled
@@ -158,11 +158,11 @@ test.describe('RAG Chatbot - Web Search & API Status (Updated)', () => {
     }
 
     // Test API connectivity by checking status
-    const apiStatus = page.locator('text=API Connected, text=Checking, text=Offline');
+    const apiStatus = page.locator('text=API Connected, text=API Warning, text=Checking, text=Offline');
     await expect(apiStatus.first()).toBeVisible();
 
     // If API is connected, web features should be available
-    const connectedStatus = page.locator('text=API Connected');
+    const connectedStatus = page.locator('text=API Connected, text=API Warning');
     if (await connectedStatus.isVisible()) {
       if (await webSearchButton.isVisible()) {
         await expect(webSearchButton).toBeEnabled();
@@ -175,17 +175,13 @@ test.describe('RAG Chatbot - Web Search & API Status (Updated)', () => {
     await page.goto('http://localhost:3000');
 
     // Health check should happen automatically on mount
-    // Status should show either "Checking", "API Connected", or "Offline"
-    const statusIndicators = page.locator('text=API Connected, text=Checking, text=Offline, text=Disconnected');
+    // Status may warn when Milvus is down even though the API remains available.
+    const statusIndicators = page.locator('text=API Connected, text=API Warning, text=Checking, text=Offline, text=Disconnected');
 
     // Wait for status to appear (health check should complete within 10 seconds)
     await expect(statusIndicators.first()).toBeVisible({ timeout: 10000 });
 
-    // Most likely should show "API Connected" since tests run with API server
-    const connectedStatus = page.locator('text=API Connected');
-    if (await connectedStatus.isVisible()) {
-      await expect(connectedStatus).toBeVisible();
-    }
+    await expect(page.getByText(/API (Connected|Warning|Offline)/)).toBeVisible();
 
     // Interface should be functional after health check
     const inputField = page.getByRole('textbox', { name: 'Ask about Milvus...' });
@@ -242,7 +238,7 @@ test.describe('RAG Chatbot - Web Search & API Status (Updated)', () => {
     await page.goto('http://localhost:3000');
 
     // Initial status check
-    const initialStatus = page.locator('text=API Connected');
+    const initialStatus = page.locator('text=API Connected, text=API Warning');
     await expect(initialStatus).toBeVisible();
 
     // Send a query
@@ -253,7 +249,7 @@ test.describe('RAG Chatbot - Web Search & API Status (Updated)', () => {
     await sendButton.click();
 
     // During processing, status should remain consistent
-    const statusDuringProcessing = page.locator('text=API Connected');
+    const statusDuringProcessing = page.locator('text=API Connected, text=API Warning');
     await expect(statusDuringProcessing).toBeVisible();
 
     // Wait for response to complete
@@ -263,7 +259,7 @@ test.describe('RAG Chatbot - Web Search & API Status (Updated)', () => {
     }, { timeout: 60000 });
 
     // After response, status should still be consistent
-    const statusAfterResponse = page.locator('text=API Connected');
+    const statusAfterResponse = page.locator('text=API Connected, text=API Warning');
     await expect(statusAfterResponse).toBeVisible();
 
     // Interface should remain fully functional
@@ -277,7 +273,7 @@ test.describe('RAG Chatbot - Web Search & API Status (Updated)', () => {
     await page.goto('http://localhost:3000');
 
     // Verify initial connected state
-    const connectedStatus = page.locator('text=API Connected');
+    const connectedStatus = page.locator('text=API Connected, text=API Warning');
     await expect(connectedStatus).toBeVisible();
 
     // Test that interface remains functional during normal operation

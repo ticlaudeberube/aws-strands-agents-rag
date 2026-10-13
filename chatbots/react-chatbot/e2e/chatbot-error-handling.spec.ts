@@ -106,7 +106,7 @@ test.describe('RAG Chatbot - Error Handling & Warning Messages (Updated)', () =>
     await page.goto('http://localhost:3000');
 
     // Check initial API status
-    const apiStatus = page.locator('text=API Connected');
+    const apiStatus = page.locator('text=API Connected, text=API Warning');
 
     if (await apiStatus.isVisible()) {
       await expect(apiStatus).toBeVisible();

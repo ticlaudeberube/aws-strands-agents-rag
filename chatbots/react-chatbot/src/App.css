@@ -112,6 +112,19 @@
   background: #eab308;
 }
 
+.api-status.warning .status-dot {
+  background: #f59e0b;
+  animation: none;
+}
+
+.api-warning {
+  padding: 10px 20px;
+  background: #fef3c7;
+  border-bottom: 1px solid #fcd34d;
+  color: #92400e;
+  font-size: 13px;
+}
+
 @keyframes pulse {
   0%, 100% {
     opacity: 1;

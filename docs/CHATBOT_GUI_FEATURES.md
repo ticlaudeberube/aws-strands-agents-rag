@@ -85,6 +85,10 @@ The frontend checks backend health and exposes runtime status in the UI. This in
 
 - API connected/offline state
 - health-check status updates
+- A visible warning when the API is reachable but local Milvus is unavailable;
+  knowledge-base search and persistent cached questions will not be available
+- The answered-questions drawer and its toggle are hidden when no cached
+  questions are available
 - web-search capability state from the backend
 
 ## Useful validation note

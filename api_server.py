@@ -674,14 +674,32 @@ async def root():
 
 @app.get("/health", tags=["health"])
 async def health():
-    """Health check endpoint."""
+    """Health check endpoint, including Milvus availability for local mode."""
     try:
         s = settings if settings else get_settings()
+        current_agent = strands_agent
+        vector_db = getattr(current_agent, "vector_db", None)
+        milvus_available = False
+        warning = (
+            "Milvus is unavailable. Knowledge-base search and "
+            "persistent cached questions are unavailable."
+        )
+
+        if vector_db is not None:
+            try:
+                vector_db.client.list_collections(db_name=s.milvus_db_name)
+            except Exception as e:
+                logger.warning("Milvus health check failed: %s", e)
+            else:
+                milvus_available = True
+
         return {
-            "status": "ok",
+            "status": "ok" if milvus_available else "warning",
             "model": "rag-agent",
             "ollama": s.ollama_host,
             "milvus": f"{s.milvus_host}:{s.milvus_port}",
+            "milvus_available": milvus_available,
+            "warning": None if milvus_available else warning,
             "web_search_enabled": bool(s.tavily_api_key and s.tavily_api_key.strip()),
         }
     except Exception as e:

@@ -21,6 +21,23 @@ async function setupPage(page: Page) {
 }
 
 test.describe("RAG Chatbot - Cache Management", () => {
+  test("should hide answered questions list when no cached questions exist", async ({
+    page,
+  }) => {
+    await page.route("**/v1/cache/questions", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ questions: [], count: 0 }),
+      }),
+    );
+
+    await page.goto("/");
+
+    await expect(page.locator("button.cache-drawer-btn")).toHaveCount(0);
+    await expect(page.locator(".cache-drawer")).toHaveCount(0);
+  });
+
   test("should toggle cache", async ({ page }) => {
     await setupPage(page);
     // Verify cache button exists

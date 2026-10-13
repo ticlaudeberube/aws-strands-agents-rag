@@ -48,6 +48,7 @@ function App() {
   ]);
   const [isLoading, setIsLoading] = useState(false);
   const [apiStatus, setApiStatus] = useState('checking');
+  const [apiWarning, setApiWarning] = useState('');
   const [webSearchEnabled, setWebSearchEnabled] = useState(false);
   const [bypassCache, setBypassCache] = useState(false);
   const [cachedResponses, setCachedResponses] = useState([]);
@@ -78,7 +79,19 @@ function App() {
       const response = await fetch(`${API_BASE_URL}/health`);
       if (response.ok) {
         const data = await response.json();
-        setApiStatus('connected');
+        if (data.status === 'error') {
+          setApiStatus('error');
+          setApiWarning('');
+          setWebSearchEnabled(false);
+          return;
+        }
+        const milvusUnavailable = data.milvus_available === false || data.status === 'warning';
+        setApiStatus(milvusUnavailable ? 'warning' : 'connected');
+        setApiWarning(
+          milvusUnavailable
+            ? data.warning || 'Milvus is unavailable. Knowledge-base search and persistent cached questions are unavailable.'
+            : ''
+        );
         setWebSearchEnabled(data.web_search_enabled || false);
         console.log('[App] Web search enabled:', data.web_search_enabled);
       } else {
@@ -534,6 +547,7 @@ function App() {
                 <div className={`api-status ${apiStatus}`}>
                   <span className="status-dot"></span>
                   {apiStatus === 'connected' && 'API Connected'}
+                  {apiStatus === 'warning' && 'API Warning'}
                   {apiStatus === 'checking' && 'Checking...'}
                   {apiStatus === 'error' && 'API Offline'}
                 </div>
@@ -548,6 +562,12 @@ function App() {
               </div>
             </div>
 
+            {apiWarning && (
+              <div className="api-warning" role="status">
+                {apiWarning}
+              </div>
+            )}
+
             <MessageContainer
               messages={messages}
               isLoading={isLoading}
@@ -555,24 +575,28 @@ function App() {
               onClearChat={handleClearChat}
             />
 
-            <div className={`cache-drawer ${cacheDrawerOpen ? 'open' : 'closed'}`}>
-              <CachedResponsesList
-                cachedResponses={cachedResponses}
-                onSelectResponse={handleSelectCachedResponse}
-                isCollapsed={false}
-                onToggleCollapse={handleToggleCacheDrawer}
-              />
-            </div>
+            {cachedResponses.length > 0 && (
+              <div className={`cache-drawer ${cacheDrawerOpen ? 'open' : 'closed'}`}>
+                <CachedResponsesList
+                  cachedResponses={cachedResponses}
+                  onSelectResponse={handleSelectCachedResponse}
+                  isCollapsed={false}
+                  onToggleCollapse={handleToggleCacheDrawer}
+                />
+              </div>
+            )}
 
             <div className="chat-footer">
               <div className="footer-top">
-                <button
-                  className="cache-drawer-btn"
-                  onClick={handleToggleCacheDrawer}
-                  title={cacheDrawerOpen ? 'Hide answered questions' : 'Show previously answered questions'}
-                >
-                  {cacheDrawerOpen ? '▼ Answered Questions' : '▲ Answered Questions'} ({cachedResponses.length})
-                </button>
+                {cachedResponses.length > 0 && (
+                  <button
+                    className="cache-drawer-btn"
+                    onClick={handleToggleCacheDrawer}
+                    title={cacheDrawerOpen ? 'Hide answered questions' : 'Show previously answered questions'}
+                  >
+                    {cacheDrawerOpen ? '▼ Answered Questions' : '▲ Answered Questions'} ({cachedResponses.length})
+                  </button>
+                )}
               </div>
               <ChatInput
                 onSendMessage={handleSendMessage}

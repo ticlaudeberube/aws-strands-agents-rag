@@ -9,6 +9,10 @@ curl http://localhost:8000/health
 ```
 
 Expected response includes server status and backend availability metadata.
+In local mode, `status` is `"warning"` and `milvus_available` is `false` if
+Milvus cannot be reached. The API remains available for health checks, but
+knowledge-base search and persistent cached questions are unavailable. The
+React client displays this warning without treating the API as offline.
 
 ## Chat completions
 

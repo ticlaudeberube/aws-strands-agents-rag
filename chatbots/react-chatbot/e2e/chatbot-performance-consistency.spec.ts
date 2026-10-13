@@ -247,7 +247,7 @@ test.describe('RAG Chatbot - Performance & Badge Consistency (Updated)', () => {
     await expect(cacheButton).toBeDisabled(); // Cache button disabled
 
     // API Status should remain visible
-    const apiStatus = page.locator('text=API Connected');
+    const apiStatus = page.locator('text=API Connected, text=API Warning');
     await expect(apiStatus).toBeVisible();
 
     // Wait for processing to complete

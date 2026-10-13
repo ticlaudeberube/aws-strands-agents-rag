@@ -253,11 +253,12 @@ Features tested:
 
 Run: `npx playwright test e2e/chatbot-search.spec.ts`
 
-### chatbot-status.spec.ts (20 tests) ✨
+### chatbot-status.spec.ts (21 tests) ✨
 **Tests API health checking and status indicators**
 
 Features tested:
-- API status indicator (Connected/Checking/Offline)
+- API status indicator (Connected/Warning/Checking/Offline)
+- Warning state when local Milvus is unavailable while the API remains reachable
 - Health check on app mount
 - Web search capability detection
 - Button disabling when offline

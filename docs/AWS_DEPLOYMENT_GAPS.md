@@ -10,11 +10,56 @@ This complements the deploy runbook in
 
 ---
 
+## TODO — remaining open items
+
+Consolidated checklist of everything still open (details in the sections below).
+Resolved items (#1, #2, #9b) are omitted.
+
+**Deploy blockers**
+- [ ] #3 Bootstrap the Terraform remote-state backend (S3 bucket + DynamoDB lock) by hand.
+- [ ] #4 Run `terraform plan` / `apply` (nothing is deployed yet).
+- [ ] #2 (follow-up) Wire the CI-built `lambda-package` artifact into the actual apply.
+
+**Region / account** — ✅ resolved
+- [x] #5 Assigned project Region confirmed as **US East (N. Virginia) =
+      `us-east-1`** (AWS Settings), matching the Terraform `aws_region`. Local
+      `default` + `cberube` profiles aligned to `us-east-1`.
+- [x] #6 Service + model availability verified in `us-east-1` on
+      `996428372683`: Bedrock `amazon.nova-lite-v1:0` is ACTIVE, and the
+      OpenSearch Serverless + ElastiCache APIs respond (0 resources — available,
+      none provisioned yet).
+- [ ] #1 (follow-up) Enable the chosen Bedrock model for the deploying account
+      (and submit the Anthropic FTU form if switching to Claude).
+
+**Config / secrets / operational**
+- [ ] #7 Populate the Tavily + Redis Secrets Manager secrets post-apply.
+- [ ] #8 Keep PCA embedding projection consistent (re-index if `bedrock_pca_matrix_uri` changes).
+- [ ] #9 Confirm the AOSS data-access policy maps the Lambda execution role.
+- [ ] #10 Upload documents to the S3 `documents/` prefix to populate the KB.
+- [ ] #11 Note: compute module `count` depends on an apply-time value (can't `-target` it in isolation).
+- [ ] #12 Bump Terraform `required_version` to `>= 1.6.0` for CI/prod.
+
+**Testing / hardening (not deploy blockers)**
+- [ ] Add unit tests for the untested new code: `BedrockClient` Converse request/response, `DynamoDBClient` local wiring, multi-turn history (`_format_history` / `_apply_history` with both dict shapes + empty/oversized), and the frontend `serverlessChat` adapter mapping.
+- [ ] Live end-to-end test of the frontend serverless adapter (#9b) against a deployed API Gateway + Lambda.
+
+**Feature polish (optional, lower priority)**
+- [ ] True token streaming via Bedrock `converse_stream` (currently single-chunk).
+- [ ] Multi-turn memory in **Local Mode** (currently serverless-path only; see SERVERLESS_LOCAL.md TODO).
+- [ ] Serverless-mode nuance: `bypass_cache` has no effect on the Lambda path; force-web passes through.
+
+---
+
 ## Blockers — must fix before deploy
 
-### 1. ❌ Bedrock inference model is end-of-life / access-gated
-The Terraform default `anthropic.claude-3-haiku-20240307-v1:0` has reached
-**end-of-life** and is no longer invokable. Pick an active model:
+### 1. ✅ Bedrock inference model (fixed)
+~~The Terraform default `anthropic.claude-3-haiku-20240307-v1:0` is
+end-of-life.~~ **Fixed:** all tfvars (`dev`/`staging`/`prod`) and the root +
+compute module defaults now use **`amazon.nova-lite-v1:0`** (active, on-demand,
+no Anthropic FTU form); prod overrides to `amazon.nova-pro-v1:0`. To use
+Anthropic Claude instead, submit the FTU form and set `bedrock_model_override`
+to an active profile ID (e.g. `us.anthropic.claude-haiku-4-5-20251001-v1:0`).
+Original guidance retained below for reference:
 - **Amazon Nova** (e.g. `amazon.nova-lite-v1:0`) — no extra access form; works
   today. (This is what the local setup uses.)
 - **Anthropic Claude** (e.g. `us.anthropic.claude-haiku-4-5-20251001-v1:0`) —
@@ -27,12 +72,16 @@ Action: set `bedrock_inference_model_id` (and/or `bedrock_model_override`) in
 `infrastructure/terraform/environments/*.tfvars` to an active model, and ensure
 the chosen model is enabled for the deploying account + Region.
 
-### 2. ❌ Converse migration must be in the Lambda package
-`src/tools/bedrock_client.py` now uses the Bedrock **Converse** API (model-
-agnostic). This only reaches Lambda if **CI rebuilds the deployment zip from
-`src/`**. The compute module currently builds a **placeholder zip**; the real
-artifact must be built and passed via `lambda_package_path` /
-`lambda_source_code_hash` (see DEPLOYMENT.md Step 2).
+### 2. ✅ Converse migration ships in the Lambda package (fixed)
+~~The real artifact must be built from `src/`.~~ **Fixed:** added
+`infrastructure/lambda/build_lambda_package.sh` (+ `requirements-lambda.txt`)
+which builds an arm64 zip from `src/` with the serverless-runtime deps, and a
+**build-lambda** CI job that runs it and uploads `lambda.zip` +
+`lambda.zip.sha256`. Verified the built zip contains the Converse change, the
+handler history wiring, and the multi-turn routing helpers. Pass the artifact to
+Terraform via `lambda_package_path` / `lambda_source_code_hash` on apply (see
+DEPLOYMENT.md Step 2). Remaining manual step: wire the artifact into the actual
+deploy pipeline/apply.
 
 ### 3. ❌ Terraform remote-state backend not bootstrapped
 `backend.tf` points at an S3 bucket (`strands-rag-tfstate`) + DynamoDB lock
@@ -49,19 +98,20 @@ unprovisioned.
 
 ## Region / account constraints (new AWS experience)
 
-### 5. ⚠️ (confirm) Project Region mismatch
-Everything is pinned to `us-east-1`, but on the managed AWS experience the
-**assigned project Region** (from the contact address, viewable in AWS Settings
-→ View all projects → Overview → Additional Info → Region) governs where
-Regional resources can be created. Local `~/.aws/config` has shown
-`ca-central-1` / `us-east-2`. If the assigned Region is not `us-east-1`, the
-deploy is **blocked by managed SCPs**. Confirm the assigned Region and set the
-Terraform `aws_region` to match.
+### 5. ✅ Project Region (resolved)
+The assigned project Region (AWS Settings) is **US East (N. Virginia) =
+`us-east-1`**, which matches the Terraform `aws_region` in all tfvars. The local
+`~/.aws/config` default profile (previously `ca-central-1`) and the `cberube`
+profile are both now set to `us-east-1`, so CLI/Terraform target the right
+Region. No SCP region-block risk for a `us-east-1` deploy.
 
-### 6. ⚠️ (confirm) Service + model availability in the assigned Region
-Verify Bedrock (and the chosen model), OpenSearch Serverless, and ElastiCache
-are all available in the assigned Region — not every service/model exists in
-every Region.
+### 6. ✅ Service + model availability (verified in us-east-1)
+Verified on account `996428372683` in `us-east-1`: Bedrock
+`amazon.nova-lite-v1:0` reports `modelLifecycle.status = ACTIVE`, and the
+OpenSearch Serverless (`list-collections`) and ElastiCache
+(`describe-cache-clusters`) APIs respond (0 resources — the services are
+available and callable, nothing provisioned yet). If the assigned Region turns
+out NOT to be `us-east-1` (see #5), re-verify in that Region.
 
 ---
 
@@ -91,18 +141,18 @@ requires a **data-access policy** mapping the Lambda execution role to the
 collection. Verify that policy exists and includes the role, or retrieval/index
 calls will 403.
 
-### 9b. ⚠️ (confirm) Frontend ↔ API response-contract mismatch
-The React app calls an **OpenAI-style** `/v1/chat/completions` (served by
-`api_server.py`), but the deployed **Lambda** behind API Gateway returns the
-**serverless** envelope `{answer, sources, tier_used, session_id, latency_ms,
-confidence_score, web_search_unavailable}` from a `POST /chat` route. These are
-**different contracts**. Locally this is hidden because the GUI runs inside
-`api_server.py` (via the shim). On real AWS the frontend talks to API Gateway →
-Lambda directly, so either the frontend must consume the serverless shape, or an
-adapter/BFF must translate it. Confirm which contract the deployed frontend
-expects and reconcile. (Verified by code reading: the Lambda response envelope
-is built in `agentcore_handler.lambda_handler`; the React client in
-`chatbots/react-chatbot/src/App.js` consumes the OpenAI-style streaming shape.)
+### 9b. ✅ Frontend ↔ API response-contract mismatch (fixed)
+~~The React app only spoke the OpenAI-style SSE `/v1/chat/completions` contract,
+but the deployed Lambda returns the serverless `{answer, sources, tier_used,
+session_id, ...}` envelope at `POST /chat`.~~ **Fixed (Option 1 — frontend
+adapter):** added `chatbots/react-chatbot/src/config/serverlessChat.js`, and
+`App.js` now branches on `isServerlessMode()` to call `POST /chat` with the
+serverless body and parse the single-JSON response (mapping `tier_used` →
+`cached`/`web_search`/`rag`). A stable per-session id is sent so serverless
+multi-turn history accumulates. Local-dev SSE streaming is unchanged. Verified:
+production build passes with no warnings (`CI=true npm run build`), and the
+adapter correctly parses a simulated serverless Lambda envelope. Still needs a
+live end-to-end test against a deployed API Gateway + Lambda once #4 is done.
 
 ### 10. ⚠️ Index + document population
 `rag-kb` / `rag-cache` indexes and real documents don't exist until the indexing
@@ -144,10 +194,12 @@ target is `>= 1.6.0`. Bump in CI/prod.
 
 ## Suggested order of attack
 
-1. Confirm the **assigned project Region** (#5) — everything else depends on it.
-2. Set an **active Bedrock model** in the tfvars and enable it for the account
-   (#1); submit the Anthropic FTU form if going with Claude.
-3. Wire **CI to build the real Lambda zip** with the Converse change (#2).
+1. ~~Confirm the assigned project Region (#5)~~ — ✅ done (`us-east-1`).
+2. ~~Set an active Bedrock model in the tfvars (#1)~~ — ✅ done (Nova). Still
+   enable the model for the account if needed; submit the Anthropic FTU form only
+   if switching to Claude.
+3. ~~Wire CI to build the real Lambda zip (#2)~~ — ✅ done; still wire the
+   artifact into the actual apply.
 4. **Bootstrap the state backend** (#3), then `plan`/`apply` (#4).
 5. Populate **secrets** (#7), confirm the **AOSS data-access policy** (#9), then
    **upload documents** to populate the KB (#10).

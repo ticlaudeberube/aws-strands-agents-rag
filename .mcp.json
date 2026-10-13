@@ -1,0 +1,73 @@
+{
+	"mcpServers": {
+		"aws-docs": {
+			"type": "local",
+			"command": "uvx",
+			"args": [
+				"--from",
+				"awslabs.aws-documentation-mcp-server@latest",
+				"awslabs.aws-documentation-mcp-server"
+			],
+			"tools": [
+				"*"
+			],
+			"env": {
+				"FASTMCP_LOG_LEVEL": "ERROR",
+				"AWS_DOCUMENTATION_PARTITION": "aws"
+			}
+		},
+		"bedrock-agentcore": {
+			"type": "local",
+			"command": "uvx",
+			"args": [
+				"awslabs.amazon-bedrock-agentcore-mcp-server@latest"
+			],
+			"tools": [
+				"*"
+			],
+			"env": {
+				"FASTMCP_LOG_LEVEL": "ERROR"
+			}
+		},
+		"milvus": {
+			"type": "local",
+			"command": "uvx",
+			"args": [
+				"mcp-server-milvus==0.1.1.dev9"
+			],
+			"tools": [
+				"*"
+			],
+			"env": {
+				"MILVUS_URI": "http://localhost:19530",
+				"MILVUS_TOKEN": ""
+			}
+		},
+		"playwright-test": {
+			"type": "local",
+			"command": "npx",
+			"args": [
+				"playwright",
+				"run-test-mcp-server"
+			],
+			"tools": [
+				"*"
+			]
+		},
+		"terraform": {
+			"type": "local",
+			"command": "docker",
+			"args": [
+				"run",
+				"-i",
+				"--rm",
+				"-e",
+				"TFE_TOKEN",
+				"hashicorp/terraform-mcp-server"
+			],
+			"tools": [
+				"*"
+			]
+		}
+	}
+}

@@ -1,5 +1,5 @@
 {
-  "servers": {
+  "mcpServers": {
     "aws-docs": {
       "command": "uvx",
       "args": [
@@ -14,28 +14,24 @@
     },
     "bedrock-agentcore": {
       "command": "uvx",
-      "args": ["awslabs.amazon-bedrock-agentcore-mcp-server@latest"],
+      "args": [
+        "awslabs.amazon-bedrock-agentcore-mcp-server@latest"
+      ],
       "env": {
         "FASTMCP_LOG_LEVEL": "ERROR"
       }
     },
     "milvus": {
       "command": "uvx",
-      "args": ["mcp-server-milvus==0.1.1.dev9"],
+      "args": [
+        "mcp-server-milvus==0.1.1.dev9"
+      ],
       "env": {
         "MILVUS_URI": "http://localhost:19530",
         "MILVUS_TOKEN": ""
       }
     },
-    "tavily": {
-      "command": "npx",
-      "args": ["-y", "tavily-mcp@0.2.22"],
-      "env": {
-        "TAVILY_API_KEY": "${input:tavilyApiKey}"
-      }
-    },
     "playwright-test": {
-      "type": "stdio",
       "command": "npx",
       "args": [
         "playwright",
@@ -53,22 +49,8 @@
         "hashicorp/terraform-mcp-server"
       ],
       "env": {
-        "TFE_TOKEN": "${input:tfeToken}"
+        "TFE_TOKEN": "${TFE_TOKEN}"
       }
     }
-  },
-  "inputs": [
-    {
-      "id": "tavilyApiKey",
-      "type": "promptString",
-      "description": "Tavily API key (get one free at https://tavily.com)",
-      "password": true
-    },
-    {
-      "id": "tfeToken",
-      "type": "promptString",
-      "description": "HCP Terraform / Terraform Enterprise API token (optional \u2014 leave blank for Registry-only access)",
-      "password": true
-    }
-  ]
+  }
 }

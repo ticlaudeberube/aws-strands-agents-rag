@@ -11,8 +11,8 @@ This is an AWS Strands Agents RAG system that uses Milvus for vector database op
 - **Strands Agent Expert**: Specialized Copilot agent for Strands development
   - **Usage Guide**: [STRANDS_AGENT_USAGE.md](.github/STRANDS_AGENT_USAGE.md) - Complete documentation
   - **Agent**: `@strands-expert` - Expert assistance for Strands Agent development
-  - **Generator**: `/strands-generator` - Quick boilerplate code generation
-  - Use for: agent creation, tool development, MCP integration, performance optimization
+  - **Skill**: `/strands-agent-development` - Project-aware workflow for implementing and testing Strands Agent changes
+  - Use the skill for code changes; use the expert agent for design questions and troubleshooting
 ## Knowledge Base References
   - **AWS Strands Agent Samples**: https://github.com/aws-samples/sample-strands-agent-with-agentcore
     - Reference for sample Strands agent implementations

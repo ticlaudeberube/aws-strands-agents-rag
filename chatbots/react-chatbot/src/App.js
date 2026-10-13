@@ -77,8 +77,12 @@ function App() {
   }, []);
 
   const checkApiStatus = async () => {
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), 8000);
     try {
-      const response = await fetch(`${API_BASE_URL}/health`);
+      const response = await fetch(`${API_BASE_URL}/health`, {
+        signal: controller.signal,
+      });
       if (response.ok) {
         const data = await response.json();
         if (data.status === 'error') {
@@ -95,15 +99,24 @@ function App() {
             ? data.warning || 'The vector database is unavailable. Knowledge-base search and persistent cached questions are unavailable.'
             : ''
         );
-        setWebSearchEnabled(data.web_search_enabled || false);
+        setWebSearchEnabled(data.web_search_enabled === true);
         console.log('[App] Web search enabled:', data.web_search_enabled);
       } else {
         setApiStatus('error');
+        setWebSearchEnabled(false);
       }
     } catch (error) {
       setApiStatus('error');
+      setWebSearchEnabled(false);
+    } finally {
+      window.clearTimeout(timeoutId);
     }
   };
+
+  useEffect(() => {
+    const healthCheckInterval = window.setInterval(checkApiStatus, 10000);
+    return () => window.clearInterval(healthCheckInterval);
+  }, []);
 
   const loadCachedResponses = async () => {
     try {

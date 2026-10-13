@@ -13,8 +13,14 @@ In local mode, `status` is `"warning"` and `vector_db_available` is `false` if
 the configured vector DB cannot be reached. The API remains available for health checks, but
 knowledge-base search and persistent cached questions are unavailable. The
 React client displays this warning without treating the API as offline.
+The client also rechecks API health every 10 seconds so it can recover from
+an API server that was unavailable when the page loaded. The API limits its
+vector DB health probe to two seconds, so an unresponsive database is reported
+as a warning rather than leaving the GUI on a stale connected status.
 
 The health response's `vector_db` and `vector_db_available` fields are provider-neutral.
+`web_search_enabled` is true only when web search is enabled in settings and a
+Tavily API key is configured.
 The current local adapter uses Milvus. `/health/vector-db` provides detailed
 vector DB health; `/health/milvus` remains as a deprecated compatibility route.
 
@@ -35,6 +41,9 @@ curl -X POST http://localhost:8000/v1/chat/completions \
 ```
 
 The request accepts standard OpenAI-style chat fields plus project-specific options such as `force_web_search`.
+When forced web search is requested while web search is disabled in settings,
+the API reports that it is disabled rather than presenting the condition as a
+Tavily quota or authentication failure.
 
 ## Request fields
 

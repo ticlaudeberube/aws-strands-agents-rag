@@ -26,6 +26,7 @@ async def test_web_search_streaming():
         patch("src.agents.strands_graph_agent.MilvusVectorDB"),
         patch("src.agents.strands_graph_agent.OllamaClient"),
         patch("src.agents.strands_graph_agent.MilvusResponseCache"),
+        patch("src.agents.strands_graph_agent.WebSearchClient"),
     ):
         agent = StrandsGraphRAGAgent(settings=settings)
 
@@ -42,3 +43,40 @@ async def test_web_search_streaming():
 
     assert isinstance(full_response, str)
     assert len(full_response) > 0
+
+
+@pytest.mark.asyncio
+async def test_forced_web_search_reports_when_disabled_without_generating(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A forced web-only query should not generate an answer without search results."""
+    settings = get_settings()
+
+    with (
+        patch("src.agents.strands_graph_agent.MilvusVectorDB"),
+        patch("src.agents.strands_graph_agent.OllamaClient"),
+        patch("src.agents.strands_graph_agent.MilvusResponseCache"),
+        patch("src.agents.strands_graph_agent.WebSearchClient"),
+    ):
+        agent = StrandsGraphRAGAgent(settings=settings)
+
+    agent.web_search = None
+    monkeypatch.setattr(
+        agent,
+        "_generate_web_search_query",
+        lambda question: pytest.fail("A disabled web search must not build a query"),
+    )
+
+    chunks = [
+        chunk
+        async for chunk in agent.stream_answer_web_search_only(
+            question="What is the latest vector DB release?"
+        )
+    ]
+
+    assert chunks == [
+        "Web search is disabled. Enable it in server settings to use web-only search."
+    ]
+    assert agent._last_stream_sources[0]["metadata"] == (
+        '{"source": "system", "type": "web_search_disabled"}'
+    )

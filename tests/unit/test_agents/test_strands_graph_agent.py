@@ -207,9 +207,7 @@ class TestAgentRejectionPaths:
 
         assert sources == []
         answer_lc = answer.lower()
-        valid_rejection = (
-            "can only help" in answer_lc and "milvus" in answer_lc
-        ) or "web search features are currently unavailable" in answer_lc
+        valid_rejection = "can only help" in answer_lc
         assert valid_rejection, f"Unexpected rejection message: {answer}"
         assert len(answer) > 0
 
@@ -223,10 +221,8 @@ class TestAgentRejectionPaths:
         assert sources == []
         answer_lc = answer.lower()
         valid_rejection = (
-            ("detected" in answer_lc and ("concern" in answer_lc or "security" in answer_lc))
-            or "can only help" in answer_lc
-            or "web search features are currently unavailable" in answer_lc
-        )
+            "detected" in answer_lc and ("concern" in answer_lc or "security" in answer_lc)
+        ) or "can only help" in answer_lc
         assert valid_rejection, f"Unexpected rejection message: {answer}"
         assert len(answer) > 0
 
@@ -413,6 +409,20 @@ class TestGraphConfiguration:
         # Should have: topic_check, security_check, rag_worker,
         # reject_out_of_scope, reject_security_risk, format_result
         assert len(nodes) >= 3
+
+    def test_out_of_scope_rejection_does_not_report_web_search_failure(self, settings):
+        """Out-of-scope queries should not claim disabled web search is unavailable."""
+        with (
+            patch("src.agents.strands_graph_agent.MilvusVectorDB"),
+            patch("src.agents.strands_graph_agent.OllamaClient"),
+            patch("src.agents.strands_graph_agent.Agent"),
+        ):
+            graph_config = create_rag_graph(settings=settings)
+
+        result = graph_config["nodes"]["reject_out_of_scope"]({"question": "How do I bake?"})
+
+        assert "web search" not in result["final_answer"].lower()
+        assert result["final_sources"] == []
 
 
 # ============================================================================

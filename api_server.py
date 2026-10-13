@@ -50,6 +50,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+VECTOR_DB_HEALTH_CHECK_TIMEOUT_SECONDS = 2.0
+
 
 # ============================================================================
 # DRY Helper Functions
@@ -251,6 +253,7 @@ async def lifespan(app: FastAPI):
         logger.info("\nInitializing MCP Server...")
         try:
             mcp_server = RAGAgentMCPServer(settings)
+            _adopt_connected_mcp_agent()
             registry = get_registry()
 
             skills_summary = registry.list_skills()
@@ -345,6 +348,22 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+def _adopt_connected_mcp_agent() -> None:
+    """Reuse the MCP agent if it connected after the primary agent degraded."""
+    global strands_agent
+
+    if (
+        strands_agent is not None
+        and strands_agent.vector_db is None
+        and mcp_server is not None
+        and mcp_server.agent.vector_db is not None
+    ):
+        logger.warning(
+            "Primary agent started without the vector database; reusing the connected MCP agent"
+        )
+        strands_agent = mcp_server.agent
 
 
 async def get_or_init_agent():
@@ -673,7 +692,7 @@ async def root():
 
 
 @app.get("/health", tags=["health"])
-async def health():
+def health():
     """Health check endpoint, including local vector database availability."""
     try:
         s = settings if settings else get_settings()
@@ -687,7 +706,10 @@ async def health():
 
         if vector_db is not None:
             try:
-                vector_db.client.list_collections(db_name=s.milvus_db_name)
+                vector_db.client.list_collections(
+                    db_name=s.milvus_db_name,
+                    timeout=VECTOR_DB_HEALTH_CHECK_TIMEOUT_SECONDS,
+                )
             except Exception as e:
                 logger.warning("Vector database health check failed: %s", e)
             else:
@@ -700,7 +722,9 @@ async def health():
             "vector_db": f"{s.milvus_host}:{s.milvus_port}",
             "vector_db_available": vector_db_available,
             "warning": None if vector_db_available else warning,
-            "web_search_enabled": bool(s.tavily_api_key and s.tavily_api_key.strip()),
+            "web_search_enabled": bool(
+                s.enable_web_search_supplement and s.tavily_api_key and s.tavily_api_key.strip()
+            ),
         }
     except Exception as e:
         return {"status": "error", "detail": str(e)}
@@ -725,7 +749,8 @@ async def health_detailed():
         # Check the configured vector database.
         try:
             vector_db_collections = current_agent.vector_db.client.list_collections(
-                db_name=current_settings.milvus_db_name
+                db_name=current_settings.milvus_db_name,
+                timeout=VECTOR_DB_HEALTH_CHECK_TIMEOUT_SECONDS,
             )
             vector_db_status = "healthy"
             vector_db_collection_count = len(vector_db_collections)
@@ -1109,6 +1134,7 @@ def _stream_chat_completions(
 
                 # CRITICAL: Check competitor queries even in force web search mode for streaming
                 from src.agents.strands_graph_agent import (
+                    _create_web_search_disabled_message,
                     _create_web_search_unavailable_message,
                     _is_competitor_database_query,
                 )
@@ -1120,10 +1146,10 @@ def _stream_chat_completions(
                     )
                     # Return same error message format as normal competitor detection
                     if not agent.web_search:
-                        logger.warning(
-                            "[STREAMING_FORCE_WEB_SEARCH] Web search unavailable for competitor query"
+                        logger.info(
+                            "[STREAMING_FORCE_WEB_SEARCH] Web search disabled for competitor query"
                         )
-                        error_dict = _create_web_search_unavailable_message()
+                        error_dict = _create_web_search_disabled_message()
                         # Send text content first
                         yield f"data: {json.dumps({'choices': [{'delta': {'content': error_dict['text']}}]})}\n\n"
                         # Send sources information in final chunk to match frontend expectations
@@ -1405,6 +1431,7 @@ async def chat_completions(request: ChatCompletionRequest, bypass_cache: bool = 
                 # CRITICAL: Check competitor queries even in force web search mode
                 # Must use same detection logic and return same error message format
                 from src.agents.strands_graph_agent import (
+                    _create_web_search_disabled_message,
                     _create_web_search_unavailable_message,
                     _is_competitor_database_query,
                 )
@@ -1416,10 +1443,8 @@ async def chat_completions(request: ChatCompletionRequest, bypass_cache: bool = 
                     )
                     # Return same error message format as normal competitor detection
                     if not current_agent.web_search:
-                        logger.warning(
-                            "[FORCE_WEB_SEARCH] Web search unavailable for competitor query"
-                        )
-                        error_dict = _create_web_search_unavailable_message()
+                        logger.info("[FORCE_WEB_SEARCH] Web search disabled for competitor query")
+                        error_dict = _create_web_search_disabled_message()
                         answer = error_dict["text"]
                         sources = [error_dict]
                     else:

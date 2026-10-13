@@ -687,6 +687,16 @@ def _create_web_search_unavailable_message(message_type: str = "standard") -> di
     }
 
 
+def _create_web_search_disabled_message() -> dict[str, str]:
+    """Create a system message for web search disabled by configuration."""
+    return {
+        "text": "Web search is disabled. Enable it in server settings to use web-only search.",
+        "metadata": '{"source": "system", "type": "web_search_disabled"}',
+        "source_type": "system_message",
+        "url": "",
+    }
+
+
 def _create_no_web_results_message(message_type: str) -> dict[str, str]:
     """Create standardized no web results messages.
 
@@ -1341,13 +1351,12 @@ def create_rag_graph(
     # NODE 4: Failure Handlers
     def reject_out_of_scope(state: dict) -> dict:
         """Handle out-of-scope queries."""
-        # Use the same web search unavailable message for consistency
-        # Many out-of-scope queries are legitimate questions that would benefit from web search
-        web_unavailable_msg = _create_web_search_unavailable_message()
-        state["final_answer"] = web_unavailable_msg["text"]
+        state["final_answer"] = (
+            "I can help with questions about vector databases, vector search, embeddings, and RAG."
+        )
         state["final_sources"] = []
         state["final_confidence"] = 0.0
-        logger.info("[REJECTION] Out-of-scope query → returning web search unavailable message")
+        logger.info("[REJECTION] Out-of-scope query")
         return state
 
     def reject_security_risk(state: dict) -> dict:
@@ -1888,18 +1897,10 @@ class StrandsGraphRAGAgent:
 
         # CRITICAL: Check competitor queries BEFORE cache - they need web search first
         is_competitor_query = _is_competitor_database_query(question)
-        if is_competitor_query:
+        if is_competitor_query and self.web_search:
             logger.info(
                 f"[COMPETITOR_QUERY] Detected competitor database query in answer_question: {question[:50]}..."
             )
-
-            # For competitor queries, web search is REQUIRED - check availability first
-            if not self.web_search:
-                logger.warning(
-                    "[COMPETITOR_QUERY] Web search unavailable - returning error message"
-                )
-                error_dict = _create_web_search_unavailable_message()
-                return error_dict["text"], [error_dict]
 
             # Test web search availability by attempting a search
             try:
@@ -2064,19 +2065,10 @@ class StrandsGraphRAGAgent:
                 # TOPIC PASSED → Check if time-sensitive (after topic validation)
                 # ================================================================
                 is_time_sensitive = self._is_time_sensitive_query(question)
-                if is_time_sensitive:
+                if is_time_sensitive and self.web_search:
                     logger.info(
                         f"[TIME_SENSITIVE_QUERY] Detected time-sensitive IN-SCOPE query: {question[:50]}..."
                     )
-
-                    # For time-sensitive queries, web search is REQUIRED - check availability first
-                    if not self.web_search:
-                        logger.warning(
-                            "[TIME_SENSITIVE_QUERY] Web search unavailable - returning error message"
-                        )
-                        error_dict = _create_web_search_unavailable_message()
-                        execution_path.append("time_sensitive_web_search_required")
-                        return error_dict["text"], [error_dict]
 
                     # Test web search availability by attempting a search
                     try:
@@ -2568,20 +2560,10 @@ class StrandsGraphRAGAgent:
 
             # CRITICAL: Check competitor queries BEFORE cache - they need web search first
             is_competitor_query = _is_competitor_database_query(question)
-            if is_competitor_query:
+            if is_competitor_query and self.web_search:
                 logger.info(
                     f"[COMPETITOR_QUERY] Detected competitor database query: {question[:50]}..."
                 )
-
-                # For competitor queries, web search is REQUIRED - check availability first
-                if not self.web_search:
-                    logger.warning(
-                        "[COMPETITOR_QUERY] Web search unavailable - returning error message"
-                    )
-                    error_msg = _create_web_search_unavailable_message("competitor")
-                    self._last_stream_sources = [error_msg]
-                    yield error_msg["text"]
-                    return
 
                 # Test web search availability by attempting a search
                 try:
@@ -2684,20 +2666,10 @@ class StrandsGraphRAGAgent:
                 return
 
             # TIME-SENSITIVE CHECK (after scope validation passes)
-            if is_time_sensitive:
+            if is_time_sensitive and self.web_search:
                 logger.info(
                     f"[TIME_SENSITIVE_QUERY] Detected time-sensitive IN-SCOPE query: {question[:50]}..."
                 )
-
-                # For time-sensitive queries, web search is REQUIRED - check availability first
-                if not self.web_search:
-                    logger.warning(
-                        "[TIME_SENSITIVE_QUERY] Web search unavailable - returning error message"
-                    )
-                    error_msg = _create_web_search_unavailable_message("standard")
-                    self._last_stream_sources = [error_msg]
-                    yield error_msg["text"]
-                    return
 
                 # Test web search availability by attempting a search
                 try:
@@ -2958,20 +2930,10 @@ class StrandsGraphRAGAgent:
 
             # CRITICAL: Check competitor queries BEFORE processing - they need web search first
             is_competitor_query = _is_competitor_database_query(question)
-            if is_competitor_query:
+            if is_competitor_query and self.web_search:
                 logger.info(
                     f"[COMPETITOR_QUERY] Detected competitor database query in stream_answer_no_cache: {question[:50]}..."
                 )
-
-                # For competitor queries, web search is REQUIRED - check availability first
-                if not self.web_search:
-                    logger.warning(
-                        "[COMPETITOR_QUERY] Web search unavailable - returning error message"
-                    )
-                    error_msg = _create_web_search_unavailable_message("competitor")
-                    self._last_stream_sources = [error_msg]
-                    yield error_msg["text"]
-                    return
 
                 # Test web search availability by attempting a search
                 try:
@@ -3198,14 +3160,17 @@ class StrandsGraphRAGAgent:
         sources: list[dict[str, Any]] = []
         self._last_stream_sources = []  # Initialize immediately so it's always set
 
+        if not self.web_search:
+            disabled_message = _create_web_search_disabled_message()
+            self._last_stream_sources = [disabled_message]
+            yield disabled_message["text"]
+            return
+
         try:
             logger.info(f"[STREAM_WEB_ONLY] 🌐 Forcing web search for: {question[:60]}")
 
             # Web search only - no knowledge base retrieval
             try:
-                if not self.web_search:
-                    raise ValueError("Web search client is not available")
-
                 web_search_query = self._generate_web_search_query(question)
                 web_results, web_search_status = await asyncio.to_thread(
                     self.web_search.search, web_search_query, 5

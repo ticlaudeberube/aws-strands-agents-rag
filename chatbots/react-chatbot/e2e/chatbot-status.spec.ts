@@ -93,8 +93,98 @@ test.describe("RAG Chatbot - API Status & Health", () => {
     await expect(
       page.getByRole("status").filter({ hasText: "vector database is unavailable" }),
     ).toBeVisible();
+    await expect(page.getByText("API Connected")).toHaveCount(0);
     await page.locator("textarea.chat-input").fill("What is a vector database?");
     await expect(page.locator("button.send-btn")).toBeEnabled();
+  });
+
+  test("should recover when the API becomes available after the page loads", async ({
+    page,
+  }) => {
+    let healthChecks = 0;
+    let apiAvailable = false;
+    await page.route("**/health", (route) => {
+      healthChecks += 1;
+      if (!apiAvailable) {
+        return route.fulfill({ status: 503 });
+      }
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          status: "ok",
+          vector_db_available: true,
+          warning: null,
+          web_search_enabled: false,
+        }),
+      });
+    });
+
+    await page.goto("/");
+
+    await expect(page.getByText("API Offline")).toBeVisible();
+    apiAvailable = true;
+    await expect(page.getByText("API Connected")).toBeVisible({
+      timeout: 15000,
+    });
+    expect(healthChecks).toBeGreaterThan(1);
+  });
+
+  test("should warn when vector DB becomes unavailable while API remains available", async ({
+    page,
+  }) => {
+    let vectorDbAvailable = true;
+    await page.route("**/health", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          status: vectorDbAvailable ? "ok" : "warning",
+          vector_db_available: vectorDbAvailable,
+          warning: vectorDbAvailable
+            ? null
+            : "The vector database is unavailable. Knowledge-base search and persistent cached questions are unavailable.",
+          web_search_enabled: false,
+        }),
+      }),
+    );
+
+    await page.goto("/");
+    await expect(page.getByText("API Connected")).toBeVisible();
+
+    vectorDbAvailable = false;
+    await expect(page.getByText("API Warning")).toBeVisible({
+      timeout: 15000,
+    });
+    await expect(page.getByText("API Connected")).toHaveCount(0);
+    await expect(
+      page.getByRole("status").filter({ hasText: "vector database is unavailable" }),
+    ).toBeVisible();
+  });
+
+  test("should hide web search control when the feature is disabled", async ({
+    page,
+  }) => {
+    let webSearchEnabled = true;
+    await page.route("**/health", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          status: "ok",
+          vector_db_available: true,
+          web_search_enabled: webSearchEnabled,
+        }),
+      }),
+    );
+
+    await page.goto("/");
+
+    await expect(page.locator("button.web-search-btn")).toBeVisible();
+    webSearchEnabled = false;
+    await expect(page.locator("button.web-search-btn")).toHaveCount(0, {
+      timeout: 15000,
+    });
   });
 
   test("should perform health check on app mount", async ({ page }) => {

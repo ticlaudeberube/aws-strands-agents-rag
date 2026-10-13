@@ -17,6 +17,21 @@ def _mock_agent(list_collections: Mock) -> SimpleNamespace:
     return SimpleNamespace(vector_db=vector_db)
 
 
+def test_adopts_connected_mcp_agent_when_primary_agent_degraded(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A later successful MCP connection restores the API's primary agent."""
+    degraded_agent = _mock_agent(Mock())
+    degraded_agent.vector_db = None
+    connected_agent = _mock_agent(Mock())
+    monkeypatch.setattr(api_server, "strands_agent", degraded_agent)
+    monkeypatch.setattr(api_server, "mcp_server", SimpleNamespace(agent=connected_agent))
+
+    api_server._adopt_connected_mcp_agent()
+
+    assert api_server.strands_agent is connected_agent
+
+
 def test_health_reports_warning_when_vector_db_client_is_missing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -24,7 +39,7 @@ def test_health_reports_warning_when_vector_db_client_is_missing(
     monkeypatch.setattr(api_server, "settings", Settings())
     monkeypatch.setattr(api_server, "strands_agent", None)
 
-    data = asyncio.run(api_server.health())
+    data = api_server.health()
 
     assert data["status"] == "warning"
     assert data["vector_db_available"] is False
@@ -39,11 +54,15 @@ def test_health_reports_warning_when_vector_db_probe_fails(
     monkeypatch.setattr(api_server, "settings", Settings())
     monkeypatch.setattr(api_server, "strands_agent", _mock_agent(list_collections))
 
-    data = asyncio.run(api_server.health())
+    data = api_server.health()
 
     assert data["status"] == "warning"
     assert data["vector_db_available"] is False
     assert "vector database is unavailable" in data["warning"]
+    list_collections.assert_called_once_with(
+        db_name=Settings().milvus_db_name,
+        timeout=api_server.VECTOR_DB_HEALTH_CHECK_TIMEOUT_SECONDS,
+    )
 
 
 def test_health_reports_ok_when_vector_db_is_available(
@@ -54,11 +73,55 @@ def test_health_reports_ok_when_vector_db_is_available(
     monkeypatch.setattr(api_server, "settings", Settings())
     monkeypatch.setattr(api_server, "strands_agent", _mock_agent(list_collections))
 
-    data = asyncio.run(api_server.health())
+    data = api_server.health()
 
     assert data["status"] == "ok"
     assert data["vector_db_available"] is True
     assert data["warning"] is None
+
+
+def test_health_disables_web_search_when_feature_flag_is_off(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A configured key alone does not enable web search."""
+    configured_settings = Settings().model_copy(
+        update={
+            "enable_web_search_supplement": False,
+            "tavily_api_key": "configured",
+        }
+    )
+    monkeypatch.setattr(api_server, "settings", configured_settings)
+    monkeypatch.setattr(api_server, "strands_agent", _mock_agent(Mock(return_value=[])))
+
+    data = api_server.health()
+
+    assert data["web_search_enabled"] is False
+
+
+def test_health_tracks_vector_db_availability_changes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Repeated health checks reflect a vector DB going offline."""
+    list_collections = Mock(side_effect=[[], ConnectionError("offline")])
+    monkeypatch.setattr(api_server, "settings", Settings())
+    monkeypatch.setattr(api_server, "strands_agent", _mock_agent(list_collections))
+
+    available = api_server.health()
+    unavailable = api_server.health()
+
+    assert available["status"] == "ok"
+    assert available["vector_db_available"] is True
+    assert unavailable["status"] == "warning"
+    assert unavailable["vector_db_available"] is False
+    assert list_collections.call_count == 2
+    assert all(
+        call.kwargs
+        == {
+            "db_name": Settings().milvus_db_name,
+            "timeout": api_server.VECTOR_DB_HEALTH_CHECK_TIMEOUT_SECONDS,
+        }
+        for call in list_collections.call_args_list
+    )
 
 
 def test_detailed_health_warns_when_vector_db_is_unavailable(
@@ -85,3 +148,7 @@ def test_detailed_health_warns_when_vector_db_is_unavailable(
 
     assert data["status"] == "warning"
     assert data["services"]["vector_db"]["status"] == "unhealthy"
+    agent.vector_db.client.list_collections.assert_called_once_with(
+        db_name=Settings().milvus_db_name,
+        timeout=api_server.VECTOR_DB_HEALTH_CHECK_TIMEOUT_SECONDS,
+    )

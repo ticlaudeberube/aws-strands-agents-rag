@@ -276,6 +276,7 @@ def route_rag_query(
     temperature: float = 0.3,
     max_tokens: int | None = None,
     metric_emitter: Callable[[str], None] | None = None,
+    history: list[dict] | None = None,
 ) -> RoutingResult:
     """Route a (validated) query through Cache → KB → Web Search.
 
@@ -299,6 +300,11 @@ def route_rag_query(
         temperature: LLM sampling temperature for generation.
         max_tokens: Optional max-token cap for generation.
         metric_emitter: Optional callback invoked with each warning-metric name.
+        history: Optional prior conversation turns (``{"question","answer"}`` or
+            ``{"role","content"}`` dicts). When supplied, a compact transcript of
+            the most recent turns is prepended to the generation prompt so
+            multi-turn references resolve. Embeddings and cache keys stay keyed
+            on the raw question, so caching behaviour is unchanged.
 
     Returns:
         A :class:`RoutingResult` describing the chosen tier and the answer.
@@ -313,7 +319,7 @@ def route_rag_query(
         # Generate from whatever sources the web search produced (empty when the
         # search was unavailable; the unavailable flag is already set).
         web_result.answer = _generate_from_sources(
-            llm, question, web_result.sources, temperature, max_tokens
+            llm, question, web_result.sources, temperature, max_tokens, history
         )
         return web_result
 
@@ -355,7 +361,7 @@ def route_rag_query(
                 web_result = _build_web_result(question, web_search, kb_sources=[], confidence=0.0)
                 web_result.metrics = result_metrics.metrics
                 web_result.answer = _generate_from_sources(
-                    llm, question, web_result.sources, temperature, max_tokens
+                    llm, question, web_result.sources, temperature, max_tokens, history
                 )
                 return web_result
 
@@ -385,12 +391,12 @@ def route_rag_query(
         web_result = _build_web_result(question, web_search, kb_sources, confidence=relevance)
         web_result.metrics = result_metrics.metrics
         web_result.answer = _generate_from_sources(
-            llm, question, web_result.sources or kb_sources, temperature, max_tokens
+            llm, question, web_result.sources or kb_sources, temperature, max_tokens, history
         )
         return web_result
 
     # ---- Generation from KB context, then populate caches -----------------
-    answer = _generate_from_sources(llm, question, kb_sources, temperature, max_tokens)
+    answer = _generate_from_sources(llm, question, kb_sources, temperature, max_tokens, history)
 
     _populate_caches(
         question,
@@ -587,20 +593,79 @@ def _populate_caches(
         logger.warning("[ROUTING] Layer 4 store_semantic_cache failed: %s", exc)
 
 
+# Multi-turn history: how many prior turns to include in the generation prompt.
+_HISTORY_PROMPT_TURNS = 6
+
+
+def _format_history(history: list[dict] | None) -> str:
+    """Format recent conversation turns into a prompt preamble.
+
+    Accepts turns in either DynamoDB shape (``{"question","answer"}``) or the
+    api_server/chat shape (``{"role","content"}``). Returns an empty string when
+    there is no usable history, otherwise a compact ``User:``/``Assistant:``
+    transcript of the most recent :data:`_HISTORY_PROMPT_TURNS` turns. Only the
+    *generation* prompt uses this; embeddings and cache keys stay keyed on the
+    raw question so cache hits are unaffected.
+    """
+    if not history:
+        return ""
+
+    lines: list[str] = []
+    for turn in history[-_HISTORY_PROMPT_TURNS:]:
+        if not isinstance(turn, dict):
+            continue
+        q = turn.get("question")
+        a = turn.get("answer")
+        if q is not None or a is not None:
+            if q:
+                lines.append(f"User: {str(q).strip()}")
+            if a:
+                lines.append(f"Assistant: {str(a).strip()}")
+            continue
+        # Fallback: {role, content} shape.
+        role = turn.get("role")
+        content = turn.get("content")
+        if isinstance(content, list):  # Strands content blocks: [{"text": ...}]
+            content = " ".join(b.get("text", "") for b in content if isinstance(b, dict)).strip()
+        if role and content:
+            speaker = "User" if role == "user" else "Assistant"
+            lines.append(f"{speaker}: {str(content).strip()}")
+
+    if not lines:
+        return ""
+    return "Previous conversation (most recent last):\n" + "\n".join(lines)
+
+
+def _apply_history(question: str, history: list[dict] | None) -> str:
+    """Prepend formatted history to the question for the generation prompt."""
+    preamble = _format_history(history)
+    if not preamble:
+        return question
+    return (
+        f"{preamble}\n\n"
+        "Using the previous conversation above for context (resolve pronouns and "
+        "references to it), answer the current question.\n\n"
+        f"Current question: {question}"
+    )
+
+
 def _generate_from_sources(
     llm: Any,
     question: str,
     sources: list[dict],
     temperature: float,
     max_tokens: int | None,
+    history: list[dict] | None = None,
 ) -> str:
     """Generate an answer from retrieved ``sources`` via the LLM (Req 5.6).
 
     Uses the LLM client's own prompt formatting when available
     (``BedrockClient.format_rag_prompt``), otherwise falls back to the shared
     prompt template, so the retrieved context is always included in the prompt.
+    When ``history`` is supplied, a compact transcript of recent turns is
+    prepended to the question so the model has conversational context.
     """
-    prompt = _format_prompt(llm, question, sources)
+    prompt = _format_prompt(llm, question, sources, history)
     try:
         return str(llm.generate(prompt=prompt, temperature=temperature, max_tokens=max_tokens))
     except TypeError:
@@ -608,11 +673,20 @@ def _generate_from_sources(
         return str(llm.generate(prompt))
 
 
-def _format_prompt(llm: Any, question: str, sources: list[dict]) -> str:
-    """Build the RAG prompt, preferring the LLM client's own formatter."""
+def _format_prompt(
+    llm: Any, question: str, sources: list[dict], history: list[dict] | None = None
+) -> str:
+    """Build the RAG prompt, preferring the LLM client's own formatter.
+
+    When ``history`` is present, the question passed to the formatter is
+    augmented with a recent-conversation preamble so multi-turn references
+    resolve. The retrieved ``sources`` context is unchanged.
+    """
+    effective_question = _apply_history(question, history)
+
     formatter = getattr(llm, "format_rag_prompt", None)
     if callable(formatter):
-        return str(formatter(question, sources))
+        return str(formatter(effective_question, sources))
 
     # Fallback: shared prompt template (same structure as Local Mode).
     from src.agents import prompts
@@ -630,7 +704,7 @@ def _format_prompt(llm: Any, question: str, sources: list[dict]) -> str:
     )
     return prompts.format_rag_prompt(
         system_instructions=system_instructions,
-        question=question,
+        question=effective_question,
         context=context,
     )
 

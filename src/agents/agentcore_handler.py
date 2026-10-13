@@ -321,8 +321,8 @@ def lambda_handler(event: dict, context: Any = None) -> dict:
         # ---- 10.3: load session history (graceful degradation) -----------
         ddb = _get_ddb_client(settings)
         with _xray_subsegment("dynamodb_load_history"):
-            _history = _load_history(ddb, session_id)
-        logger.info("Loaded %d history turn(s) for session %s", len(_history), session_id)
+            history = _load_history(ddb, session_id)
+        logger.info("Loaded %d history turn(s) for session %s", len(history), session_id)
 
         # ---- 10.3: build graph + invoke shared route ---------------------
         graph = _get_graph(settings)
@@ -337,6 +337,7 @@ def lambda_handler(event: dict, context: Any = None) -> dict:
                     top_k=top_k,
                     force_web_search=force_web_search,
                     metric_emitter=metrics.emit_named,
+                    history=history,
                 )
         except Exception as exc:  # noqa: BLE001 - mapped to LLM_ERROR below
             # A failure inside generation/retrieval is reported as LLM_ERROR per

@@ -1497,11 +1497,14 @@ def create_rag_graph(
         temperature: float | None = None,
         max_tokens: int | None = None,
         metric_emitter: Any | None = None,
+        history: list[dict] | None = None,
     ) -> rag_routing.RoutingResult:
         """Route a validated query through the shared Cache → KB → Web pipeline.
 
         Thin binding over :func:`src.agents.rag_routing.route_rag_query` that
         injects the mode-appropriate backends and configured thresholds.
+        ``history`` (optional prior turns) is forwarded so generation has
+        multi-turn conversational context.
         """
         return rag_routing.route_rag_query(
             question,
@@ -1518,6 +1521,7 @@ def create_rag_graph(
             temperature=(temperature if temperature is not None else settings.ollama_temperature),
             max_tokens=max_tokens,
             metric_emitter=metric_emitter,
+            history=history,
         )
 
     graph_config = {

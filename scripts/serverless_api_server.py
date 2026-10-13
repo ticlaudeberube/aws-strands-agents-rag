@@ -71,9 +71,7 @@ class _OpenSearchCacheQueryClient:
     def __init__(self, opensearch_client):
         self._os = opensearch_client
 
-    def query(
-        self, collection_name=None, db_name=None, output_fields=None, limit=100, **_kw
-    ):  # noqa: ANN001, ARG002
+    def query(self, collection_name=None, db_name=None, output_fields=None, limit=100, **_kw):  # noqa: ANN001, ARG002
         try:
             body = {"size": limit, "query": {"match_all": {}}}
             resp = self._os.client.search(index=self._os.cache_index, body=body)
@@ -262,6 +260,7 @@ class ServerlessAgentShim:
             top_k=top_k,
             temperature=temperature,
             max_tokens=max_tokens,
+            history=history,
         )
         self._persist_turn(session_id, question, result.answer)
         return result

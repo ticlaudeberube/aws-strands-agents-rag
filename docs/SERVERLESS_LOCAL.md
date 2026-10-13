@@ -191,6 +191,11 @@ This is the authoritative check that the production handler (including DynamoDB
 session persistence) works end-to-end, backed only by local containers + real
 Bedrock.
 
+Multi-turn memory can be verified here too: ask a question, then a follow-up
+that uses a pronoun ("what are **its** tuning parameters?"). The second answer
+resolves the reference using the history loaded from DynamoDB, confirming
+`route_rag_query`'s `history` wiring end-to-end.
+
 ## The "vector database unavailable" warning (fixed)
 
 **Symptom:** the GUI showed *"The vector database is unavailable. Knowledge-base
@@ -290,16 +295,23 @@ complete.
   `shared_route`, which still consults the semantic cache.
 - **Non-stream force-web / bypass-cache chat paths** aren't backed (the GUI uses
   streaming, so these aren't exercised).
-- **No multi-turn context fed to the model** — session history is loaded and
-  persisted to DynamoDB (see below), but the loaded history is not yet injected
-  into the prompt; each `shared_route` call answers from the current question +
-  KB only. (The real Lambda has the same characteristic — it loads history for
-  persistence/observability but the shared route is single-turn.)
+- **Multi-turn memory IS implemented — on the serverless path only.**
+  `route_rag_query` / `shared_route` accept an optional `history`, and a compact
+  transcript of recent turns is prepended to the generation prompt so
+  pronouns/references resolve (e.g. "what are *its* parameters?" after asking
+  about HNSW). Embeddings and cache keys stay keyed on the raw question, so
+  caching is unchanged. The real Lambda handler and the serverless shim load
+  history from DynamoDB and pass it in.
+  **Local Mode (`DEPLOYMENT_MODE=local`, Ollama + Milvus + `api_server.py`) does
+  NOT have this** — its `StrandsGraphRAGAgent.answer_question` is a separate,
+  older answer path that does not call `shared_route`, has no `history`
+  parameter, and no per-session history store. Adding it there is tracked as a
+  TODO below.
 - **DynamoDB session persistence IS wired** — the shim builds a local
   `DynamoDBClient` and, when a `session_id` is supplied, loads history before
   and persists the Q/A turn after answering, matching the Lambda. Note the GUI's
-  chat handler does not pass a `session_id`, so persistence is exercised by the
-  Lambda-handler harness (below) rather than the browser.
+  chat handler does not currently pass a `session_id`, so history-aware answers
+  are exercised by the Lambda-handler harness (Option C) rather than the browser.
 - **MCP endpoints, `/health/detailed`, cache stats, competitor-query handling**
   — not implemented; those endpoints return empty or error if called.
 
@@ -316,6 +328,14 @@ For the full list of what separates this local setup from a real AWS deploy, see
   currently returns a finished `RoutingResult`), so it is deferred.
 - **Richer seed KB** or a loader so retrieval reflects real content instead of
   the two demonstration documents.
+- **Multi-turn memory in Local Mode.** Currently serverless-path only (via
+  `shared_route`'s `history`). Local Mode uses a separate
+  `StrandsGraphRAGAgent.answer_question` flow that routes through the Strands
+  agents / `rag_worker` node rather than `shared_route`, so it would need its
+  own history wiring: add a `history` param, inject it into the generation
+  context (the `rag_agent` context / `rag_worker`), and source it from the
+  request's already-built `conversation_history` (Local Mode has no DynamoDB
+  session store). Scoped as a separate change to avoid destabilizing that path.
 
 ## Cached questions list (GUI sidebar)
 

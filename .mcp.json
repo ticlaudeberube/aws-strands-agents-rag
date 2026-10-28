@@ -29,20 +29,6 @@
 				"FASTMCP_LOG_LEVEL": "ERROR"
 			}
 		},
-		"milvus": {
-			"type": "local",
-			"command": "uvx",
-			"args": [
-				"mcp-server-milvus==0.1.1.dev9"
-			],
-			"tools": [
-				"*"
-			],
-			"env": {
-				"MILVUS_URI": "http://localhost:19530",
-				"MILVUS_TOKEN": ""
-			}
-		},
 		"playwright-test": {
 			"type": "local",
 			"command": "npx",

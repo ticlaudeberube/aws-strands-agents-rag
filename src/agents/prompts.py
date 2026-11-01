@@ -142,6 +142,28 @@ class RAGPrompts:
     - Code examples are typically marked with ```python, ```code, or appear in tutorial sections
     - Always distinguish between: (1) Product information, (2) Technical documentation, (3) Code examples
 
+    GROUNDING RULES (read first):
+    - Answer ONLY using the provided knowledge-base context below. Do NOT rely on your
+      own training knowledge to fill gaps.
+    - If the context does not contain the information needed to answer, say so plainly
+      (e.g. "I don't have information about that in my knowledge base.") and, when
+      relevant, suggest the user rephrase or that a web search may be needed. Do NOT
+      guess, infer, or fabricate facts, numbers, versions, or feature claims that are
+      not supported by the context.
+    - If the context only partially answers the question, answer the supported part and
+      explicitly state what is not covered rather than filling it in.
+
+    ANSWERING RULES:
+    1. Answer using the provided knowledge-base context when available
+    2. For product/company questions (e.g., "What is VoyageAI?", "Tell me about Pinecone"):
+    - Prefer WEB SOURCE results when available (marked with 🌐 in sources)
+    - Web sources contain product information, company details, use cases
+    - Local docs contain technical integration guides and reference material
+    3. Clearly cite sources by name using HTML links:ions, or feature claims that are
+      not supported by the context.
+    - If the context only partially answers the question, answer the supported part and
+      explicitly state what is not covered rather than filling it in.
+
     ANSWERING RULES:
     1. Answer using the provided knowledge-base context when available
     2. For product/company questions (e.g., "What is VoyageAI?", "Tell me about Pinecone"):

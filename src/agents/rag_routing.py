@@ -66,6 +66,7 @@ __all__ = [
     "TEMPORAL_KEYWORDS",
     "CACHE_REDIS_UNAVAILABLE",
     "CACHE_OPENSEARCH_UNAVAILABLE",
+    "NO_GROUNDING_ANSWER",
 ]
 
 # CloudWatch warning metric names (Requirements 3.6, 3.7).
@@ -78,6 +79,16 @@ CACHE_OPENSEARCH_UNAVAILABLE = "cache/opensearch_unavailable"
 DEFAULT_SEMANTIC_THRESHOLD = 0.92
 DEFAULT_WEB_FALLBACK_THRESHOLD = 0.15
 DEFAULT_TOP_K = 10
+
+# Honest refusal returned when neither the KB nor web search produced usable
+# grounding for the query. Returning this instead of generating from weak/empty
+# context is the anti-hallucination safeguard: the model is never asked to
+# answer a query it has no supporting sources for.
+NO_GROUNDING_ANSWER = (
+    "I don't have information about that in my knowledge base, and a web search "
+    "didn't return anything usable. Try rephrasing your question or asking about "
+    "vector databases, embeddings, or RAG."
+)
 
 # Temporal keywords that force a cache bypass (Req 2.3). Mirrors the local
 # ``StrandsGraphRAGAgent._is_time_sensitive_query`` keyword set so both modes
@@ -132,6 +143,22 @@ def average_relevance(sources: list[dict]) -> float:
     if not scores:
         return 0.0
     return sum(scores) / len(scores)
+
+
+def _has_usable_grounding(sources: list[dict]) -> bool:
+    """Return ``True`` when ``sources`` contain non-empty text to ground on.
+
+    Used by the anti-hallucination grounding gate: a list of sources with no
+    usable ``text``/``snippet`` content cannot support a factual answer, so the
+    router returns an honest refusal rather than generating from nothing.
+    """
+    for source in sources:
+        if not isinstance(source, dict):
+            continue
+        text = (source.get("text") or source.get("snippet") or "").strip()
+        if text:
+            return True
+    return False
 
 
 @dataclass
@@ -390,8 +417,23 @@ def route_rag_query(
         logger.info("[ROUTING] KB relevance below threshold → web search fallback (Req 2.4)")
         web_result = _build_web_result(question, web_search, kb_sources, confidence=relevance)
         web_result.metrics = result_metrics.metrics
+
+        # Anti-hallucination grounding gate: when the KB was not relevant enough
+        # AND web search produced no usable sources, there is nothing to ground
+        # an answer on. Return an honest refusal instead of asking the LLM to
+        # generate from weak/empty context (which invites fabrication).
+        grounding_sources = web_result.sources or kb_sources
+        if web_result.web_search_unavailable and not _has_usable_grounding(grounding_sources):
+            logger.warning(
+                "[ROUTING] No usable KB or web grounding (relevance=%.3f) → "
+                "returning honest 'no results' instead of generating",
+                relevance,
+            )
+            web_result.answer = NO_GROUNDING_ANSWER
+            return web_result
+
         web_result.answer = _generate_from_sources(
-            llm, question, web_result.sources or kb_sources, temperature, max_tokens, history
+            llm, question, grounding_sources, temperature, max_tokens, history
         )
         return web_result
 

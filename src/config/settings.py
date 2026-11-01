@@ -294,6 +294,15 @@ class Settings(BaseSettings):
         default=0.15,  # Much more restrictive - only fallback when KB truly has no good content
         validation_alias="WEB_SEARCH_FALLBACK_THRESHOLD",
     )  # Minimum average KB relevance score (0-1) before triggering web search fallback (default: 0.15, was 0.5)
+    answer_grounding_threshold: float = Field(
+        default=0.35,
+        validation_alias="ANSWER_GROUNDING_THRESHOLD",
+        description=(
+            "Minimum fraction (0-1) of a generated answer's content words that "
+            "must be supported by retrieved sources before the answer is flagged "
+            "as low-grounding (possible hallucination) and annotated with a caveat."
+        ),
+    )  # Post-generation grounding check threshold (anti-hallucination)
     tavily_api_key: str | None = Field(
         default=None,
         validation_alias="TAVILY_API_KEY",

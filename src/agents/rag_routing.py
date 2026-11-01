@@ -53,6 +53,7 @@ Lambda handler can forward them to CloudWatch; a caller-supplied
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
@@ -66,12 +67,33 @@ __all__ = [
     "TEMPORAL_KEYWORDS",
     "CACHE_REDIS_UNAVAILABLE",
     "CACHE_OPENSEARCH_UNAVAILABLE",
+    "ANSWER_LOW_GROUNDING",
     "NO_GROUNDING_ANSWER",
+    "LOW_GROUNDING_CAVEAT",
 ]
 
 # CloudWatch warning metric names (Requirements 3.6, 3.7).
 CACHE_REDIS_UNAVAILABLE = "cache/redis_unavailable"
 CACHE_OPENSEARCH_UNAVAILABLE = "cache/opensearch_unavailable"
+
+# Emitted when the post-generation grounding check finds the answer is poorly
+# supported by the retrieved sources (possible hallucination), so dashboards can
+# track how often low-grounding answers are produced.
+ANSWER_LOW_GROUNDING = "answer/low_grounding"
+
+# Minimum fraction of the answer's content words that must also appear in the
+# retrieved source text for the answer to be considered "grounded". Tuned
+# conservatively: this is a cheap lexical safety net, not a semantic judge, so
+# the bar is deliberately low to avoid false positives on paraphrased answers.
+DEFAULT_GROUNDING_THRESHOLD = 0.35
+
+# Appended to an answer when its grounding score falls below the threshold, so
+# the user is told the answer may not be fully supported by the knowledge base
+# instead of receiving an unqualified (possibly fabricated) response.
+LOW_GROUNDING_CAVEAT = (
+    "\n\n_Note: parts of this answer may not be fully supported by the "
+    "available sources. Please verify against the cited documentation._"
+)
 
 # Default semantic-cache similarity threshold (Req 2.2) and web-search fallback
 # threshold (Req 2.4). Callers normally pass the configured values from
@@ -161,6 +183,187 @@ def _has_usable_grounding(sources: list[dict]) -> bool:
     return False
 
 
+# Short, high-frequency words carry no grounding signal; excluded from the
+# overlap computation so paraphrasing/function words don't inflate the score.
+_GROUNDING_STOPWORDS: frozenset[str] = frozenset(
+    {
+        "the",
+        "a",
+        "an",
+        "and",
+        "or",
+        "but",
+        "if",
+        "then",
+        "is",
+        "are",
+        "was",
+        "were",
+        "be",
+        "been",
+        "being",
+        "to",
+        "of",
+        "in",
+        "on",
+        "at",
+        "for",
+        "with",
+        "as",
+        "by",
+        "that",
+        "this",
+        "these",
+        "those",
+        "it",
+        "its",
+        "you",
+        "your",
+        "can",
+        "will",
+        "would",
+        "should",
+        "may",
+        "might",
+        "do",
+        "does",
+        "did",
+        "not",
+        "no",
+        "yes",
+        "from",
+        "into",
+        "about",
+        "which",
+        "what",
+        "when",
+        "where",
+        "how",
+        "why",
+        "who",
+        "there",
+        "here",
+        "also",
+        "such",
+        "than",
+        "they",
+        "them",
+        "their",
+        "has",
+        "have",
+        "had",
+        "we",
+        "our",
+        "i",
+        "me",
+        "my",
+        "he",
+        "she",
+        "his",
+        "her",
+        "use",
+        "used",
+        "using",
+        "some",
+        "any",
+        "all",
+        "more",
+        "most",
+        "other",
+        "one",
+        "two",
+        "both",
+    }
+)
+
+# Word pattern for grounding tokenization; keeps hyphen/underscore technical
+# terms (e.g. "vector-search", "ef_construction") whole.
+_WORD_RE = re.compile(r"[a-z0-9]+(?:[-_][a-z0-9]+)*")
+
+
+def _content_tokens(text: str) -> set[str]:
+    """Lowercase, split, and drop stopwords/short tokens → set of content words.
+
+    Keeps hyphenated/underscored technical terms (e.g. ``vector-search``,
+    ``ef_construction``) whole so they count as single grounding signals.
+    """
+    tokens = _WORD_RE.findall(text.lower())
+    return {t for t in tokens if len(t) > 2 and t not in _GROUNDING_STOPWORDS}
+
+
+def _source_text(sources: list[dict]) -> str:
+    """Concatenate all usable text/snippet content from ``sources``."""
+    parts: list[str] = []
+    for source in sources:
+        if not isinstance(source, dict):
+            continue
+        text = source.get("text") or source.get("snippet") or ""
+        if text:
+            parts.append(str(text))
+    return "\n".join(parts)
+
+
+def compute_grounding_score(answer: str, sources: list[dict]) -> float:
+    """Return the fraction of answer content words supported by ``sources``.
+
+    A cheap, dependency-free lexical check: it computes the share of the
+    answer's distinct content words (stopwords and very short tokens removed)
+    that also appear in the combined retrieved source text. This is a safety net
+    for *detecting* likely-ungrounded answers, not a semantic judge — a
+    paraphrase using different wording will score lower, which is why the
+    threshold is conservative and the consequence is a caveat, not a block.
+
+    Returns ``1.0`` when the answer has no content words to verify (nothing to
+    check) and ``0.0`` when there are no sources to verify against.
+    """
+    answer_tokens = _content_tokens(answer)
+    if not answer_tokens:
+        return 1.0
+
+    source_tokens = _content_tokens(_source_text(sources))
+    if not source_tokens:
+        return 0.0
+
+    supported = answer_tokens & source_tokens
+    return len(supported) / len(answer_tokens)
+
+
+def _apply_grounding_check(
+    result: RoutingResult,
+    answer: str,
+    sources: list[dict],
+    threshold: float,
+    metric_emitter: Callable[[str], None] | None,
+) -> RoutingResult:
+    """Score the fresh ``answer`` against ``sources`` and flag weak grounding.
+
+    Populates :attr:`RoutingResult.grounding_score`. When the score is below
+    ``threshold`` the answer is kept (it may still be a valid paraphrase) but a
+    caveat is appended, the heuristic ``confidence_score`` is reduced, and the
+    :data:`ANSWER_LOW_GROUNDING` warning metric is emitted. Empty answers (e.g.
+    the system-message paths) are left untouched.
+    """
+    if not answer or not answer.strip():
+        return result
+
+    score = compute_grounding_score(answer, sources)
+    result.grounding_score = score
+
+    if score < threshold:
+        logger.warning(
+            "[ROUTING] Low answer grounding: score=%.2f < threshold=%.2f "
+            "(possible hallucination) → appending caveat",
+            score,
+            threshold,
+        )
+        _emit(ANSWER_LOW_GROUNDING, result, metric_emitter)
+        result.answer = answer + LOW_GROUNDING_CAVEAT
+        # Reflect the weaker grounding in the surfaced confidence.
+        result.confidence_score = min(result.confidence_score, score)
+
+    return result
+
+
 @dataclass
 class RoutingResult:
     """Outcome of :func:`route_rag_query`.
@@ -175,6 +378,10 @@ class RoutingResult:
             returned no usable results (Req 10.3).
         confidence_score: Heuristic confidence (semantic-cache similarity or KB
             average relevance).
+        grounding_score: Fraction (0.0–1.0) of the answer's content words also
+            found in the retrieved source text, computed by the post-generation
+            grounding check. ``1.0`` for cache hits and refusals (no fresh
+            generation to verify). A low value flags a possible hallucination.
         metrics: Ordered list of CloudWatch warning-metric names emitted during
             routing (e.g. ``cache/redis_unavailable``), for the handler to
             forward.
@@ -186,6 +393,7 @@ class RoutingResult:
     cache_hit: bool = False
     web_search_unavailable: bool = False
     confidence_score: float = 0.0
+    grounding_score: float = 1.0
     metrics: list[str] = field(default_factory=list)
 
 
@@ -300,6 +508,7 @@ def route_rag_query(
     force_web_search: bool = False,
     semantic_threshold: float = DEFAULT_SEMANTIC_THRESHOLD,
     web_fallback_threshold: float = DEFAULT_WEB_FALLBACK_THRESHOLD,
+    grounding_threshold: float = DEFAULT_GROUNDING_THRESHOLD,
     temperature: float = 0.3,
     max_tokens: int | None = None,
     metric_emitter: Callable[[str], None] | None = None,
@@ -324,6 +533,10 @@ def route_rag_query(
         force_web_search: When ``True``, bypass cache + KB (Req 2.6).
         semantic_threshold: Layer 4 cache-hit similarity threshold (Req 2.2).
         web_fallback_threshold: KB relevance below which web search runs (Req 2.4).
+        grounding_threshold: Minimum fraction of answer content words that must
+            be supported by the retrieved sources for a freshly generated KB
+            answer to be considered grounded. Below this, the answer is kept but
+            annotated with a caveat and ``answer/low_grounding`` is emitted.
         temperature: LLM sampling temperature for generation.
         max_tokens: Optional max-token cap for generation.
         metric_emitter: Optional callback invoked with each warning-metric name.
@@ -440,19 +653,7 @@ def route_rag_query(
     # ---- Generation from KB context, then populate caches -----------------
     answer = _generate_from_sources(llm, question, kb_sources, temperature, max_tokens, history)
 
-    _populate_caches(
-        question,
-        query_vector,
-        kb_sources,
-        answer,
-        cache,
-        semantic_cache,
-        top_k,
-        result_metrics,
-        metric_emitter,
-    )
-
-    return RoutingResult(
+    kb_result = RoutingResult(
         answer=answer,
         sources=kb_sources,
         tier_used="kb",
@@ -460,6 +661,29 @@ def route_rag_query(
         confidence_score=relevance,
         metrics=result_metrics.metrics,
     )
+
+    # Post-generation grounding check (anti-hallucination): verify the answer is
+    # actually supported by the retrieved KB context before returning it. Weak
+    # grounding is flagged with a caveat + metric rather than hard-blocked.
+    _apply_grounding_check(kb_result, answer, kb_sources, grounding_threshold, metric_emitter)
+
+    # Cache the answer as generated (without the advisory caveat) so cache hits
+    # stay clean; the caveat is a presentation-time signal, not part of the KB
+    # answer. Only populate when grounding passed to avoid caching weak answers.
+    if kb_result.grounding_score >= grounding_threshold:
+        _populate_caches(
+            question,
+            query_vector,
+            kb_sources,
+            answer,
+            cache,
+            semantic_cache,
+            top_k,
+            result_metrics,
+            metric_emitter,
+        )
+
+    return kb_result
 
 
 # ---------------------------------------------------------------------------

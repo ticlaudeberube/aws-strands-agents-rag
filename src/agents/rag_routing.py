@@ -68,8 +68,10 @@ __all__ = [
     "CACHE_REDIS_UNAVAILABLE",
     "CACHE_OPENSEARCH_UNAVAILABLE",
     "ANSWER_LOW_GROUNDING",
+    "ANSWER_LOW_CONFIDENCE",
     "NO_GROUNDING_ANSWER",
     "LOW_GROUNDING_CAVEAT",
+    "LOW_CONFIDENCE_CAVEAT",
 ]
 
 # CloudWatch warning metric names (Requirements 3.6, 3.7).
@@ -80,6 +82,10 @@ CACHE_OPENSEARCH_UNAVAILABLE = "cache/opensearch_unavailable"
 # supported by the retrieved sources (possible hallucination), so dashboards can
 # track how often low-grounding answers are produced.
 ANSWER_LOW_GROUNDING = "answer/low_grounding"
+
+# Emitted when the heuristic confidence score falls below its threshold (a
+# softer signal than grounding), so dashboards can track low-confidence answers.
+ANSWER_LOW_CONFIDENCE = "answer/low_confidence"
 
 # Minimum fraction of the answer's content words that must also appear in the
 # retrieved source text for the answer to be considered "grounded". Tuned
@@ -93,6 +99,19 @@ DEFAULT_GROUNDING_THRESHOLD = 0.35
 LOW_GROUNDING_CAVEAT = (
     "\n\n_Note: parts of this answer may not be fully supported by the "
     "available sources. Please verify against the cited documentation._"
+)
+
+# Heuristic confidence (source distance + answer shape) below which a softer
+# caveat is appended. Applied only when the stronger grounding caveat did not
+# already fire, so a user never sees two hedges stacked on one answer.
+DEFAULT_CONFIDENCE_THRESHOLD = 0.45
+
+# Appended when confidence is low but grounding was acceptable — a gentler hedge
+# than the grounding caveat (the answer is supported by sources, but the
+# retrieval match or answer shape was weak).
+LOW_CONFIDENCE_CAVEAT = (
+    "\n\n_Note: this answer is based on a weak match in the knowledge base and "
+    "may be incomplete. Consider rephrasing for a more specific answer._"
 )
 
 # Default semantic-cache similarity threshold (Req 2.2) and web-search fallback
@@ -138,18 +157,25 @@ TEMPORAL_KEYWORDS: tuple[str, ...] = (
 )
 
 
+# Precompiled word-boundary matcher for the temporal keywords. Built once so
+# every query reuses it. Keywords are matched as whole words/phrases so short
+# terms like "new" do NOT match inside unrelated words ("renew", "newcomer").
+_TEMPORAL_PATTERN = re.compile(
+    r"\b(?:" + "|".join(re.escape(kw) for kw in TEMPORAL_KEYWORDS) + r")\b"
+)
+
+
 def is_time_sensitive_query(question: str) -> bool:
     """Return ``True`` when ``question`` contains a temporal keyword (Req 2.3).
 
-    Case-insensitive substring match against :data:`TEMPORAL_KEYWORDS`, matching
-    the Local Mode classifier so cache-bypass behaviour is identical in both
-    modes.
+    Case-insensitive, **word-boundary** match against :data:`TEMPORAL_KEYWORDS`
+    (so "new" matches "what's new" but not "renew"), matching the Local Mode
+    classifier so cache-bypass behaviour is identical in both modes.
     """
-    lowered = question.lower()
-    for keyword in TEMPORAL_KEYWORDS:
-        if keyword in lowered:
-            logger.debug("[ROUTING] Temporal keyword '%s' → cache bypass", keyword)
-            return True
+    match = _TEMPORAL_PATTERN.search(question.lower())
+    if match:
+        logger.debug("[ROUTING] Temporal keyword '%s' → cache bypass", match.group(0))
+        return True
     return False
 
 
@@ -328,39 +354,96 @@ def compute_grounding_score(answer: str, sources: list[dict]) -> float:
     return len(supported) / len(answer_tokens)
 
 
+def evaluate_answer_quality(
+    answer: str,
+    sources: list[dict],
+    confidence: float,
+    grounding_threshold: float = DEFAULT_GROUNDING_THRESHOLD,
+    confidence_threshold: float = DEFAULT_CONFIDENCE_THRESHOLD,
+) -> tuple[str, float, float, str | None]:
+    """Assess a freshly generated answer and return any quality caveat to apply.
+
+    Shared by both the serverless router and the local generation tool so the
+    two paths annotate answers identically. Computes the lexical grounding score
+    and decides, in priority order, which single caveat (if any) to append:
+
+    1. **Low grounding** (``grounding_score < grounding_threshold``): the stronger
+       signal — the answer is not well supported by its sources. Appends
+       :data:`LOW_GROUNDING_CAVEAT` and pulls confidence down to the grounding
+       score. Metric: :data:`ANSWER_LOW_GROUNDING`.
+    2. **Low confidence** (``confidence < confidence_threshold``), only when
+       grounding passed: a softer signal (weak retrieval match / short answer).
+       Appends :data:`LOW_CONFIDENCE_CAVEAT`. Metric: :data:`ANSWER_LOW_CONFIDENCE`.
+
+    The two caveats are mutually exclusive, so a user never sees two stacked
+    hedges on one answer. Empty answers are returned unchanged.
+
+    Returns:
+        ``(annotated_answer, adjusted_confidence, grounding_score, metric)``
+        where ``metric`` is the warning-metric name to emit, or ``None``.
+    """
+    if not answer or not answer.strip():
+        return answer, confidence, 1.0, None
+
+    grounding_score = compute_grounding_score(answer, sources)
+
+    if grounding_score < grounding_threshold:
+        logger.warning(
+            "[QUALITY] Low answer grounding: score=%.2f < threshold=%.2f "
+            "(possible hallucination) → appending caveat",
+            grounding_score,
+            grounding_threshold,
+        )
+        return (
+            answer + LOW_GROUNDING_CAVEAT,
+            min(confidence, grounding_score),
+            grounding_score,
+            ANSWER_LOW_GROUNDING,
+        )
+
+    if confidence < confidence_threshold:
+        logger.warning(
+            "[QUALITY] Low answer confidence: %.2f < threshold=%.2f → appending caveat",
+            confidence,
+            confidence_threshold,
+        )
+        return (
+            answer + LOW_CONFIDENCE_CAVEAT,
+            confidence,
+            grounding_score,
+            ANSWER_LOW_CONFIDENCE,
+        )
+
+    return answer, confidence, grounding_score, None
+
+
 def _apply_grounding_check(
     result: RoutingResult,
     answer: str,
     sources: list[dict],
     threshold: float,
     metric_emitter: Callable[[str], None] | None,
+    confidence_threshold: float = DEFAULT_CONFIDENCE_THRESHOLD,
 ) -> RoutingResult:
-    """Score the fresh ``answer`` against ``sources`` and flag weak grounding.
+    """Annotate ``result`` with grounding/confidence caveats (router binding).
 
-    Populates :attr:`RoutingResult.grounding_score`. When the score is below
-    ``threshold`` the answer is kept (it may still be a valid paraphrase) but a
-    caveat is appended, the heuristic ``confidence_score`` is reduced, and the
-    :data:`ANSWER_LOW_GROUNDING` warning metric is emitted. Empty answers (e.g.
+    Thin wrapper over :func:`evaluate_answer_quality` that records the grounding
+    score on the result, applies the chosen caveat, adjusts the surfaced
+    confidence, and emits the corresponding warning metric. Empty answers (e.g.
     the system-message paths) are left untouched.
     """
-    if not answer or not answer.strip():
-        return result
-
-    score = compute_grounding_score(answer, sources)
-    result.grounding_score = score
-
-    if score < threshold:
-        logger.warning(
-            "[ROUTING] Low answer grounding: score=%.2f < threshold=%.2f "
-            "(possible hallucination) → appending caveat",
-            score,
-            threshold,
-        )
-        _emit(ANSWER_LOW_GROUNDING, result, metric_emitter)
-        result.answer = answer + LOW_GROUNDING_CAVEAT
-        # Reflect the weaker grounding in the surfaced confidence.
-        result.confidence_score = min(result.confidence_score, score)
-
+    annotated, adjusted_confidence, grounding_score, metric = evaluate_answer_quality(
+        answer,
+        sources,
+        result.confidence_score,
+        grounding_threshold=threshold,
+        confidence_threshold=confidence_threshold,
+    )
+    result.grounding_score = grounding_score
+    result.answer = annotated
+    result.confidence_score = adjusted_confidence
+    if metric is not None:
+        _emit(metric, result, metric_emitter)
     return result
 
 
@@ -509,6 +592,7 @@ def route_rag_query(
     semantic_threshold: float = DEFAULT_SEMANTIC_THRESHOLD,
     web_fallback_threshold: float = DEFAULT_WEB_FALLBACK_THRESHOLD,
     grounding_threshold: float = DEFAULT_GROUNDING_THRESHOLD,
+    confidence_threshold: float = DEFAULT_CONFIDENCE_THRESHOLD,
     temperature: float = 0.3,
     max_tokens: int | None = None,
     metric_emitter: Callable[[str], None] | None = None,
@@ -537,6 +621,9 @@ def route_rag_query(
             be supported by the retrieved sources for a freshly generated KB
             answer to be considered grounded. Below this, the answer is kept but
             annotated with a caveat and ``answer/low_grounding`` is emitted.
+        confidence_threshold: Heuristic-confidence floor below which a softer
+            low-confidence caveat is appended (only when the grounding caveat did
+            not already fire). Below this, ``answer/low_confidence`` is emitted.
         temperature: LLM sampling temperature for generation.
         max_tokens: Optional max-token cap for generation.
         metric_emitter: Optional callback invoked with each warning-metric name.
@@ -662,10 +749,18 @@ def route_rag_query(
         metrics=result_metrics.metrics,
     )
 
-    # Post-generation grounding check (anti-hallucination): verify the answer is
-    # actually supported by the retrieved KB context before returning it. Weak
-    # grounding is flagged with a caveat + metric rather than hard-blocked.
-    _apply_grounding_check(kb_result, answer, kb_sources, grounding_threshold, metric_emitter)
+    # Post-generation quality check (anti-hallucination): verify the answer is
+    # actually supported by the retrieved KB context, and flag weak grounding or
+    # low confidence with a single (mutually exclusive) caveat + metric rather
+    # than hard-blocking.
+    _apply_grounding_check(
+        kb_result,
+        answer,
+        kb_sources,
+        grounding_threshold,
+        metric_emitter,
+        confidence_threshold=confidence_threshold,
+    )
 
     # Cache the answer as generated (without the advisory caveat) so cache hits
     # stay clean; the caveat is a presentation-time signal, not part of the KB

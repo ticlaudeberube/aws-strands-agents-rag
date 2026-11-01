@@ -303,6 +303,15 @@ class Settings(BaseSettings):
             "as low-grounding (possible hallucination) and annotated with a caveat."
         ),
     )  # Post-generation grounding check threshold (anti-hallucination)
+    answer_confidence_threshold: float = Field(
+        default=0.45,
+        validation_alias="ANSWER_CONFIDENCE_THRESHOLD",
+        description=(
+            "Heuristic confidence (0-1) below which a generated answer is annotated "
+            "with a low-confidence caveat. Applied only when the (stronger) "
+            "grounding caveat did not already fire, so the two never stack."
+        ),
+    )  # Low-confidence caveat threshold (anti-hallucination, soft signal)
     tavily_api_key: str | None = Field(
         default=None,
         validation_alias="TAVILY_API_KEY",

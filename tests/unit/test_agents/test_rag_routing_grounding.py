@@ -241,3 +241,84 @@ def test_ungrounded_answer_gets_caveat_and_metric() -> None:
     assert result.grounding_score < 0.35
     # Confidence is pulled down to reflect the weak grounding.
     assert result.confidence_score <= result.grounding_score
+
+
+# ---------------------------------------------------------------------------
+# Temporal keyword matching — word boundaries (finding M1)
+# ---------------------------------------------------------------------------
+
+
+def test_temporal_keyword_is_word_boundary_not_substring() -> None:
+    """'new' matches a standalone word but NOT inside 'renew'/'newcomer'."""
+    # True positives: whole-word temporal terms.
+    assert rag_routing.is_time_sensitive_query("what's new in Milvus") is True
+    assert rag_routing.is_time_sensitive_query("the newest HNSW params") is True
+    assert rag_routing.is_time_sensitive_query("latest release notes") is True
+
+    # False positives eliminated: 'new' embedded in a non-temporal word.
+    assert rag_routing.is_time_sensitive_query("how do I renew my index?") is False
+    assert rag_routing.is_time_sensitive_query("a newcomer to vector search") is False
+
+    # Non-temporal query stays non-temporal.
+    assert rag_routing.is_time_sensitive_query("tell me about Milvus") is False
+
+
+# ---------------------------------------------------------------------------
+# Answer quality: grounding + confidence caveats (finding H2)
+# ---------------------------------------------------------------------------
+
+_QUALITY_SOURCES = [
+    {"text": "Milvus supports HNSW and IVF indexing for fast vector search.", "distance": 0.9}
+]
+
+
+def test_quality_grounded_high_confidence_no_caveat() -> None:
+    """A supported, confident answer is returned unchanged."""
+    answer = "Milvus supports HNSW indexing for fast vector search."
+    out, conf, ground, metric = rag_routing.evaluate_answer_quality(answer, _QUALITY_SOURCES, 0.8)
+    assert out == answer
+    assert metric is None
+    assert conf == 0.8
+    assert ground >= 0.35
+
+
+def test_quality_ungrounded_gets_only_grounding_caveat() -> None:
+    """Low grounding wins over low confidence; only the grounding caveat fires."""
+    answer = "Pinecone charges forty dollars monthly for serverless replica pods."
+    out, conf, _ground, metric = rag_routing.evaluate_answer_quality(
+        answer,
+        _QUALITY_SOURCES,
+        0.2,  # confidence also low
+    )
+    assert metric == rag_routing.ANSWER_LOW_GROUNDING
+    assert rag_routing.LOW_GROUNDING_CAVEAT in out
+    assert rag_routing.LOW_CONFIDENCE_CAVEAT not in out  # mutually exclusive
+
+
+def test_quality_grounded_low_confidence_gets_only_confidence_caveat() -> None:
+    """When grounding passes but confidence is low, only the confidence caveat fires."""
+    answer = "Milvus supports HNSW indexing for fast vector search."
+    out, _conf, _ground, metric = rag_routing.evaluate_answer_quality(answer, _QUALITY_SOURCES, 0.3)
+    assert metric == rag_routing.ANSWER_LOW_CONFIDENCE
+    assert rag_routing.LOW_CONFIDENCE_CAVEAT in out
+    assert rag_routing.LOW_GROUNDING_CAVEAT not in out  # mutually exclusive
+
+
+def test_quality_empty_answer_untouched() -> None:
+    """Empty answers (system-message paths) are never annotated."""
+    out, conf, ground, metric = rag_routing.evaluate_answer_quality("", _QUALITY_SOURCES, 0.1)
+    assert out == ""
+    assert metric is None
+    assert ground == 1.0
+
+
+def test_quality_confidence_threshold_is_configurable() -> None:
+    """A lower threshold suppresses the confidence caveat for the same answer."""
+    answer = "Milvus supports HNSW indexing for fast vector search."
+    # confidence 0.4 is below the 0.45 default but above a 0.3 custom threshold.
+    _, _, _, metric_default = rag_routing.evaluate_answer_quality(answer, _QUALITY_SOURCES, 0.4)
+    _, _, _, metric_custom = rag_routing.evaluate_answer_quality(
+        answer, _QUALITY_SOURCES, 0.4, confidence_threshold=0.3
+    )
+    assert metric_default == rag_routing.ANSWER_LOW_CONFIDENCE
+    assert metric_custom is None

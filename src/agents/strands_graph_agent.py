@@ -247,6 +247,21 @@ def create_answer_generation_tool(ollama_client: OllamaClient, settings: Setting
         try:
             gen_start = time.time()
 
+            # Anti-hallucination grounding gate (parity with the shared router):
+            # if there are no usable sources to ground on, return an honest
+            # refusal instead of asking the LLM to answer from empty/placeholder
+            # context (e.g. the "No documents found." sentinel).
+            if not rag_routing._has_usable_grounding(sources):
+                logger.warning(
+                    "[GENERATION] No usable sources to ground on → returning honest "
+                    "'no results' instead of generating (anti-hallucination)"
+                )
+                return RAGResult(
+                    answer=rag_routing.NO_GROUNDING_ANSWER,
+                    sources=sources,
+                    confidence_score=0.0,
+                )
+
             # Use provided temperature or settings default
             temp = temperature if temperature is not None else settings.ollama_temperature
             tokens = max_tokens if max_tokens is not None else settings.max_tokens
@@ -279,10 +294,25 @@ def create_answer_generation_tool(ollama_client: OllamaClient, settings: Setting
             # Calculate confidence
             confidence = _calculate_confidence_score(sources, answer)
 
+            # Post-generation quality check (parity with the shared router):
+            # verify the answer is supported by its sources and flag weak
+            # grounding OR low confidence with a single, mutually-exclusive
+            # caveat rather than hard-blocking.
+            answer, confidence, grounding_score, _metric = rag_routing.evaluate_answer_quality(
+                answer,
+                sources,
+                confidence,
+                grounding_threshold=settings.answer_grounding_threshold,
+                confidence_threshold=settings.answer_confidence_threshold,
+            )
+
             # Convert markdown links to HTML
             answer = convert_markdown_links_to_html(answer)
 
-            logger.debug(f"Answer generation: {gen_time:.2f}s, confidence={confidence:.2%}")
+            logger.debug(
+                f"Answer generation: {gen_time:.2f}s, confidence={confidence:.2%}, "
+                f"grounding={grounding_score:.2%}"
+            )
 
             return RAGResult(
                 answer=answer,
@@ -775,18 +805,21 @@ def _is_question_in_scope(question: str, ollama_client: OllamaClient, settings: 
         "ivf": 8,
     }
 
-    words = question_lower.split()
+    # Word-boundary matching against the whole question. This correctly handles
+    # multi-word keywords ("vector database") AND avoids substring false
+    # positives that the previous ``keyword in word`` check produced — e.g.
+    # "rag" matching "storage", "annoy" matching the verb "annoy", or "mysql"
+    # pulling an otherwise off-topic question in-scope.
     score = 0
-    for word in words:
-        if word in in_scope_keywords:
-            score += in_scope_keywords[word]
-        for keyword in in_scope_keywords:
-            if keyword in word and len(keyword) > 2:
-                score += in_scope_keywords[keyword] // 2
+    matched: list[str] = []
+    for keyword, weight in in_scope_keywords.items():
+        if re.search(rf"\b{re.escape(keyword)}\b", question_lower):
+            score += weight
+            matched.append(keyword)
 
-    # High confidence threshold - any keyword match means in-scope
+    # Any keyword match means in-scope.
     if score > 0:
-        logger.debug(f"[SCOPE_CHECK] Keyword match (score={score}): in-scope")
+        logger.debug(f"[SCOPE_CHECK] Keyword match (score={score}, matched={matched}): in-scope")
         return True
 
     # Fast reject: No keywords at all = definitely out of scope
@@ -1519,6 +1552,7 @@ def create_rag_graph(
             semantic_threshold=settings.response_cache_threshold,
             web_fallback_threshold=settings.web_search_fallback_threshold,
             grounding_threshold=settings.answer_grounding_threshold,
+            confidence_threshold=settings.answer_confidence_threshold,
             temperature=(temperature if temperature is not None else settings.ollama_temperature),
             max_tokens=max_tokens,
             metric_emitter=metric_emitter,
@@ -2338,38 +2372,10 @@ class StrandsGraphRAGAgent:
         Returns:
             True if query is time-sensitive, False otherwise
         """
-        question_lower = question.lower()
-
-        time_sensitive_keywords = [
-            "latest",
-            "recent",
-            "newest",
-            "current",
-            "trends",
-            "trending",
-            "emerging",
-            "new",
-            "upcoming",
-            "2024",
-            "2025",
-            "2026",
-            "this year",
-            "today",
-            "this month",
-            "latest news",
-            "breaking",
-            "just released",
-            "recently launched",
-        ]
-
-        for keyword in time_sensitive_keywords:
-            if keyword in question_lower:
-                logger.debug(
-                    f"[TIME_SENSITIVE] Query detected: '{keyword}' in '{question[:50]}...'"
-                )
-                return True
-
-        return False
+        # Delegate to the shared, word-boundary classifier so both deployment
+        # modes classify time-sensitivity identically and short keywords like
+        # "new" do not match inside unrelated words ("renew", "newcomer").
+        return rag_routing.is_time_sensitive_query(question)
 
     def _should_trigger_web_search_fallback(self, kb_sources: list[dict]) -> bool:
         """Check if KB results are weak enough to trigger web search fallback.

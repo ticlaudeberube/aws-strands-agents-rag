@@ -49,6 +49,8 @@ __all__ = [
     "RAG_LATENCY_P99",
     "WEBSEARCH_INVOCATION_COUNT",
     "ERRORS_TOTAL",
+    "ANSWER_LOW_GROUNDING",
+    "ANSWER_LOW_CONFIDENCE",
 ]
 
 # ---- Metric names (design "CloudWatch Metric Dimensions") ----------------- #
@@ -58,6 +60,11 @@ RAG_LATENCY_P50 = "rag/latency_p50"
 RAG_LATENCY_P99 = "rag/latency_p99"
 WEBSEARCH_INVOCATION_COUNT = "websearch/invocation_count"
 ERRORS_TOTAL = "errors/total"
+# Anti-hallucination answer-quality counters, emitted by the shared router via
+# ``metric_emitter`` when a generated answer is flagged (see
+# ``src.agents.rag_routing``). Kept in sync with the metric names defined there.
+ANSWER_LOW_GROUNDING = "answer/low_grounding"
+ANSWER_LOW_CONFIDENCE = "answer/low_confidence"
 
 # Units keyed by metric name so EMF + put_metric_data agree.
 _METRIC_UNITS = {
@@ -69,6 +76,8 @@ _METRIC_UNITS = {
     ERRORS_TOTAL: "Count",
     "cache/redis_unavailable": "Count",
     "cache/opensearch_unavailable": "Count",
+    ANSWER_LOW_GROUNDING: "Count",
+    ANSWER_LOW_CONFIDENCE: "Count",
 }
 
 

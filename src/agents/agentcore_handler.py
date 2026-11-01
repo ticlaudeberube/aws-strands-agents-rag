@@ -379,6 +379,7 @@ def lambda_handler(event: dict, context: Any = None) -> dict:
             "session_id": session_id,
             "latency_ms": int(round(latency_ms)),
             "confidence_score": routing_result.confidence_score,
+            "grounding_score": routing_result.grounding_score,
             "web_search_unavailable": routing_result.web_search_unavailable,
         }
         return _response(200, body)

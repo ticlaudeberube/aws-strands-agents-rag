@@ -21,14 +21,11 @@
         "FASTMCP_LOG_LEVEL": "ERROR"
       }
     },
-    "milvus": {
-      "command": "uvx",
-      "args": [
-        "mcp-server-milvus==0.1.1.dev9"
-      ],
+    "mlflow-mcp": {
+      "command": "uv",
+      "args": ["run", "--with", "mlflow[mcp]>=3.5.1", "mlflow", "mcp", "run"],
       "env": {
-        "MILVUS_URI": "http://localhost:19530",
-        "MILVUS_TOKEN": ""
+        "MLFLOW_TRACKING_URI": "http://127.0.0.1:5000"
       }
     },
     "playwright-test": {

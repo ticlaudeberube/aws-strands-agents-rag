@@ -24,10 +24,12 @@
   - docker-compose.yml - Full stack setup
 
 - docs/ - Developer documentation
+  - INDEX.md - Documentation index (source of truth for the active doc set)
   - GETTING_STARTED.md - Setup and configuration
-  - DEVELOPMENT.md - Code examples and patterns
+  - HOW_TO.md - Practical usage and code examples
   - ARCHITECTURE.md - System design
   - API_SERVER.md - REST API documentation
+  - DEPLOYMENT.md - Serverless/AWS deployment
 
 - scripts/ - Utility scripts (moving from root)
   - cache/ - Cache management utilities

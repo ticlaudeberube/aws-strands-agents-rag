@@ -1,10 +1,10 @@
 # Python
-- you should test with pytest
+- This project uses `uv` for environment and dependency management (see `pyproject.toml` and `.github/workflows/ci.yml`). The virtual environment lives in `.venv`.
+- Run tooling through `uv run`: tests with `uv run pytest`, linting with `uv run ruff check --fix`, formatting with `uv run ruff format`, type checking with `uv run mypy .`. Install/sync dependencies with `uv sync --extra dev`.
 - Use snake_case as default file name and folder convention
 - NEVER remove or modify existing test cases unless explicitly requested
 - Keep all validation tests that verify current behavior
 - When modifying code, ensure existing tests still pass
-- You should pick-up Python version from ./venv environment and activate when not
 - Use type hints for function parameters and return values
 - Follow PEP 8 style guidelines for code formatting
 - Use f-strings for string formatting instead of .format() or %

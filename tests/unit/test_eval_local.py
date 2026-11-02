@@ -11,6 +11,7 @@ from __future__ import annotations
 import importlib.util
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from src.agents import rag_routing
 
@@ -23,6 +24,12 @@ assert _spec and _spec.loader
 eval_local = importlib.util.module_from_spec(_spec)
 sys.modules["eval_local"] = eval_local
 _spec.loader.exec_module(eval_local)
+
+# The module is loaded dynamically above (runtime), which mypy cannot follow.
+# Import the dataclasses statically for type checking only so annotations below
+# resolve without affecting the runtime dynamic load.
+if TYPE_CHECKING:
+    from scripts.eval_local import AnswerSignals, QuestionResult
 
 
 # ---- classify_answer ------------------------------------------------------
@@ -73,7 +80,7 @@ def test_classify_normal_answer_not_refused_or_caveated() -> None:
 # ---- grade ----------------------------------------------------------------
 
 
-def _sig(refused: bool = False, caveated: bool = False) -> eval_local.AnswerSignals:
+def _sig(refused: bool = False, caveated: bool = False) -> AnswerSignals:
     return eval_local.AnswerSignals(
         refused=refused, caveated=caveated, grounding_score=1.0, answer_len=20
     )
@@ -107,7 +114,7 @@ def test_grade_unknown_tag_fails() -> None:
 # ---- summarize ------------------------------------------------------------
 
 
-def _result(**kw: object) -> eval_local.QuestionResult:
+def _result(**kw: object) -> QuestionResult:
     base = dict(
         id="x",
         category="in_scope",

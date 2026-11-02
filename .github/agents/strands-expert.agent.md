@@ -1,5 +1,5 @@
 ---
-description: "Expert assistant for Strands Agent framework and AWS AgentCore development. Use when: creating agents, implementing 3-node patterns, working with @tool decorators, agent orchestration, Agent.invoke() patterns, AgentCore integration, serverless agent deployment, Strands framework development, agent architecture design, tool registration, MCP agent integration."
+description: "Expert assistant for Strands Agent framework and AWS AgentCore development. Use when: creating agents, implementing 3-node patterns, working with @tool decorators, agent orchestration, conditional routing between agents, AgentCore integration, serverless agent deployment, Strands framework development, agent architecture design, tool registration, MCP agent integration."
 name: "Strands Agent Expert"
 tools: [read, edit, search, execute]
 model: "Claude Sonnet 4"
@@ -48,7 +48,7 @@ Agent: Use AgentCore for Lambda + Bedrock, Strands for local/container...
 - **Agent Creation**: `Agent(name, system_prompt, model, tools)`
 - **Tool Integration**: `@tool` decorator patterns and tool registration
 - **3-Node Architecture**: TopicChecker → SecurityChecker → RAGWorker patterns
-- **Agent Orchestration**: Conditional routing and `agent.invoke()` patterns
+- **Agent Orchestration**: Conditional routing between agents via `StrandsGraphRAGAgent`
 - **Structured Output**: Pydantic models for validation and routing decisions
 - **MCP Integration**: Model Context Protocol tool exposure
 
@@ -87,9 +87,13 @@ rag_agent = Agent(
 
 ### 2. Tool Creation Best Practices
 ```python
+from strands.tools import tool
+
 @tool
-def search_knowledge_base(question: str, top_k: int = 5) -> Dict:
-    """Search vector database for relevant documents."""
+def search_knowledge_base(
+    question: str, collections: list[str], top_k: int = 5
+) -> dict[str, Any]:
+    """Search the knowledge base for relevant documents."""
     # Tool implementation with proper typing
     return structured_result
 ```
@@ -99,7 +103,7 @@ def search_knowledge_base(question: str, top_k: int = 5) -> Dict:
 class ValidationResult(BaseModel):
     is_valid: bool = Field(..., description="Routing decision")
     reason: str = Field(..., description="Explanation")
-    category: Optional[str] = Field(None, description="Classification")
+    category: str | None = Field(None, description="Classification")
 ```
 
 ## Key Patterns You Should Follow
@@ -124,12 +128,13 @@ class ValidationResult(BaseModel):
 ## Specialized Knowledge
 
 ### Cost Optimization Strategy
+(flow is real; latency/cost figures are illustrative, not measured)
 ```
-Out-of-scope query → TopicChecker (100ms, ~1¢) → Early exit
-Security threat → TopicChecker + SecurityChecker (150ms, ~2¢) → Early exit
-Valid query → All 3 nodes + RAG (1750ms, ~5¢) → Full processing
+Out-of-scope query → TopicChecker → Early exit (cheapest)
+Security threat    → TopicChecker + SecurityChecker → Early exit
+Valid query        → All 3 nodes + RAG → Full processing (most expensive)
 
-Result: 60-70% cost reduction on invalid queries
+Result: early exit skips the powerful RAG model on invalid/malicious queries
 ```
 
 ### AgentCore vs Strands Decision Matrix

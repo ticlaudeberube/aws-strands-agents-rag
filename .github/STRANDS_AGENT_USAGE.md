@@ -10,7 +10,7 @@ Invoke `/strands-agent-development` with the task you want completed. For exampl
 /strands-agent-development Add a focused test for the RAG worker's retry behavior
 ```
 
-The skill directs Copilot to inspect the current implementation, callers, and tests before making changes. It emphasizes reusing project patterns, preserving existing behavior, respecting the `src/` and `document-loaders/` isolation boundary, updating relevant docs, and running focused tests. It is not a code template generator and does not assume every task needs a new agent or the full three-node workflow.
+The skill directs Copilot to inspect the current implementation, callers, and tests before making changes. It emphasizes reusing project patterns, preserving existing behavior, respecting the `src/` and `document_loaders/` isolation boundary, updating relevant docs, and running focused tests. It is not a code template generator and does not assume every task needs a new agent or the full three-node workflow.
 
 ## Discuss design or troubleshoot
 

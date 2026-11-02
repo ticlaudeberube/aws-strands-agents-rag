@@ -1,6 +1,6 @@
 # Source Isolation & Document Loader Architecture
 
-This guide explains the intentional separation between the `src/` production package and the `document-loaders/` utility package in this project.
+This guide explains the intentional separation between the `src/` production package and the `document_loaders/` utility package in this project.
 
 ---
 
@@ -14,11 +14,11 @@ The project maintains **strict isolation** between two independent systems:
 │ ├── agents/                                 │
 │ ├── tools/                                  │
 │ ├── config/                                 │
-│ └── ✅ NO imports from document-loaders/    │
+│ └── ✅ NO imports from document_loaders/    │
 └─────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────┐
-│ document-loaders/ (Data Pipeline Utility)    │
+│ document_loaders/ (Data Pipeline Utility)    │
 │ ├── core/                                   │
 │ ├── local_settings.py                       │
 │ └── ✅ NO imports from src/                 │
@@ -27,14 +27,14 @@ The project maintains **strict isolation** between two independent systems:
 
 **Why This Design:**
 - `src/` is a production application → should have minimal dependencies
-- `document-loaders/` is a standalone utility → can run independently, be replaced, or deployed separately
+- `document_loaders/` is a standalone utility → can run independently, be replaced, or deployed separately
 - Each achieves its purpose without coupling to the other
 
 ---
 
 ## ✅ What This Means (Rules)
 
-### Rule 1: src/ MUST NOT Import from document-loaders/
+### Rule 1: src/ MUST NOT Import from document_loaders/
 ❌ **Never do this in src/ code:**
 ```python
 from document_loaders.core.tools import MilvusVectorDB  # WRONG
@@ -54,8 +54,8 @@ class MilvusVectorDB:
 
 ---
 
-### Rule 2: document-loaders/ MUST NOT Import from src/
-❌ **Never do this in document-loaders code:**
+### Rule 2: document_loaders/ MUST NOT Import from src/
+❌ **Never do this in document_loaders code:**
 ```python
 from src.config.settings import Settings        # WRONG
 from src.agents.strands_graph_agent import Agent # WRONG
@@ -77,7 +77,7 @@ class Settings:
 
 ---
 
-### Rule 3: Duplicate Code Between src/ and document-loaders/ is OK
+### Rule 3: Duplicate Code Between src/ and document_loaders/ is OK
 ✅ **This is intentional and correct:**
 ```
 src/tools/milvus_client.py       ← Production MilvusVectorDB
@@ -144,7 +144,7 @@ class TavilySearchClient:
 ### I'm Adding a Data Loading Feature
 **Question: Where should it go?**
 
-✅ Goes in `document-loaders/`:
+✅ Goes in `document_loaders/`:
 - Scripts to ingest data
 - Document processing utilities
 - Embedding and indexing logic
@@ -154,7 +154,7 @@ class TavilySearchClient:
 
 **Example:**
 ```python
-# ✅ CORRECT: New loader in document-loaders/
+# ✅ CORRECT: New loader in document_loaders/
 # document_loaders/pdf_loader.py
 from document_loaders.local_settings import Settings
 from document_loaders.core.tools import MilvusVectorDB
@@ -166,7 +166,7 @@ class PDFDocumentLoader:
 
 ---
 
-## 🔄 Sharing Logic Between src/ and document-loaders/
+## 🔄 Sharing Logic Between src/ and document_loaders/
 
 Sometimes you need the same logic in both places (e.g., MilvusVectorDB).
 
@@ -214,7 +214,7 @@ pytest tests/
 
 ---
 
-### Testing document-loaders/ (Utility)
+### Testing document_loaders/ (Utility)
 ```bash
 # Can run standalone, no src/ required
 python document_loaders/sync_responses_cache.py
@@ -248,9 +248,9 @@ grep -r "import src" document_loaders/
 
 When reviewing code additions, check:
 
-- [ ] New code in `src/` does NOT import from `document-loaders/`
-- [ ] New code in `document-loaders/` does NOT import from `src/`
-- [ ] Configuration is in the right place (app config in src/, loader config in document-loaders/)
+- [ ] New code in `src/` does NOT import from `document_loaders/`
+- [ ] New code in `document_loaders/` does NOT import from `src/`
+- [ ] Configuration is in the right place (app config in src/, loader config in document_loaders/)
 - [ ] Each package can be tested independently
 - [ ] If code is duplicated, it's intentional (different packages, different purposes)
 

@@ -147,6 +147,10 @@ data/*
 *.csv
 !embeddings.json
 
+# MLflow local tracking stores (eval harness output — regenerated on each run)
+mlruns/
+mlflow.db
+
 # Temporary
 temp/
 tmp/

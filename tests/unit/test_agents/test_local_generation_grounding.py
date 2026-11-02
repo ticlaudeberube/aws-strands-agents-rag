@@ -10,11 +10,12 @@ is required.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from src.agents import rag_routing
 from src.agents.strands_graph_agent import create_answer_generation_tool
 from src.config.settings import Settings
+from src.tools.ollama_client import OllamaClient
 
 
 class _FakeOllama:
@@ -43,7 +44,7 @@ def _settings() -> Settings:
 def test_no_usable_sources_returns_honest_refusal_without_generating() -> None:
     """Empty / text-less sources → NO_GROUNDING_ANSWER, LLM never called."""
     ollama = _FakeOllama("some fabricated answer")
-    generate = create_answer_generation_tool(ollama, _settings())
+    generate = create_answer_generation_tool(cast(OllamaClient, ollama), _settings())
 
     result = generate(
         question="what is some obscure thing",
@@ -62,7 +63,7 @@ def test_grounded_answer_passes_without_caveat() -> None:
         {"text": "Milvus supports HNSW and IVF indexing for fast vector search.", "distance": 0.9}
     ]
     ollama = _FakeOllama("Milvus supports HNSW indexing for fast vector search.")
-    generate = create_answer_generation_tool(ollama, _settings())
+    generate = create_answer_generation_tool(cast(OllamaClient, ollama), _settings())
 
     result = generate(
         question="how does Milvus index vectors",
@@ -81,7 +82,7 @@ def test_ungrounded_answer_gets_caveat_and_lowered_confidence() -> None:
     ]
     # Answer shares almost no content words with the source text.
     ollama = _FakeOllama("Pinecone charges forty dollars monthly for serverless replica pods.")
-    generate = create_answer_generation_tool(ollama, _settings())
+    generate = create_answer_generation_tool(cast(OllamaClient, ollama), _settings())
 
     result = generate(
         question="how does Milvus index vectors",

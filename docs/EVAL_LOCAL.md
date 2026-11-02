@@ -10,6 +10,48 @@ It is a **dev-loop / CI tool only**. `mlflow` lives in the `eval` optional
 dependency group and is imported lazily; nothing here is importable from the
 runtime/serverless path.
 
+## Quick reference (recommended setup)
+
+The project is configured so the eval logs **runs and GenAI traces to a local
+MLflow server by default** — no flags needed.
+
+1. **One-time:** `.env` sets the tracking target (copied from `.env.example`):
+
+   ```bash
+   MLFLOW_TRACKING_URI=http://127.0.0.1:5000
+   ```
+
+   The harness loads `.env` automatically. Comment this line out to fall back to
+   the local `./mlruns` file store instead.
+
+2. **Start the MLflow server** (serves the UI at the same address). Port 5000
+   collides with macOS AirPlay Receiver — use another port if needed:
+
+   ```bash
+   uv run mlflow ui --port 5000          # or --port 5001 to avoid AirPlay
+   # for a persistent SQLite-backed store add: --backend-store-uri sqlite:///mlflow.db
+   ```
+
+3. **Run the eval** (picks up the server from `.env` — no `--tracking-uri`):
+
+   ```bash
+   uv run scripts/eval_local.py --run-name my-change
+   ```
+
+   The startup log prints the resolved store (`MLflow tracking store:
+   http://127.0.0.1:5000`) and the run URL.
+
+4. **View results** at `http://127.0.0.1:5000`:
+   - **Experiments → rag-local-eval** → run rows with metrics/params.
+   - **Traces** tab (`/experiments/<id>/traces?workflowType=genai`) → one
+     GenAI trace per question.
+
+To override for a single run (e.g. a throwaway file store) pass
+`--tracking-uri ...`; the flag always wins over `.env`.
+
+> `mlflow ui` and `mlflow server` are the same app on MLflow 3.x — `mlflow ui`
+> fully supports the GenAI Traces view, so there's no need to run both.
+
 ## What it measures
 
 Per question and in aggregate:
@@ -48,19 +90,44 @@ as `results.json`.
 
 ## MLflow stores: pick one and stay consistent
 
-MLflow runs are written to a **tracking store**, and the eval script and the UI
-must point at the **same** store or the UI will show no runs. Two stores are in
-play in this repo:
+MLflow runs and traces are written to a **tracking store**, and the eval script
+and the UI/server must point at the **same** store or the UI will show nothing.
+The harness resolves the store in this order (first match wins):
 
-- **File store (`./mlruns`)** — the eval script's default when `--tracking-uri`
-  is omitted. Simplest for a quick local loop.
+1. `--tracking-uri` flag
+2. `MLFLOW_TRACKING_URI` — set in `.env` (the configured default) or exported
+3. fallback: local `./mlruns` file store
+
+The resolved store is logged at startup (`MLflow tracking store: ...`), so you
+can always see where a run went. Three stores are in play in this repo:
+
+- **Tracking server (`http://127.0.0.1:5000`)** — the configured default via
+  `.env`. Started with `uv run mlflow ui` (which also serves the web UI at the
+  same address). This is the only store that powers the **GenAI Traces** view
+  (`/experiments/<id>/traces?workflowType=genai`). The harness and the UI are
+  the same address, so they can't drift apart.
+- **File store (`./mlruns`)** — the fallback when `MLFLOW_TRACKING_URI` is unset.
+  Simplest for a quick offline loop; browse with `uv run mlflow ui` launched
+  from the project root (so it reads the same `./mlruns`).
 - **SQLite store (`sqlite:///mlflow.db`)** — a single `mlflow.db` file in the
-  project root. Preferred when you want the richer MLflow-3 server features and
-  a single-file store that's easy to reset (just delete `mlflow.db`).
+  project root; easy to reset (delete the file). Use it for both the run
+  (`--tracking-uri sqlite:///mlflow.db`) and the UI
+  (`uv run mlflow ui --backend-store-uri sqlite:///mlflow.db`).
 
-Whichever you choose, use it for **both** the eval run (`--tracking-uri`) and
-the UI (`--backend-store-uri`). Mixing them is the most common reason runs
-"disappear."
+Whichever you choose, the run and whatever serves the UI must agree. Mixing them
+(e.g. a run written to `./mlruns` but a UI reading `mlflow.db`) is the most
+common reason runs "disappear." Pointing both at the server sidesteps this
+because there's a single address.
+
+## GenAI traces
+
+Each question is wrapped in an MLflow **trace span** (`answer_question`,
+span type `AGENT`) capturing the question/top-k as inputs and the answer plus
+source count as outputs. When the harness points at a tracking server, these
+appear under the experiment's **Traces** tab — the
+`workflowType=genai` view. Tracing is best-effort: if the span API is
+unavailable the eval falls back to a plain call and still runs. The file and
+SQLite stores record runs/metrics but the GenAI Traces UI is a server feature.
 
 ## Running the evaluation
 
@@ -77,6 +144,12 @@ uv run scripts/eval_local.py --questions eval/questions.jsonl \
 
 # Log into the SQLite store (so the SQLite-backed UI shows it):
 uv run scripts/eval_local.py --tracking-uri sqlite:///mlflow.db
+
+# Log runs AND GenAI traces into a running tracking server:
+uv run scripts/eval_local.py --tracking-uri http://127.0.0.1:5000
+# ...or set it once for the shell:
+export MLFLOW_TRACKING_URI=http://127.0.0.1:5000
+uv run scripts/eval_local.py
 ```
 
 Flags:
@@ -89,7 +162,7 @@ Flags:
 | `--judge`        | off                   | Add the LLM-as-judge faithfulness score (uses Ollama)|
 | `--judge-model`  | `settings.ollama_model`| Override the judge model.                           |
 | `--top-k`        | `5`                   | Retrieval depth per question.                        |
-| `--tracking-uri` | `./mlruns`            | Where to log — match the UI's `--backend-store-uri`. |
+| `--tracking-uri` | flag → `MLFLOW_TRACKING_URI` → `./mlruns` | Where to log. Use `http://127.0.0.1:5000` for a server (needed for GenAI traces), or `sqlite:///mlflow.db`. |
 
 Exit codes: `0` on success, `2` if the question file is missing or the `eval`
 extra (mlflow) is not installed.
@@ -127,7 +200,9 @@ In the UI (`http://127.0.0.1:<port>`):
 | Symptom                                   | Cause / fix                                                                                     |
 |-------------------------------------------|-------------------------------------------------------------------------------------------------|
 | `[Errno 48] Address already in use`       | Port 5000 is taken — on macOS usually the AirPlay Receiver (Control Center). Use another port: `uv run mlflow ui --backend-store-uri sqlite:///mlflow.db --port 5001`, or disable System Settings → General → AirDrop & Handoff → AirPlay Receiver. |
-| UI opens but shows no runs                | UI and eval pointed at different stores. Point both at the same place (`./mlruns` **or** `sqlite:///mlflow.db`). |
+| UI opens but shows no runs                | UI and eval pointed at different stores. Point both at the same place, or point the eval at your server with `--tracking-uri http://127.0.0.1:5000`. The eval logs its resolved store at startup. |
+| Traces tab is empty / no GenAI traces     | Traces need a tracking **server**. Run with `--tracking-uri http://127.0.0.1:5000` (or `MLFLOW_TRACKING_URI`); file/SQLite stores don't serve the GenAI Traces view. |
+| Connection refused to `127.0.0.1:5000`    | No server is running there. Start one (`mlflow server --host 127.0.0.1 --port 5000 ...`) before pointing the eval at it, or use a file/SQLite store instead. On macOS, port 5000 may be AirPlay — use another port. |
 | `mlflow is not installed`                 | Install the eval extra: `uv pip install -e '.[eval]'`.                                           |
 | DB/schema or alembic revision error on UI start | The `mlflow.db` was created by a different MLflow major. Stay on the pinned 3.x, or archive/delete `mlflow.db` to start fresh (loses prior runs). |
 | `Errored questions` in the summary        | Ollama/Milvus unreachable. Start Local Mode backends (see `docs/GETTING_STARTED.md`).           |

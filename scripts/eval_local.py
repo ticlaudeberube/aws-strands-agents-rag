@@ -41,6 +41,7 @@ import argparse
 import asyncio
 import json
 import logging
+import os
 import sys
 import time
 from dataclasses import dataclass, field
@@ -291,6 +292,32 @@ def load_questions(path: Path) -> list[dict]:
     return items
 
 
+async def _answer_with_trace(agent: Any, question: str, top_k: int) -> tuple[str, list[dict]]:
+    """Call the agent, wrapping it in an MLflow GenAI trace span.
+
+    Emitting a span makes each question show up under the experiment's
+    **Traces** tab (the ``workflowType=genai`` view), not just as run
+    metrics. Tracing is best-effort: if MLflow or the span API is unavailable
+    we fall back to a plain call so the eval still runs.
+    """
+    import mlflow  # type: ignore[import-not-found]  # lazy: eval-extra only
+
+    answer: str
+    sources: list[dict]
+
+    try:
+        span_cm = mlflow.start_span(name="answer_question", span_type="AGENT")
+    except Exception:  # noqa: BLE001 - tracing must never break the eval
+        answer, sources = await agent.answer_question(question=question, top_k=top_k)
+        return answer, sources
+
+    with span_cm as span:
+        span.set_inputs({"question": question, "top_k": top_k})
+        answer, sources = await agent.answer_question(question=question, top_k=top_k)
+        span.set_outputs({"answer": answer, "num_sources": len(sources)})
+        return answer, sources
+
+
 async def _run_one(agent: Any, item: dict, cfg: EvalConfig, judge_client: Any) -> QuestionResult:
     """Run a single question through the local agent and build its record."""
     question = item["question"]
@@ -301,7 +328,7 @@ async def _run_one(agent: Any, item: dict, cfg: EvalConfig, judge_client: Any) -
     answer: str = ""
     sources: list[dict] = []
     try:
-        answer, sources = await agent.answer_question(question=question, top_k=cfg.top_k)
+        answer, sources = await _answer_with_trace(agent, question, cfg.top_k)
         # answer_question returns (answer, sources) only, so recompute the same
         # confidence heuristic the pipeline uses and infer the tier from source
         # types (web results carry source_type="web_search").
@@ -345,11 +372,35 @@ def _build_agent(settings: Any) -> Any:
     return StrandsGraphRAGAgent(settings)
 
 
+def _resolve_tracking_uri(cfg_uri: str | None) -> str | None:
+    """Resolve the MLflow tracking URI: --tracking-uri → env var → default.
+
+    Returns ``None`` to mean "MLflow's default" (the local ``./mlruns`` file
+    store). An explicit flag wins; otherwise ``MLFLOW_TRACKING_URI`` is honored
+    (which MLflow would read anyway, but resolving it here lets us log it). This
+    is how you point the harness at a running tracking server, e.g.
+    ``--tracking-uri http://127.0.0.1:5000`` or ``export
+    MLFLOW_TRACKING_URI=http://127.0.0.1:5000``.
+    """
+    if cfg_uri:
+        return cfg_uri
+    return os.environ.get("MLFLOW_TRACKING_URI") or None
+
+
 async def run_eval(cfg: EvalConfig) -> dict[str, float]:
     """Execute the full eval, log to MLflow, and return the aggregate metrics."""
     import mlflow  # type: ignore[import-not-found]  # lazy: eval-extra only
 
     from src.config.settings import Settings
+
+    # Load .env so MLFLOW_TRACKING_URI (and any other config) is available to
+    # _resolve_tracking_uri below, regardless of import ordering elsewhere.
+    try:
+        from dotenv import load_dotenv
+
+        load_dotenv()
+    except ImportError:  # python-dotenv is a runtime dep, but stay defensive
+        pass
 
     settings = Settings()
     items = load_questions(cfg.questions_path)
@@ -360,8 +411,10 @@ async def run_eval(cfg: EvalConfig) -> dict[str, float]:
     judge_model = cfg.judge_model or getattr(settings, "ollama_model", None)
     cfg.judge_model = judge_model
 
-    if cfg.tracking_uri:
-        mlflow.set_tracking_uri(cfg.tracking_uri)
+    tracking_uri = _resolve_tracking_uri(cfg.tracking_uri)
+    if tracking_uri:
+        mlflow.set_tracking_uri(tracking_uri)
+    logger.info("MLflow tracking store: %s", mlflow.get_tracking_uri())
     mlflow.set_experiment(cfg.experiment)
 
     results: list[QuestionResult] = []
@@ -459,7 +512,11 @@ def _parse_args(argv: list[str] | None = None) -> EvalConfig:
     parser.add_argument(
         "--tracking-uri",
         default=None,
-        help="MLflow tracking URI (default: local ./mlruns).",
+        help=(
+            "MLflow tracking URI. Resolution order: this flag → MLFLOW_TRACKING_URI "
+            "env var → local ./mlruns. Point at a running server with e.g. "
+            "http://127.0.0.1:5000, or a file store with sqlite:///mlflow.db."
+        ),
     )
     args = parser.parse_args(argv)
     return EvalConfig(

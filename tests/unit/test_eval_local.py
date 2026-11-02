@@ -11,7 +11,7 @@ from __future__ import annotations
 import importlib.util
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from src.agents import rag_routing
 
@@ -81,8 +81,13 @@ def test_classify_normal_answer_not_refused_or_caveated() -> None:
 
 
 def _sig(refused: bool = False, caveated: bool = False) -> AnswerSignals:
-    return eval_local.AnswerSignals(
-        refused=refused, caveated=caveated, grounding_score=1.0, answer_len=20
+    # eval_local is loaded dynamically (Any to mypy); cast the constructed
+    # instance to the statically-imported type.
+    return cast(
+        "AnswerSignals",
+        eval_local.AnswerSignals(
+            refused=refused, caveated=caveated, grounding_score=1.0, answer_len=20
+        ),
     )
 
 
@@ -129,7 +134,7 @@ def _result(**kw: object) -> QuestionResult:
         answer_len=50,
     )
     base.update(kw)
-    return eval_local.QuestionResult(**base)  # type: ignore[arg-type]
+    return cast("QuestionResult", eval_local.QuestionResult(**base))
 
 
 def test_summarize_rates_and_per_category() -> None:

@@ -1,0 +1,26 @@
+{"id": "in-scope-001", "question": "What is Milvus?", "category": "in_scope", "expected_behavior": "answer", "notes": "Core in-domain product question."}
+{"id": "in-scope-002", "question": "How does HNSW indexing work in a vector database?", "category": "in_scope", "expected_behavior": "answer", "notes": "Index-technique question covered by the KB."}
+{"id": "in-scope-003", "question": "What is the difference between IVF and HNSW indexes?", "category": "in_scope", "expected_behavior": "answer", "notes": "Comparison of two in-domain index types."}
+{"id": "in-scope-004", "question": "How are embeddings used for semantic search?", "category": "in_scope", "expected_behavior": "answer", "notes": "RAG/embedding fundamentals."}
+{"id": "in-scope-005", "question": "What is retrieval augmented generation?", "category": "in_scope", "expected_behavior": "answer", "notes": "RAG definition."}
+{"id": "in-scope-006", "question": "How do I create a collection and schema in Milvus?", "category": "in_scope", "expected_behavior": "answer", "notes": "Milvus operational question."}
+{"id": "in-scope-007", "question": "What distance metrics does Milvus support for similarity search?", "category": "in_scope", "expected_behavior": "answer", "notes": "Milvus feature detail."}
+{"id": "in-scope-008", "question": "What is the difference between dense and sparse retrieval?", "category": "in_scope", "expected_behavior": "answer", "notes": "Retrieval concept."}
+
+{"id": "out-of-scope-001", "question": "What is the capital of France?", "category": "out_of_scope", "expected_behavior": "refuse", "notes": "Clearly off-topic, no vector-DB keyword."}
+{"id": "out-of-scope-002", "question": "Write me a poem about the ocean.", "category": "out_of_scope", "expected_behavior": "refuse", "notes": "Creative request, off-topic."}
+{"id": "out-of-scope-003", "question": "How do I renew my passport?", "category": "out_of_scope", "expected_behavior": "refuse", "notes": "Contains 'renew' (substring 'new') — must NOT be treated as time-sensitive (regression guard for M1)."}
+{"id": "out-of-scope-004", "question": "How much storage does my laptop have?", "category": "out_of_scope", "expected_behavior": "refuse", "notes": "Contains 'storage' (substring 'rag') — must NOT be treated as in-scope (regression guard for M2)."}
+{"id": "out-of-scope-005", "question": "Tell me a story about a dragon.", "category": "out_of_scope", "expected_behavior": "refuse", "notes": "Contains 'dragon' (substring 'rag') — regression guard for M2."}
+
+{"id": "competitor-001", "question": "What is Pinecone?", "category": "competitor", "expected_behavior": "answer_or_refuse", "notes": "Competitor product — answered via web search when available, otherwise honest 'not found'."}
+{"id": "competitor-002", "question": "Tell me about Weaviate's features.", "category": "competitor", "expected_behavior": "answer_or_refuse", "notes": "Competitor; depends on web-search availability."}
+{"id": "competitor-003", "question": "How does Qdrant compare to Milvus?", "category": "competitor", "expected_behavior": "answer", "notes": "Comparison — Milvus side is in KB; competitor side via web."}
+
+{"id": "time-sensitive-001", "question": "What are the latest vector database trends?", "category": "time_sensitive", "expected_behavior": "answer_or_refuse", "notes": "Temporal keyword 'latest' — should prefer web search; refuse honestly if unavailable."}
+{"id": "time-sensitive-002", "question": "What is the newest Milvus release?", "category": "time_sensitive", "expected_behavior": "answer_or_refuse", "notes": "Temporal keyword 'newest'."}
+{"id": "time-sensitive-003", "question": "What vector search features launched this year?", "category": "time_sensitive", "expected_behavior": "answer_or_refuse", "notes": "Temporal phrase 'this year'."}
+
+{"id": "unanswerable-001", "question": "What is the exact per-query latency of Milvus on my specific hardware?", "category": "unanswerable", "expected_behavior": "refuse_or_caveat", "notes": "In-domain but not answerable from the KB — should refuse or heavily caveat, not fabricate a number."}
+{"id": "unanswerable-002", "question": "How many total documents are in your knowledge base right now?", "category": "unanswerable", "expected_behavior": "refuse_or_caveat", "notes": "Meta-question the KB cannot answer; must not invent a count."}
+{"id": "unanswerable-003", "question": "What is Milvus's revenue for the last fiscal quarter?", "category": "unanswerable", "expected_behavior": "refuse_or_caveat", "notes": "In-domain entity but out-of-KB fact; must not fabricate financials."}

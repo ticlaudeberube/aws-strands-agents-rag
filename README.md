@@ -13,6 +13,8 @@ A dual-mode RAG system that currently supports both local development and AWS se
 - [docs/AWS_DEPLOYMENT_GAPS.md](docs/AWS_DEPLOYMENT_GAPS.md) — what stands between local serverless and a real AWS deploy
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — runtime architecture and routing
 - [docs/API_SERVER.md](docs/API_SERVER.md) — API contract and endpoints
+- [docs/ANTI_HALLUCINATION.md](docs/ANTI_HALLUCINATION.md) — anti-hallucination design, thresholds, and observability
+- [docs/EVAL_LOCAL.md](docs/EVAL_LOCAL.md) — local MLflow evaluation harness
 - [docs/CHATBOT_GUI_FEATURES.md](docs/CHATBOT_GUI_FEATURES.md) — frontend feature reference
 - [docs/INDEX.md](docs/INDEX.md) — active doc index
 
@@ -66,6 +68,26 @@ User query
 The source of truth for mode selection is `DEPLOYMENT_MODE` in `.env` and `src/config/settings.py`.
 
 See [docs/HOW_TO.md](docs/HOW_TO.md) and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the verified setup and architecture.
+
+## Evaluation (MLflow)
+
+A local, offline eval harness runs a fixed question set through the Local Mode
+pipeline and logs quality metrics (pass/refusal/caveat rates, grounding and
+confidence scores) to MLflow, so you can tell whether a prompt or threshold
+change helped. It is a dev-loop/CI tool only — MLflow lives in the `eval`
+optional-dependency extra (pinned `mlflow>=3.0,<4`) and is never imported from
+the runtime/serverless path.
+
+```bash
+uv pip install -e '.[eval]'                               # install the eval extra once
+uv run scripts/eval_local.py --tracking-uri sqlite:///mlflow.db   # run the eval (needs Ollama + Milvus)
+uv run mlflow ui --backend-store-uri sqlite:///mlflow.db --port 5001   # browse runs at http://127.0.0.1:5001
+```
+
+Use `--port 5001` because macOS binds port 5000 to the AirPlay Receiver, and
+point the eval and the UI at the **same** tracking store or the UI shows no
+runs. Full usage, flags, and troubleshooting are in
+[docs/EVAL_LOCAL.md](docs/EVAL_LOCAL.md).
 
 ## Deploying to AWS
 

@@ -53,6 +53,11 @@ dev = [
     "types-tqdm>=4.64.0",
     "pre-commit>=3.0.0",
 ]
+# Offline RAG evaluation harness (scripts/eval_local.py). Strictly a local/CI
+# dev-loop tool — MLflow MUST NOT be imported from any runtime/serverless path.
+eval = [
+    "mlflow>=3.0,<4",
+]
 
 [tool.setuptools]
 packages = ["src"]
@@ -86,6 +91,8 @@ module = [
     "msgpack.*",
     "redis",
     "redis.*",
+    "mlflow",
+    "mlflow.*",
     "document_loaders.*",
     "aws_xray_sdk",
     "aws_xray_sdk.*",

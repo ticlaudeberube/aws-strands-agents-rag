@@ -11,6 +11,11 @@ This is the current, active documentation set for the project.
 - [API_SERVER.md](API_SERVER.md) — API contract and sample requests
 - [CHATBOT_GUI_FEATURES.md](CHATBOT_GUI_FEATURES.md) — chatbot UI behavior and feature reference
 
+## Quality and evaluation
+
+- [ANTI_HALLUCINATION.md](ANTI_HALLUCINATION.md) — layered anti-hallucination design, thresholds, and observability
+- [EVAL_LOCAL.md](EVAL_LOCAL.md) — local MLflow evaluation harness (usage and interpretation)
+
 ## Quick decisions
 
 - Local development: use `DEPLOYMENT_MODE=local`

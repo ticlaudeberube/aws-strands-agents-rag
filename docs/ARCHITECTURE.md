@@ -12,12 +12,18 @@ User query
   -> TopicChecker
   -> SecurityChecker
   -> RAGWorker
+     -> [hard-block hook: cancels tool calls on a security/injection attempt]
      -> retrieval backend
      -> answer generation
+     -> grounding check
+          -> weak? one widened-retrieval retry, then caveat if still weak
      -> source output
 ```
 
-The Strands graph is the shared application flow. The difference between modes is the backend wiring, not the agent logic itself.
+The Strands graph is the shared application flow. The hard-block hook and the
+grounding retry are anti-hallucination defenses; see
+[docs/ANTI_HALLUCINATION.md](ANTI_HALLUCINATION.md) (Layers 3 and 4b) for the
+full design. The difference between modes is the backend wiring, not the agent logic itself.
 The graph uses a vector-store role rather than requiring one vendor's product.
 The current adapters are Milvus for local mode and OpenSearch Serverless for
 AWS mode; another provider needs a compatible adapter and configuration.

@@ -1559,6 +1559,8 @@ def create_rag_graph(
             web_fallback_threshold=settings.web_search_fallback_threshold,
             grounding_threshold=settings.answer_grounding_threshold,
             confidence_threshold=settings.answer_confidence_threshold,
+            grounding_retry_enabled=settings.grounding_retry_enabled,
+            grounding_retry_top_k_multiplier=settings.grounding_retry_top_k_multiplier,
             temperature=(temperature if temperature is not None else settings.ollama_temperature),
             max_tokens=max_tokens,
             metric_emitter=metric_emitter,

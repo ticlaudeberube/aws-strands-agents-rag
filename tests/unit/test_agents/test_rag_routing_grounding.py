@@ -322,3 +322,123 @@ def test_quality_confidence_threshold_is_configurable() -> None:
     )
     assert metric_default == rag_routing.ANSWER_LOW_CONFIDENCE
     assert metric_custom is None
+
+
+# ---------------------------------------------------------------------------
+# Soft-steer: one widened-retrieval retry on weak grounding (item 2)
+# ---------------------------------------------------------------------------
+
+
+class _TopKAwareVectorStore:
+    """VectorStore returning weak results at the base top_k and a strong,
+    well-grounded result once top_k is widened — simulating the supporting chunk
+    sitting just outside the original retrieval window."""
+
+    STRONG_TEXT = "Milvus supports HNSW and IVF indexing for fast vector search."
+
+    def __init__(self, base_top_k: int) -> None:
+        self._base_top_k = base_top_k
+        self.calls: list[int] = []
+
+    def knn_search(self, _index: str, _vector: list[float], k: int) -> list[dict]:
+        self.calls.append(k)
+        if k <= self._base_top_k:
+            # Weak but text-bearing: relevance passes the web-fallback gate, but
+            # the content won't ground the strong answer.
+            return [{"id": "w", "text": "Unrelated filler about postage rates.", "distance": 0.9}]
+        return [{"id": "s", "text": self.STRONG_TEXT, "distance": 0.95}]
+
+
+class _SourceAwareLLM:
+    """LLM whose answer echoes its retrieved source text, so grounding reflects
+    which retrieval attempt produced the context."""
+
+    def __init__(self) -> None:
+        self.generate_calls = 0
+
+    def embed_text(self, _text: str) -> list[float]:
+        return [0.0] * 8
+
+    def generate(self, prompt: str, **_kwargs: Any) -> str:
+        self.generate_calls += 1
+        # The source text is embedded in the RAG prompt; echo the strong answer
+        # when the strong chunk is present, otherwise a non-grounded answer.
+        if "HNSW and IVF indexing" in prompt:
+            return "Milvus supports HNSW and IVF indexing for fast vector search."
+        return "Pinecone charges monthly for serverless replica pods."
+
+
+def _route_retry(
+    vector_store: Any,
+    llm: Any,
+    *,
+    enabled: bool = True,
+    multiplier: int = 2,
+    top_k: int = rag_routing.DEFAULT_TOP_K,
+) -> rag_routing.RoutingResult:
+    return route_rag_query(
+        "tell me about milvus indexing",
+        llm=llm,
+        vector_store=vector_store,
+        cache=None,
+        semantic_cache=None,
+        web_search=None,
+        kb_index="rag-kb",
+        top_k=top_k,
+        grounding_retry_enabled=enabled,
+        grounding_retry_top_k_multiplier=multiplier,
+    )
+
+
+def test_grounding_retry_recovers_with_widened_top_k() -> None:
+    """Weak first attempt + strong retry → retry answer kept, no caveat, metric emitted."""
+    store = _TopKAwareVectorStore(base_top_k=rag_routing.DEFAULT_TOP_K)
+    llm = _SourceAwareLLM()
+
+    result = _route_retry(store, llm)
+
+    # Searched twice: base top_k, then widened.
+    assert store.calls == [rag_routing.DEFAULT_TOP_K, rag_routing.DEFAULT_TOP_K * 2]
+    assert llm.generate_calls == 2
+    # The recovered answer is well grounded → no caveat.
+    assert rag_routing.LOW_GROUNDING_CAVEAT not in result.answer
+    assert result.grounding_score >= 0.35
+    assert rag_routing.ANSWER_GROUNDING_RETRY in result.metrics
+
+
+def test_grounding_retry_disabled_skips_second_search() -> None:
+    """With the retry off, a single search runs and the caveat is applied."""
+    store = _TopKAwareVectorStore(base_top_k=rag_routing.DEFAULT_TOP_K)
+    llm = _SourceAwareLLM()
+
+    result = _route_retry(store, llm, enabled=False)
+
+    assert store.calls == [rag_routing.DEFAULT_TOP_K]  # no retry
+    assert llm.generate_calls == 1
+    assert rag_routing.LOW_GROUNDING_CAVEAT in result.answer
+    assert rag_routing.ANSWER_GROUNDING_RETRY not in result.metrics
+
+
+def test_grounding_retry_top_k_capped_at_max() -> None:
+    """The widened top_k never exceeds MAX_TOP_K even with a large multiplier."""
+    # base below max, but base*multiplier would exceed it.
+    store = _TopKAwareVectorStore(base_top_k=30)
+    llm = _SourceAwareLLM()
+
+    result = _route_retry(store, llm, multiplier=10, top_k=30)
+
+    assert store.calls == [30, rag_routing.MAX_TOP_K]  # capped, not 300
+    assert rag_routing.ANSWER_GROUNDING_RETRY in result.metrics
+    assert result is not None
+
+
+def test_grounding_retry_not_attempted_at_max_top_k() -> None:
+    """When top_k is already at MAX_TOP_K there is no room to widen → no retry."""
+    store = _TopKAwareVectorStore(base_top_k=rag_routing.MAX_TOP_K)
+    llm = _SourceAwareLLM()
+
+    result = _route_retry(store, llm, top_k=rag_routing.MAX_TOP_K)
+
+    assert store.calls == [rag_routing.MAX_TOP_K]  # single search
+    assert rag_routing.ANSWER_GROUNDING_RETRY not in result.metrics
+    assert rag_routing.LOW_GROUNDING_CAVEAT in result.answer

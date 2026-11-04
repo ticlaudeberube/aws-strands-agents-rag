@@ -312,6 +312,25 @@ class Settings(BaseSettings):
             "grounding caveat did not already fire, so the two never stack."
         ),
     )  # Low-confidence caveat threshold (anti-hallucination, soft signal)
+    grounding_retry_enabled: bool = Field(
+        default=True,
+        validation_alias="GROUNDING_RETRY_ENABLED",
+        description=(
+            "When True, a KB answer that fails the grounding check triggers one "
+            "retrieval retry with a widened top_k before the low-grounding caveat "
+            "is applied (anti-hallucination soft steer). Set False to disable."
+        ),
+    )  # One-shot grounding retry toggle (anti-hallucination, soft steer)
+    grounding_retry_top_k_multiplier: int = Field(
+        default=2,
+        ge=1,
+        le=10,
+        validation_alias="GROUNDING_RETRY_TOP_K_MULTIPLIER",
+        description=(
+            "Factor applied to top_k on the grounding retry (capped at 50, the "
+            "handler's max). Only used when grounding_retry_enabled is True."
+        ),
+    )  # Widened-retrieval multiplier for the grounding retry
     tavily_api_key: str | None = Field(
         default=None,
         validation_alias="TAVILY_API_KEY",

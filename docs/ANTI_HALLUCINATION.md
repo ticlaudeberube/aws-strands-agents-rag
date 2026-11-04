@@ -81,6 +81,19 @@ semantic judge; it deliberately flags-with-a-caveat rather than hard-blocks,
 because a valid paraphrase can score low. (For semantic verification, see the
 optional LLM judge in the eval harness below.)
 
+**Soft-steer retry (before the caveat).** When a freshly generated KB answer
+fails the grounding check, `route_rag_query` first attempts *one* self-correction
+instead of immediately caveating: it re-runs the KB search with a widened
+`top_k` (`grounding_retry_top_k_multiplier`, capped at 50) and regenerates,
+keeping whichever attempt grounds better. The supporting chunk is often just
+outside the original `top_k`, so a cheap deterministic retry recovers it without
+a reflection loop. This is the "steer, don't block" technique — the agent adapts
+and completes rather than hedging. If the retry still fails the bar, the
+caveat/confidence logic above applies exactly as before. The retry emits
+`answer/grounding_retry`, runs at most once, and is toggled by
+`grounding_retry_enabled` (default on). It lives in the shared router, so both
+modes get it; the local single-shot `generate_answer` tool path is unaffected.
+
 ### Layer 4 — In-code guardrails (topic + security gates)
 
 Before retrieval, two deterministic gates run (`src/agents/strands_graph_agent.py`):
@@ -140,6 +153,8 @@ All thresholds live in `src/config/settings.py` and are env-overridable:
 |---|---|---|---|
 | `answer_grounding_threshold` | `ANSWER_GROUNDING_THRESHOLD` | `0.35` | Min grounding fraction before the low-grounding caveat fires (Layer 3). |
 | `answer_confidence_threshold` | `ANSWER_CONFIDENCE_THRESHOLD` | `0.45` | Heuristic-confidence floor before the low-confidence caveat fires (Layer 3). |
+| `grounding_retry_enabled` | `GROUNDING_RETRY_ENABLED` | `true` | Enable the one-shot widened-retrieval retry on weak grounding (Layer 3). |
+| `grounding_retry_top_k_multiplier` | `GROUNDING_RETRY_TOP_K_MULTIPLIER` | `2` | Factor applied to `top_k` on the grounding retry (capped at 50). |
 | `web_search_fallback_threshold` | `WEB_SEARCH_FALLBACK_THRESHOLD` | `0.15` | KB relevance below which web search runs; feeds the Layer 2 refusal. |
 | `response_cache_threshold` | `RESPONSE_CACHE_THRESHOLD` | `0.92` | Semantic-cache hit similarity. |
 
@@ -155,6 +170,9 @@ backstop):
 
 - `answer/low_grounding` (Count) — answers flagged as poorly supported.
 - `answer/low_confidence` (Count) — answers with a weak retrieval match.
+- `answer/grounding_retry` (Count) — the soft-steer retrieval retry fired. A
+  rising `grounding_retry` with a flat `low_grounding` means the retry is
+  recovering answers; both rising means the KB likely lacks the content.
 
 Each serverless response body also returns `confidence_score` and
 `grounding_score` per request (`agentcore_handler.py`). Chart `answer/low_grounding`
@@ -230,7 +248,7 @@ thing being graded should not also be the grader.
 |---|---|---|
 | Honest retrieval / no-results | Implemented | Layers 1–3 |
 | Neurosymbolic guardrails | Implemented (+ framework-level hard block) | Layers 4, 4b |
-| Agent steering (self-correct) | Partial — caveat + refuse, not a reflection loop | Layer 3 |
+| Agent steering (self-correct) | Implemented — one-shot widened-retrieval retry, then caveat/refuse (not a full reflection loop) | Layer 3 |
 | Semantic tool selection | Not implemented (2-tool pipeline; low value) | — |
 | Multi-agent validation | Not implemented; optional LLM judge covers offline eval | eval harness |
 

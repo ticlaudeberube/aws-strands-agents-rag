@@ -69,6 +69,7 @@ __all__ = [
     "CACHE_OPENSEARCH_UNAVAILABLE",
     "ANSWER_LOW_GROUNDING",
     "ANSWER_LOW_CONFIDENCE",
+    "ANSWER_GROUNDING_RETRY",
     "NO_GROUNDING_ANSWER",
     "LOW_GROUNDING_CAVEAT",
     "LOW_CONFIDENCE_CAVEAT",
@@ -86,6 +87,11 @@ ANSWER_LOW_GROUNDING = "answer/low_grounding"
 # Emitted when the heuristic confidence score falls below its threshold (a
 # softer signal than grounding), so dashboards can track low-confidence answers.
 ANSWER_LOW_CONFIDENCE = "answer/low_confidence"
+
+# Emitted when a KB answer fails the grounding check and a widened-retrieval
+# retry is attempted (anti-hallucination soft steer), so dashboards can track
+# how often the self-correction path runs.
+ANSWER_GROUNDING_RETRY = "answer/grounding_retry"
 
 # Minimum fraction of the answer's content words that must also appear in the
 # retrieved source text for the answer to be considered "grounded". Tuned
@@ -120,6 +126,10 @@ LOW_CONFIDENCE_CAVEAT = (
 DEFAULT_SEMANTIC_THRESHOLD = 0.92
 DEFAULT_WEB_FALLBACK_THRESHOLD = 0.15
 DEFAULT_TOP_K = 10
+
+# Upper bound on top_k, matching the handler's documented validation range
+# (1–50). The grounding retry widens top_k but never past this cap.
+MAX_TOP_K = 50
 
 # Honest refusal returned when neither the KB nor web search produced usable
 # grounding for the query. Returning this instead of generating from weak/empty
@@ -593,6 +603,8 @@ def route_rag_query(
     web_fallback_threshold: float = DEFAULT_WEB_FALLBACK_THRESHOLD,
     grounding_threshold: float = DEFAULT_GROUNDING_THRESHOLD,
     confidence_threshold: float = DEFAULT_CONFIDENCE_THRESHOLD,
+    grounding_retry_enabled: bool = True,
+    grounding_retry_top_k_multiplier: int = 2,
     temperature: float = 0.3,
     max_tokens: int | None = None,
     metric_emitter: Callable[[str], None] | None = None,
@@ -624,6 +636,15 @@ def route_rag_query(
         confidence_threshold: Heuristic-confidence floor below which a softer
             low-confidence caveat is appended (only when the grounding caveat did
             not already fire). Below this, ``answer/low_confidence`` is emitted.
+        grounding_retry_enabled: When ``True`` (default), a KB answer that fails
+            the grounding check triggers exactly one retrieval retry with a
+            widened ``top_k`` before the low-grounding caveat is applied. The
+            better-grounded of the two attempts is kept. A "steer, don't block"
+            self-correction for the common case where the supporting chunk was
+            just outside the original ``top_k``; set ``False`` to disable.
+        grounding_retry_top_k_multiplier: Factor applied to ``top_k`` on the
+            retry (result capped at :data:`MAX_TOP_K`). Only used when
+            ``grounding_retry_enabled``.
         temperature: LLM sampling temperature for generation.
         max_tokens: Optional max-token cap for generation.
         metric_emitter: Optional callback invoked with each warning-metric name.
@@ -737,8 +758,56 @@ def route_rag_query(
         )
         return web_result
 
-    # ---- Generation from KB context, then populate caches -----------------
+    # ---- Generation from KB context ---------------------------------------
     answer = _generate_from_sources(llm, question, kb_sources, temperature, max_tokens, history)
+    grounding_score = compute_grounding_score(answer, kb_sources)
+
+    # ---- Soft-steer: one widened-retrieval retry on weak grounding --------
+    # Before accepting a low-grounding caveat, re-run the KB search once with a
+    # widened top_k and regenerate. The supporting chunk is often just outside
+    # the original top_k; a cheap deterministic retry recovers it without a
+    # reflection loop. Keep whichever attempt grounds better; if neither clears
+    # the bar, the existing caveat path below handles it exactly as before.
+    retry_eligible = (
+        grounding_retry_enabled
+        and grounding_score < grounding_threshold
+        and bool(answer.strip())
+        and top_k < MAX_TOP_K
+    )
+    if retry_eligible:
+        widened_top_k = min(top_k * max(1, grounding_retry_top_k_multiplier), MAX_TOP_K)
+        if widened_top_k > top_k:
+            logger.info(
+                "[ROUTING] Low grounding (%.2f < %.2f) → retrying KB search with "
+                "widened top_k=%d (was %d)",
+                grounding_score,
+                grounding_threshold,
+                widened_top_k,
+                top_k,
+            )
+            _emit(ANSWER_GROUNDING_RETRY, result_metrics, metric_emitter)
+            retry_sources = _kb_search(
+                question,
+                query_vector,
+                vector_store,
+                cache,
+                kb_index,
+                widened_top_k,
+                is_temporal,
+                result_metrics,
+                metric_emitter,
+            )
+            if retry_sources:
+                retry_answer = _generate_from_sources(
+                    llm, question, retry_sources, temperature, max_tokens, history
+                )
+                retry_grounding = compute_grounding_score(retry_answer, retry_sources)
+                # Keep the retry only if it grounds at least as well.
+                if retry_grounding >= grounding_score:
+                    answer = retry_answer
+                    kb_sources = retry_sources
+                    grounding_score = retry_grounding
+                    relevance = average_relevance(retry_sources)
 
     kb_result = RoutingResult(
         answer=answer,
@@ -752,7 +821,7 @@ def route_rag_query(
     # Post-generation quality check (anti-hallucination): verify the answer is
     # actually supported by the retrieved KB context, and flag weak grounding or
     # low confidence with a single (mutually exclusive) caveat + metric rather
-    # than hard-blocking.
+    # than hard-blocking. (Runs on the better of the original/retry attempts.)
     _apply_grounding_check(
         kb_result,
         answer,

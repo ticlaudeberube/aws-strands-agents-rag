@@ -189,6 +189,15 @@ Lambda rather than the placeholder.
 > and avoid arm64-wheel issues. The `--platform` flags pull the correct arm64
 > wheels without emulation on any host.
 
+> **Observability (OpenTelemetry).** The package includes
+> `strands-agents[otel]` + `aws-opentelemetry-distro`; the compute module sets
+> `AWS_LAMBDA_EXEC_WRAPPER=/opt/otel-instrument` on the chat Lambda
+> (`enable_otel`, default `true`) so AgentCore auto-instruments Strands and
+> emits tool-call traces to CloudWatch/X-Ray. These OTel deps are serverless
+> only — do **not** install them into the local `eval` (MLflow) environment;
+> both consume OpenTelemetry and are kept in separate environments to avoid a
+> resolver clash (see `docs/ANTI_HALLUCINATION.md` → Observability).
+
 ---
 
 ## Step 3 — Init, plan, apply
@@ -318,7 +327,7 @@ state bucket first).
 | `variables.tf` / `outputs.tf` | Root inputs/outputs |
 | `environments/*.tfvars` | Per-environment values (dev/staging/prod) |
 | `modules/networking` | VPC, private subnets, VPC endpoints, security groups |
-| `modules/data` | DynamoDB tables, OpenSearch Serverless collection, ElastiCache Redis |
+| `modules/data` | DynamoDB tables (session, analytics, **thresholds**), OpenSearch Serverless collection, ElastiCache Redis |
 | `modules/compute` | Lambda chat + indexing functions, least-privilege IAM |
 | `modules/api` | API Gateway (HTTP API), Cognito user pool + JWT authorizer, WAF |
 | `modules/frontend` | S3 bucket (documents + frontend), CloudFront distribution |

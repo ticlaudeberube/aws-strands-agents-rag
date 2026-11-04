@@ -37,6 +37,11 @@ output "analytics_table_name" {
   value       = module.data.analytics_table_name
 }
 
+output "thresholds_table_name" {
+  description = "Name of the DynamoDB thresholds table (runtime-tunable anti-hallucination knobs)."
+  value       = module.data.thresholds_table_name
+}
+
 output "opensearch_collection_endpoint" {
   description = "OpenSearch Serverless collection endpoint (rag-kb / rag-cache indexes created at the app layer)."
   value       = module.data.opensearch_collection_endpoint

@@ -41,6 +41,16 @@ variable "analytics_table_arn" {
   type        = string
 }
 
+variable "thresholds_table_name" {
+  description = "DynamoDB thresholds table name (environment variable for the chat handler)."
+  type        = string
+}
+
+variable "thresholds_table_arn" {
+  description = "DynamoDB thresholds table ARN (scoped IAM resource, read-only)."
+  type        = string
+}
+
 variable "opensearch_collection_arn" {
   description = "OpenSearch Serverless collection ARN (scoped aoss:APIAccessAll resource)."
   type        = string
@@ -170,6 +180,12 @@ variable "documents_prefix" {
   description = "S3 key prefix that triggers indexing (Req 9.1 — the documents/ prefix)."
   type        = string
   default     = "documents/"
+}
+
+variable "enable_otel" {
+  description = "Enable AgentCore/ADOT OpenTelemetry auto-instrumentation on the chat Lambda by setting AWS_LAMBDA_EXEC_WRAPPER=/opt/otel-instrument. Requires the aws-opentelemetry-distro dependency in the Lambda package (requirements-lambda.txt). Traces reach CloudWatch/X-Ray (active tracing is already on)."
+  type        = bool
+  default     = true
 }
 
 variable "tags" {

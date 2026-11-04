@@ -52,6 +52,12 @@ variable "analytics_table_name" {
   default     = "analytics"
 }
 
+variable "thresholds_table_name" {
+  description = "Name of the DynamoDB thresholds table (runtime-tunable anti-hallucination knobs)."
+  type        = string
+  default     = "thresholds"
+}
+
 # ---------------------------------------------------------------------------
 # ElastiCache Redis sizing (Requirement 3.3)
 # ---------------------------------------------------------------------------

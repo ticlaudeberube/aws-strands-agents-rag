@@ -76,4 +76,12 @@ the local list endpoint in serverless mode. Providing a cloud history would
 require a separately designed, authenticated API rather than assuming the local
 cache-list contract exists there.
 
+The serverless handler (`agentcore_handler.py`) returns a different envelope
+from the local OpenAI-compatible payload above. Alongside the answer and
+`sources`, each response includes anti-hallucination quality fields —
+`confidence_score`, `grounding_score`, and `web_search_unavailable` — plus
+`session_id` and `latency_ms`. See
+[docs/ANTI_HALLUCINATION.md](ANTI_HALLUCINATION.md) for how `grounding_score`
+and `confidence_score` are computed and surfaced.
+
 See [docs/HOW_TO.md](HOW_TO.md) and [docs/ARCHITECTURE.md](ARCHITECTURE.md) for setup context.

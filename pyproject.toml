@@ -55,6 +55,13 @@ dev = [
 ]
 # Offline RAG evaluation harness (scripts/eval_local.py). Strictly a local/CI
 # dev-loop tool — MLflow MUST NOT be imported from any runtime/serverless path.
+#
+# NOTE: MLflow 3 pulls in OpenTelemetry for its GenAI tracing. The serverless
+# Lambda observability stack (strands-agents[otel] + aws-opentelemetry-distro,
+# declared in infrastructure/lambda/requirements-lambda.txt — NOT here) also
+# uses OpenTelemetry. Keep these two OTel-consuming toolchains in SEPARATE
+# environments (local eval venv vs. the Lambda package) to avoid a dependency
+# resolver clash. See docs/ANTI_HALLUCINATION.md (Observability).
 eval = [
     "mlflow>=3.0,<4",
 ]

@@ -10,8 +10,21 @@
 # and infrastructure/terraform/DEPLOYMENT.md Step 2. Keep in sync with the
 # "dependencies" / "serverless" extras in pyproject.toml.
 
-# Agent framework + models
-strands-agents>=1.27.0
+# Agent framework + models.
+# The [otel] extra adds the OpenTelemetry exporter Strands uses to emit agent
+# traces; AgentCore auto-instruments Strands when the ADOT distro below is also
+# present. OTel lives ONLY in this serverless package — never in the base
+# project deps or the `eval` (MLflow) extra — so the two OTel-consuming
+# toolchains (ADOT here, MLflow's GenAI tracing in the local eval) are never
+# installed into the same environment. See docs/ANTI_HALLUCINATION.md
+# (Observability) and the note in pyproject.toml.
+strands-agents[otel]>=1.27.0
+
+# AWS Distro for OpenTelemetry — auto-instruments the Lambda (enabled via the
+# AWS_LAMBDA_EXEC_WRAPPER=/opt/otel-instrument env var set in the compute
+# module) so invocation/tool-call traces, latencies, and guardrail blocks reach
+# CloudWatch without custom instrumentation code.
+aws-opentelemetry-distro>=0.7.0
 
 # AWS SDK (Bedrock, DynamoDB, Secrets Manager, S3)
 boto3>=1.34.0

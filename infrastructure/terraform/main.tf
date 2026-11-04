@@ -84,6 +84,8 @@ module "compute" {
   session_table_arn              = module.data.session_table_arn
   analytics_table_name           = module.data.analytics_table_name
   analytics_table_arn            = module.data.analytics_table_arn
+  thresholds_table_name          = module.data.thresholds_table_name
+  thresholds_table_arn           = module.data.thresholds_table_arn
   opensearch_collection_arn      = module.data.opensearch_collection_arn
   opensearch_collection_endpoint = module.data.opensearch_collection_endpoint
   redis_primary_endpoint         = module.data.redis_primary_endpoint

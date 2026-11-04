@@ -97,4 +97,17 @@ The app does not rely on a legacy `use_agentcore` flag. The supported switch is 
 - Web search is optional and controlled by the current Tavily configuration.
 - The Strands graph remains the shared business flow: TopicChecker → SecurityChecker → RAGWorker.
 
+### Anti-hallucination tuning
+
+The Layer-3 thresholds (grounding, confidence, web-search fallback, semantic
+cache) and the grounding-retry controls are env-overridable — see
+`.env.example` and the full table in
+[docs/ANTI_HALLUCINATION.md](ANTI_HALLUCINATION.md#configuration).
+
+In **serverless mode** these same thresholds can also be changed at runtime
+without a redeploy: set `DYNAMODB_THRESHOLDS_TABLE` and add one row per knob.
+The values are read once at Lambda cold start and override the `settings.py`
+defaults; any failure (or local mode) falls back to `settings.py`. See
+[Runtime tuning without a redeploy](ANTI_HALLUCINATION.md#runtime-tuning-without-a-redeploy-serverless).
+
 See [docs/ARCHITECTURE.md](ARCHITECTURE.md), [docs/API_SERVER.md](API_SERVER.md), and [docs/HOW_TO.md](HOW_TO.md).

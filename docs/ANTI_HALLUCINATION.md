@@ -161,6 +161,28 @@ All thresholds live in `src/config/settings.py` and are env-overridable:
 Thresholds should be **tuned with data**, not by intuition — see the eval
 harness below.
 
+### Runtime tuning without a redeploy (serverless)
+
+In serverless mode the six thresholds above are **compile-time defaults** that
+can be overridden at runtime from a DynamoDB table, so an operator can retune
+grounding without shipping code. Set `DYNAMODB_THRESHOLDS_TABLE` (Terraform
+provisions `…-thresholds` and wires the env var + a read-only IAM grant) and add
+one item per knob:
+
+```json
+{ "name": "answer_grounding_threshold", "value": 0.45 }
+```
+
+`ThresholdStore` (`src/tools/threshold_store.py`) reads the table **once at
+Lambda cold start** (the graph is a warm-context singleton), coerces each
+`value` to the setting's type, and overrides the matching default for the life
+of the container; the change takes effect on the next cold start. Only the six
+names above are tunable — any other row is ignored. Every failure mode (table
+unset, missing, scan error, malformed row, or Local Mode) falls back to the
+`settings.py` value, so the feature is purely additive. Model IDs, table names,
+and other infra config are deliberately **not** tunable this way — they must
+change through a deploy.
+
 ## Observability (serverless)
 
 The shared router emits warning metrics through the injected `metric_emitter`
@@ -179,6 +201,30 @@ Each serverless response body also returns `confidence_score` and
 against request volume and alarm on spikes as an early KB/retrieval-degradation
 signal. Local Mode applies the same caveats and logs them, but has no CloudWatch
 emitter (expected for local dev).
+
+### OpenTelemetry traces (AgentCore / ADOT)
+
+The custom metrics above tell you *how often* a defense fired; OpenTelemetry
+tracing tells you *per invocation what happened*. The serverless Lambda package
+(`infrastructure/lambda/requirements-lambda.txt`) includes `strands-agents[otel]`
+and `aws-opentelemetry-distro`, and the compute module sets
+`AWS_LAMBDA_EXEC_WRAPPER=/opt/otel-instrument` on the chat Lambda (toggle:
+`enable_otel`, default on). With that, AgentCore auto-instruments Strands and
+emits invocation logs, per-tool-call traces (which tool ran, input/output,
+latency), and guardrail blocks to CloudWatch — no custom instrumentation code.
+This makes the Layer 4b hard blocks and the `answer/grounding_retry` path
+directly observable in a trace, complementing the aggregate metrics. X-Ray
+active tracing (and the role's X-Ray write permission) is already enabled, so
+traces have a sink.
+
+**Dependency isolation (vs MLflow).** OpenTelemetry lives *only* in the
+serverless Lambda package — never in the base project deps or the `eval`
+extra. MLflow 3 (local eval harness) also pulls in OpenTelemetry for its GenAI
+tracing, so the two OTel-consuming toolchains are kept in **separate
+environments** (serverless Lambda vs. local eval venv) to avoid a dependency
+resolver clash. They never run in the same process: MLflow traces Local Mode
+eval runs to a local MLflow server; ADOT traces Lambda invocations to
+CloudWatch. Keep them separate when installing.
 
 ## Measuring with local MLflow
 

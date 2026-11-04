@@ -20,6 +20,16 @@ output "analytics_table_arn" {
   value       = aws_dynamodb_table.analytics.arn
 }
 
+output "thresholds_table_name" {
+  description = "Name of the DynamoDB thresholds table (runtime-tunable anti-hallucination knobs)."
+  value       = aws_dynamodb_table.thresholds.name
+}
+
+output "thresholds_table_arn" {
+  description = "ARN of the DynamoDB thresholds table."
+  value       = aws_dynamodb_table.thresholds.arn
+}
+
 output "opensearch_collection_name" {
   description = "Name of the OpenSearch Serverless VECTORSEARCH collection."
   value       = aws_opensearchserverless_collection.rag_vectors.name

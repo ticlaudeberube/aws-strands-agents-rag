@@ -1529,6 +1529,26 @@ def create_rag_graph(
     # route is additionally exposed for parity and testing.
     kb_index = settings.opensearch_kb_index if deployment_mode == "serverless" else "milvus_docs"
 
+    # Resolve the runtime-tunable Layer-3 thresholds ONCE at graph-build time
+    # (= Lambda cold start, since the graph is a warm-context singleton). In
+    # serverless mode with a thresholds table configured, DynamoDB rows override
+    # the settings defaults so operators can retune without a redeploy; any
+    # failure (or local mode, or no table) falls back to settings.py. See
+    # src/tools/threshold_store.py and docs/ANTI_HALLUCINATION.md.
+    if deployment_mode == "serverless" and getattr(settings, "dynamodb_thresholds_table", None):
+        from src.tools.threshold_store import ThresholdStore  # noqa: PLC0415 (serverless-only)
+
+        _thresholds = ThresholdStore(settings).resolve_all()
+    else:
+        _thresholds = {
+            "answer_grounding_threshold": settings.answer_grounding_threshold,
+            "answer_confidence_threshold": settings.answer_confidence_threshold,
+            "web_search_fallback_threshold": settings.web_search_fallback_threshold,
+            "response_cache_threshold": settings.response_cache_threshold,
+            "grounding_retry_enabled": settings.grounding_retry_enabled,
+            "grounding_retry_top_k_multiplier": settings.grounding_retry_top_k_multiplier,
+        }
+
     def shared_route(
         question: str,
         top_k: int = rag_routing.DEFAULT_TOP_K,
@@ -1555,12 +1575,12 @@ def create_rag_graph(
             kb_index=kb_index,
             top_k=top_k,
             force_web_search=force_web_search,
-            semantic_threshold=settings.response_cache_threshold,
-            web_fallback_threshold=settings.web_search_fallback_threshold,
-            grounding_threshold=settings.answer_grounding_threshold,
-            confidence_threshold=settings.answer_confidence_threshold,
-            grounding_retry_enabled=settings.grounding_retry_enabled,
-            grounding_retry_top_k_multiplier=settings.grounding_retry_top_k_multiplier,
+            semantic_threshold=_thresholds["response_cache_threshold"],
+            web_fallback_threshold=_thresholds["web_search_fallback_threshold"],
+            grounding_threshold=_thresholds["answer_grounding_threshold"],
+            confidence_threshold=_thresholds["answer_confidence_threshold"],
+            grounding_retry_enabled=_thresholds["grounding_retry_enabled"],
+            grounding_retry_top_k_multiplier=_thresholds["grounding_retry_top_k_multiplier"],
             temperature=(temperature if temperature is not None else settings.ollama_temperature),
             max_tokens=max_tokens,
             metric_emitter=metric_emitter,

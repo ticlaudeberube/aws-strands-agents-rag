@@ -76,8 +76,9 @@ locals {
     REDIS_PORT     = tostring(var.redis_port)
 
     # DynamoDB tables (Req 1.x, 9.x)
-    DYNAMODB_SESSION_TABLE   = var.session_table_name
-    DYNAMODB_ANALYTICS_TABLE = var.analytics_table_name
+    DYNAMODB_SESSION_TABLE    = var.session_table_name
+    DYNAMODB_ANALYTICS_TABLE  = var.analytics_table_name
+    DYNAMODB_THRESHOLDS_TABLE = var.thresholds_table_name
 
     # Bedrock model IDs (Req 5.x)
     BEDROCK_INFERENCE_MODEL_ID = var.bedrock_inference_model_id
@@ -204,6 +205,21 @@ data "aws_iam_policy_document" "lambda_least_privilege" {
     ]
   }
 
+  # Thresholds table: READ-ONLY (cold-start config fetch). The handler never
+  # writes these rows — operators update them out of band — so scope to
+  # GetItem/Scan only (least privilege).
+  statement {
+    sid    = "DynamoDBThresholdsReadOnly"
+    effect = "Allow"
+    actions = [
+      "dynamodb:GetItem",
+      "dynamodb:Scan",
+    ]
+    resources = [
+      var.thresholds_table_arn,
+    ]
+  }
+
   # ElastiCache data-plane connect (Req 3.x). elasticache:Connect does not
   # support fine-grained resource scoping for cache connections, so "*" is the
   # resource (the ACTION remains within the permitted set — Property 31 scans
@@ -312,7 +328,13 @@ resource "aws_lambda_function" "chat" {
   }
 
   environment {
-    variables = local.lambda_environment
+    # ADOT auto-instrumentation: the exec wrapper (bundled by the
+    # aws-opentelemetry-distro dependency) instruments the handler so Strands
+    # agent/tool-call traces reach CloudWatch/X-Ray. Only the chat (agent)
+    # Lambda is instrumented; the indexing Lambda keeps the plain env set.
+    variables = var.enable_otel ? merge(local.lambda_environment, {
+      AWS_LAMBDA_EXEC_WRAPPER = "/opt/otel-instrument"
+    }) : local.lambda_environment
   }
 
   tags = merge(var.tags, { Name = local.chat_function_name })

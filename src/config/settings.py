@@ -238,6 +238,15 @@ class Settings(BaseSettings):
         validation_alias="DYNAMODB_ANALYTICS_TABLE",
         description="DynamoDB table storing per-query/indexing analytics.",
     )
+    dynamodb_thresholds_table: str | None = Field(
+        default=None,
+        validation_alias="DYNAMODB_THRESHOLDS_TABLE",
+        description=(
+            "DynamoDB table storing runtime-tunable anti-hallucination thresholds "
+            "(serverless only). Read once at cold start; each row overrides the "
+            "matching settings.py default. Unset → settings.py values are used."
+        ),
+    )
 
     # Secrets Manager (secret identifiers resolved at Lambda cold start)
     secrets_tavily_api_key: str | None = Field(

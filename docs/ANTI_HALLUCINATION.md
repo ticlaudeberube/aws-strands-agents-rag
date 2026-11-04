@@ -104,6 +104,26 @@ KB has no relevant content.
 > directly. Both are live. See the metrics below to observe which outcomes
 > occur in practice.
 
+### Layer 4b — Hard block at the tool-call boundary (framework hook)
+
+The node-level security gate above runs *inside* a gating path. To make the
+security block hold **regardless of which path ran** — the gap the "two gating
+paths" note describes — a Strands `BeforeToolCallEvent` hook
+(`SecurityGuardrailHook`, `src/agents/guardrail_hooks.py`) is attached to the
+`RAGWorker` agent. Strands fires it immediately before *any* tool the agent
+selected is executed; when the pending tool's input matches a known
+jailbreak/injection pattern (reusing `_is_security_attack`, the single source of
+truth), the hook sets `event.cancel_tool` and the tool never runs — the model
+receives an error-status result instead.
+
+This is the article's **hard block vs soft steer** distinction applied here: a
+security/injection attempt is a *hard* block the LLM cannot route around (it is
+enforced by the framework before the tool runs), as opposed to the Layer 3
+caveats, which *soft*-hedge an answer the agent still returns. The hook fails
+**open** on a detector exception (logged loudly) because the node-level gates
+remain in place upstream — a detector bug should not blanket-block legitimate
+traffic. Covered by `tests/unit/test_agents/test_guardrail_hooks.py`.
+
 ### Layer 5 — Correct routing classification
 
 `is_time_sensitive_query` (`src/agents/rag_routing.py`) classifies temporal
@@ -209,7 +229,7 @@ thing being graded should not also be the grader.
 | Technique | Status here | Layer |
 |---|---|---|
 | Honest retrieval / no-results | Implemented | Layers 1–3 |
-| Neurosymbolic guardrails | Implemented | Layer 4 |
+| Neurosymbolic guardrails | Implemented (+ framework-level hard block) | Layers 4, 4b |
 | Agent steering (self-correct) | Partial — caveat + refuse, not a reflection loop | Layer 3 |
 | Semantic tool selection | Not implemented (2-tool pipeline; low value) | — |
 | Multi-agent validation | Not implemented; optional LLM judge covers offline eval | eval harness |
@@ -221,6 +241,9 @@ thing being graded should not also be the grader.
   temporal matching.
 - `tests/unit/test_agents/test_local_generation_grounding.py` — local-path
   parity (refusal + caveats).
+- `tests/unit/test_agents/test_guardrail_hooks.py` — the Layer 4b hard-block
+  hook: cancels tool calls on a detected attack, allows safe input, fails open
+  on detector error.
 - `tests/unit/test_tools/test_cloudwatch_answer_metrics.py` — the `answer/*`
   metrics reach CloudWatch end-to-end.
 - `tests/unit/test_eval_local.py` — the eval harness scoring/grading logic.

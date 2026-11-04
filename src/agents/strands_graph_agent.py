@@ -53,6 +53,7 @@ from strands.tools import tool
 
 from src.agents import prompts, rag_routing
 from src.agents.decorators import retry_with_backoff
+from src.agents.guardrail_hooks import SecurityGuardrailHook
 from src.agents.node_config import NodeConfigManager
 from src.agents.node_metrics import GraphMetrics, NodeMetrics
 from src.config import Settings
@@ -1498,6 +1499,11 @@ def create_rag_graph(
         ),
         model=rag_model,
         tools=[search_knowledge_base, generate_response],
+        # Hard guardrail (framework-level): block any tool call whose input is a
+        # security / prompt-injection attempt, enforced at the Strands tool-call
+        # boundary so it holds regardless of which upstream gating path ran. See
+        # src/agents/guardrail_hooks.py and docs/ANTI_HALLUCINATION.md (Layer 4).
+        hooks=[SecurityGuardrailHook()],
     )
 
     # ========================================================================

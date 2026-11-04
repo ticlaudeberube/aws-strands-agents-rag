@@ -57,6 +57,7 @@ This is the actual source of truth in the current project. There is no supported
 - `api_server.py` exposes the OpenAI-compatible REST API
 - `src/config/settings.py` selects the active backend stack
 - `src/agents/strands_graph_agent.py` handles the topic/security/RAG flow
+- `src/agents/guardrail_hooks.py` adds a framework-level hard block on the RAGWorker's tool calls (see [docs/ANTI_HALLUCINATION.md](ANTI_HALLUCINATION.md) Layer 4b)
 - `src/tools/` contains the retrieval, embedding, cache, and web-search clients
 - The app captures sources and response metadata for the frontend and API callers
 

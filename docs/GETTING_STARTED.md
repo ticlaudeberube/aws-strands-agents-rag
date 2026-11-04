@@ -32,7 +32,7 @@ cd ..
 4. Start the API:
 
 ```bash
-python api_server.py
+uv run python api_server.py
 ```
 
 5. Verify the app:
@@ -72,10 +72,10 @@ TAVILY_API_KEY=...
 
 ```bash
 # local API
-python api_server.py
+uv run python api_server.py
 
 # local chat
-python chatbots/interactive_chat.py
+uv run python chatbots/interactive_chat.py
 
 # health check
 curl http://localhost:8000/health

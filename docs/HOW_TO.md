@@ -55,7 +55,7 @@ cd ..
 4. Start the API:
 
 ```bash
-python api_server.py
+uv run python api_server.py
 ```
 
 5. Check the app health endpoint:
@@ -95,10 +95,10 @@ TAVILY_API_KEY=...
 
 ```bash
 # local API
-python api_server.py
+uv run python api_server.py
 
 # local chat UI
-python chatbots/interactive_chat.py
+uv run python chatbots/interactive_chat.py
 
 # local health check
 curl http://localhost:8000/health
@@ -134,7 +134,7 @@ Use these files as the authoritative reference. Do not rely on older historical 
 ## 7. Useful validation checks
 
 - Confirm `DEPLOYMENT_MODE` matches your intended environment.
-- Confirm the app boots with `python api_server.py`.
+- Confirm the app boots with `uv run python api_server.py`.
 - Confirm `curl http://localhost:8000/health` returns the server status.
 - Confirm local mode has Ollama and its configured vector DB available.
 - Confirm serverless mode has AWS and OpenSearch settings configured.

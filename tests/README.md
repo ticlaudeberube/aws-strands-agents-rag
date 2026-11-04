@@ -1118,4 +1118,22 @@ Tests are automatically run on:
 - Commits to main branch
 - Manual workflow dispatch
 
-See `.github/workflows/` for CI configuration.
+See `.github/workflows/ci.yml` for CI configuration.
+
+## Playwright E2E agents (Kiro)
+
+The React chatbot's end-to-end Playwright workflow is supported by three Kiro
+custom agents in `.kiro/agents/`, backed by the `playwright-test` MCP server
+registered in `.kiro/settings/mcp.json`:
+
+| Agent | Purpose |
+|-------|---------|
+| `playwright-test-planner` | Explores the running web app and saves a comprehensive test plan. |
+| `playwright-test-generator` | Generates a Playwright spec from a test-plan item, executing each step live before writing it. |
+| `playwright-test-healer` | Runs failing Playwright tests, debugs them, and edits the specs until they pass. |
+
+Select one from Kiro's agent picker. They were migrated from the earlier
+GitHub Copilot `.github/agents/*.agent.md` definitions (since removed); the
+prompts are preserved and the tools now reference the shared workspace MCP
+server rather than redefining it per agent. The specs themselves live under
+`chatbots/react-chatbot/e2e/`.

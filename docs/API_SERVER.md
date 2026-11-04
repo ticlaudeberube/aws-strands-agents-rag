@@ -45,6 +45,10 @@ When forced web search is requested while web search is disabled in settings,
 the API reports that it is disabled rather than presenting the condition as a
 Tavily quota or authentication failure.
 
+The `POST /v1/chat/completions` endpoint also accepts a `bypass_cache` query
+parameter (default `false`); set it to `true` to skip all caches and query the
+LLM directly, e.g. `POST /v1/chat/completions?bypass_cache=true`.
+
 ## Request fields
 
 The live request model in `api_server.py` includes:
@@ -54,13 +58,45 @@ The live request model in `api_server.py` includes:
 - `temperature`
 - `top_p`
 - `max_tokens`
-- `top_k`
+- `top_k` (when unset, retrieval defaults to 5)
 - `stream`
 - `force_web_search`
 
 ## Response shape
 
 The API returns the standard OpenAI-compatible completion payload with `choices`, `usage`, `sources`, and `timing` metadata.
+
+## Endpoint reference
+
+The live routes in `api_server.py` (local mode):
+
+| Method & path | Purpose |
+|---|---|
+| `GET /` | Service/info descriptor: name, version, endpoint map, feature flags. |
+| `GET /health` | Health check with local vector-DB availability (used by the GUI). |
+| `GET /health/detailed` | Per-service status (Ollama, vector DB) plus cache sizes. |
+| `GET /health/ollama` | Ollama service health. |
+| `GET /health/vector-db` | Detailed vector-DB health (`/health/milvus` is a deprecated alias). |
+| `GET /metrics` | RAG graph node metrics (counts, durations, early-exit rates, uptime). |
+| `GET /metrics/reset` | Clears accumulated metrics (testing/benchmarking — destructive). |
+| `GET /v1/models` | OpenAI-compatible model list. |
+| `POST /v1/chat/completions` | Chat completions (JSON or SSE when `stream: true`); `bypass_cache` query param. |
+| `POST /v1/chat/completions/stream` | Dedicated SSE streaming endpoint. |
+| `GET /api/cache/questions` | Pre-warmed common questions for GUI suggestions. |
+| `GET /api/cache/stats` | Cache statistics and performance metrics. |
+| `POST /v1/cache/clear` | Clear all RAG agent caches. |
+| `GET /v1/cache/responses` | Retrieve cached Q&A pairs (`limit` query param). |
+| `GET /v1/cache/responses/{cache_id}` | Fetch a specific cached response by ID. |
+| `GET /v1/cache/questions` | Deduplicated lightweight cached-question list. |
+| `GET /api/mcp/server/info` | MCP server metadata, tool count, skills. |
+| `GET /api/mcp/tools` | List all tools in MCP format. |
+| `GET /api/mcp/skills` | List skill categories (progressive tool disclosure). |
+| `GET /api/mcp/skills/{skill_name}` | Documentation for one skill. |
+| `POST /api/mcp/tools/call` | Invoke a tool via the MCP interface. |
+
+The `/api/mcp/*` suite exposes the project's MCP server
+(`src/mcp/mcp_server.py`) over REST — the same tools the agent uses, for
+inspection and direct invocation.
 
 ## Local vs serverless behavior
 
@@ -80,7 +116,7 @@ The serverless handler (`agentcore_handler.py`) returns a different envelope
 from the local OpenAI-compatible payload above. Alongside the answer and
 `sources`, each response includes anti-hallucination quality fields —
 `confidence_score`, `grounding_score`, and `web_search_unavailable` — plus
-`session_id` and `latency_ms`. See
+`tier_used` (`cache` / `kb` / `websearch`), `session_id`, and `latency_ms`. See
 [docs/ANTI_HALLUCINATION.md](ANTI_HALLUCINATION.md) for how `grounding_score`
 and `confidence_score` are computed and surfaced.
 

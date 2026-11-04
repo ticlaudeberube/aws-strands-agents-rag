@@ -26,7 +26,7 @@ A dual-mode RAG system that currently supports both local development and AWS se
 cd docker
 docker-compose up -d
 cd ..
-python api_server.py
+uv run python api_server.py
 ```
 
 ### Serverless mode

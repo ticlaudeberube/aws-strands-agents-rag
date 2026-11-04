@@ -1,16 +1,18 @@
 """Collection operations for Milvus."""
 
-from typing import Any
 import os
+from typing import Any
+
 from pymilvus import MilvusException  # type: ignore[import-untyped]
+
 from .client import get_client
-from .exceptions import CollectionError
 from .embeddings import EmbeddingProvider
+from .exceptions import CollectionError
 
 
 def create_collection(
     collection_name: str | None,
-    dimension: int = 1536,
+    dimension: int = 768,
     metric_type: str = "COSINE",
     consistency_level: str = "Session",
     auto_index: bool = True,

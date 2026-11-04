@@ -112,12 +112,16 @@ class MilvusVectorDB:
 
         if resolved_index_type == "HNSW":
             index_params["params"] = {
-                "M": _get_env_int("MILVUS_HNSW_M", 16),
+                # Fallback defaults aligned with src/config/settings.py so data
+                # indexed by the loader uses the same HNSW connectivity the
+                # runtime wrapper assumes (M=30, efConstruction=200).
+                "M": _get_env_int("MILVUS_HNSW_M", 30),
                 "efConstruction": _get_env_int("MILVUS_HNSW_EF_CONSTRUCTION", 200),
             }
         elif resolved_index_type == "IVF_FLAT":
             index_params["params"] = {
-                "nlist": _get_env_int("MILVUS_IVF_NLIST", 1024),
+                # Aligned with src default (nlist=128).
+                "nlist": _get_env_int("MILVUS_IVF_NLIST", 128),
             }
 
         self.client.create_collection(

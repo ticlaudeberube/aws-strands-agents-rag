@@ -66,10 +66,32 @@ Per question and in aggregate:
 - **avg_judge_faithfulness** — only when `--judge` is used (see below).
 
 The thresholds in effect (`answer_grounding_threshold`,
-`answer_confidence_threshold`, `web_search_fallback_threshold`) and the model id
-are logged as run **params**, so two runs with different settings are directly
-comparable in the MLflow UI. The full per-question table is attached to each run
-as `results.json`.
+`answer_confidence_threshold`, `web_search_fallback_threshold`), the
+`milvus_search_ef` recall knob, and the model id are logged as run **params**,
+so two runs with different settings are directly comparable in the MLflow UI.
+The full per-question table is attached to each run as `results.json`.
+
+## Tuning HNSW recall (`ef` sweep)
+
+The HNSW search-time beam width (`ef`, set by `MILVUS_SEARCH_EF`) is the main
+recall-vs-latency dial: higher `ef` searches more of the graph (better recall,
+more latency). To see the tradeoff for your corpus instead of guessing, sweep it:
+
+```bash
+uv run scripts/eval_local.py --sweep-ef 32,64,128,256
+```
+
+This runs one MLflow run per value (named `ef-sweep-ef32`, `-ef64`, …), each
+logging `milvus_search_ef` as a param, and prints a comparison table of
+`pass_rate` / `avg_grounding_score` (recall proxies) against `avg_latency_ms`.
+
+Read it this way: pass_rate / grounding rising with `ef` means recall was being
+left on the table — raise the default. A flat curve means `ef` isn't your
+constraint. **Caveat:** `avg_latency_ms` is end-to-end (embedding + retrieval +
+generation), so `ef` only moves the retrieval slice; at a small corpus
+(~thousands of chunks) HNSW search is sub-millisecond and the latency column
+will likely be flat — which is itself the useful finding that the vector index
+is not the bottleneck.
 
 ## Prerequisites
 

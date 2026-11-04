@@ -146,13 +146,37 @@ class MilvusVectorDB:
             raise
 
     def search(
-        self, collection_name: str, query_embedding: list[float], limit: int = 5
+        self,
+        collection_name: str,
+        query_embedding: list[float],
+        limit: int = 5,
+        expr: str | None = None,
     ) -> list[dict]:
-        """Search for similar embeddings in the collection."""
+        """Search for similar embeddings in the collection.
+
+        Args:
+            collection_name: Collection to search.
+            query_embedding: Query vector.
+            limit: Max number of results (top_k).
+            expr: Optional Milvus boolean filter expression (e.g.
+                ``'source == "official"'``) applied as a metadata pre-filter.
+                ``None`` (default) means pure vector similarity, unchanged
+                behaviour. Note: filtering on non-indexed scalar fields is
+                supported but not index-accelerated.
+        """
+        from src.config.settings import get_settings
+
+        settings = get_settings()
         try:
             self.client.load_collection(collection_name=collection_name, db_name=self.db_name)
         except Exception:
             pass  # Already loaded or not needed
+
+        # HNSW search-time recall knob (ef). Must be >= limit to return `limit`
+        # candidates; higher ef trades latency for recall. Only meaningful for
+        # HNSW indexes; Milvus ignores unknown params for other index types.
+        search_ef = max(settings.milvus_search_ef, limit)
+        search_params = {"params": {"ef": search_ef}}
 
         results = self.client.search(
             collection_name=collection_name,
@@ -160,6 +184,8 @@ class MilvusVectorDB:
             limit=limit,
             output_fields=["id", "text", "metadata"],
             db_name=self.db_name,
+            search_params=search_params,
+            filter=expr or "",
         )
         # results is a list of lists (one per query)
         if not results or not results[0]:

@@ -28,6 +28,15 @@ The graph uses a vector-store role rather than requiring one vendor's product.
 The current adapters are Milvus for local mode and OpenSearch Serverless for
 AWS mode; another provider needs a compatible adapter and configuration.
 
+Retrieval uses pure vector (k-NN) similarity with HNSW. Both adapters share the
+same recall knob, `MILVUS_SEARCH_EF` (HNSW `ef` / OpenSearch `ef_search`,
+clamped to at least `top_k`), and the same web-search fallback decision
+(`average_relevance` vs `WEB_SEARCH_FALLBACK_THRESHOLD`). Both `search()` /
+`knn_search()` also accept an optional metadata filter (`expr` / `filter`),
+which is unused by default — retrieval is unfiltered unless a caller passes one.
+When searching multiple local collections, hits are re-ranked by similarity
+before the `top_k` cut so the best matches survive regardless of collection.
+
 ## Local mode
 
 Local mode is the default path for development and debugging.

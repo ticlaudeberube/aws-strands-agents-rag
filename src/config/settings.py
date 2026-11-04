@@ -80,6 +80,9 @@ class Settings(BaseSettings):
         os.getenv("MILVUS_HNSW_EF_CONSTRUCTION", "200")
     )  # Dynamic list size for HNSW construction
     milvus_ivf_nlist: int = int(os.getenv("MILVUS_IVF_NLIST", "128"))  # IVF_FLAT nlist parameter
+    milvus_search_ef: int = int(
+        os.getenv("MILVUS_SEARCH_EF", "64")
+    )  # HNSW search-time beam width (ef). Higher = better recall, slower. >= top_k.
 
     # Deployment Mode
     # Single source of truth for selecting backends. "local" wires Ollama +

@@ -278,6 +278,7 @@ class EvalConfig:
     judge_model: str | None
     top_k: int
     tracking_uri: str | None = None
+    search_ef: int | None = None
     _extra: dict = field(default_factory=dict)
 
 
@@ -403,6 +404,11 @@ async def run_eval(cfg: EvalConfig) -> dict[str, float]:
         pass
 
     settings = Settings()
+    # Override the HNSW search-time beam width for this run when sweeping ef.
+    # Read at search time by MilvusVectorDB.search, so setting it before the
+    # agent is built applies to every retrieval in the run.
+    if cfg.search_ef is not None:
+        settings.milvus_search_ef = cfg.search_ef
     items = load_questions(cfg.questions_path)
     logger.info("Loaded %d questions from %s", len(items), cfg.questions_path)
 
@@ -427,6 +433,7 @@ async def run_eval(cfg: EvalConfig) -> dict[str, float]:
                 "use_judge": cfg.use_judge,
                 "judge_model": judge_model if cfg.use_judge else "none",
                 "top_k": cfg.top_k,
+                "milvus_search_ef": settings.milvus_search_ef,
                 "grounding_threshold": settings.answer_grounding_threshold,
                 "confidence_threshold": settings.answer_confidence_threshold,
                 "web_fallback_threshold": settings.web_search_fallback_threshold,
@@ -510,6 +517,17 @@ def _parse_args(argv: list[str] | None = None) -> EvalConfig:
     )
     parser.add_argument("--top-k", type=int, default=5, help="Retrieval top-k per question.")
     parser.add_argument(
+        "--sweep-ef",
+        default=None,
+        help=(
+            "Comma-separated HNSW search ef values to sweep (e.g. '32,64,128,256'). "
+            "Runs one MLflow run per value so you can compare the recall-vs-latency "
+            "tradeoff for your corpus. Omit for a single run at the configured ef. "
+            "Note: avg_latency_ms is end-to-end (embedding + retrieval + generation), "
+            "so it only partially reflects the retrieval slice ef actually affects."
+        ),
+    )
+    parser.add_argument(
         "--tracking-uri",
         default=None,
         help=(
@@ -519,6 +537,16 @@ def _parse_args(argv: list[str] | None = None) -> EvalConfig:
         ),
     )
     args = parser.parse_args(argv)
+
+    sweep_ef: list[int] = []
+    if args.sweep_ef:
+        try:
+            sweep_ef = [int(v.strip()) for v in args.sweep_ef.split(",") if v.strip()]
+        except ValueError as exc:
+            parser.error(f"--sweep-ef must be a comma-separated list of integers: {exc}")
+        if any(v < 1 for v in sweep_ef):
+            parser.error("--sweep-ef values must be positive integers.")
+
     return EvalConfig(
         questions_path=args.questions,
         experiment=args.experiment,
@@ -527,6 +555,7 @@ def _parse_args(argv: list[str] | None = None) -> EvalConfig:
         judge_model=args.judge_model,
         top_k=args.top_k,
         tracking_uri=args.tracking_uri,
+        _extra={"sweep_ef": sweep_ef},
     )
 
 
@@ -536,8 +565,12 @@ def main(argv: list[str] | None = None) -> int:
     if not cfg.questions_path.exists():
         print(f"Question set not found: {cfg.questions_path}", file=sys.stderr)
         return 2
+    sweep_ef: list[int] = cfg._extra.get("sweep_ef", [])
     try:
-        asyncio.run(run_eval(cfg))
+        if sweep_ef:
+            _run_ef_sweep(cfg, sweep_ef)
+        else:
+            asyncio.run(run_eval(cfg))
     except ModuleNotFoundError as exc:
         if exc.name == "mlflow":
             print(
@@ -548,6 +581,50 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         raise
     return 0
+
+
+def _run_ef_sweep(base_cfg: EvalConfig, ef_values: list[int]) -> None:
+    """Run the eval once per HNSW ``ef`` value and print a comparison table.
+
+    Each value is a separate MLflow run (tagged via the ``milvus_search_ef``
+    param), so the recall-vs-latency tradeoff is comparable side-by-side in the
+    UI. The per-run config is a shallow copy of ``base_cfg`` with ``search_ef``
+    and a descriptive ``run_name`` set.
+    """
+    print(f"\nSweeping HNSW search ef over {ef_values} ({len(ef_values)} runs)\n")
+    rows: list[tuple[int, dict[str, float]]] = []
+    for ef in ef_values:
+        run_cfg = EvalConfig(
+            questions_path=base_cfg.questions_path,
+            experiment=base_cfg.experiment,
+            run_name=(base_cfg.run_name or "ef-sweep") + f"-ef{ef}",
+            use_judge=base_cfg.use_judge,
+            judge_model=base_cfg.judge_model,
+            top_k=base_cfg.top_k,
+            tracking_uri=base_cfg.tracking_uri,
+            search_ef=ef,
+        )
+        agg = asyncio.run(run_eval(run_cfg))
+        rows.append((ef, agg))
+
+    # Compact comparison across the sweep (recall proxies + end-to-end latency).
+    print("\n" + "=" * 68)
+    print("EF SWEEP COMPARISON (higher pass/grounding = better recall)")
+    print("=" * 68)
+    header = f"  {'ef':>5}  {'pass_rate':>10}  {'avg_grounding':>14}  {'avg_latency_ms':>15}"
+    print(header)
+    for ef, agg in rows:
+        print(
+            f"  {ef:>5}  {agg.get('pass_rate', 0.0):>10.3f}  "
+            f"{agg.get('avg_grounding_score', 0.0):>14.3f}  "
+            f"{agg.get('avg_latency_ms', 0.0):>15.1f}"
+        )
+    print(
+        "\nNote: avg_latency_ms is end-to-end (embedding + retrieval + generation).\n"
+        "ef only affects the retrieval slice, so expect small latency movement\n"
+        "at this corpus size — a flat curve means the vector index is not your\n"
+        "bottleneck.\n" + "=" * 68 + "\n"
+    )
 
 
 if __name__ == "__main__":

@@ -173,6 +173,15 @@ def create_milvus_retrieval_tool(
 
             retrieval_time = time.time() - retrieval_start
 
+            # Global re-rank across collections before truncating. Each
+            # collection is searched independently, so concatenation order is
+            # per-collection, not by similarity. Sort by ``distance`` (cosine
+            # similarity, higher = better) descending so the top_k slice keeps
+            # the genuinely best matches rather than whichever collection came
+            # first. Single-collection results are already ordered, so this is a
+            # no-op there.
+            all_results.sort(key=lambda r: r.get("distance", 0.0), reverse=True)
+
             # Format context and sources
             context_parts = []
             sources = []
@@ -2408,46 +2417,27 @@ class StrandsGraphRAGAgent:
     def _should_trigger_web_search_fallback(self, kb_sources: list[dict]) -> bool:
         """Check if KB results are weak enough to trigger web search fallback.
 
-        This should only trigger when KB truly has no useful content, not just
-        when scores are mediocre. Users can manually trigger web search via button.
-
-        Args:
-            kb_sources: List of knowledge base sources with distance/relevance scores
-
-        Returns:
-            True if KB results are genuinely poor (very low scores AND few results)
+        Delegates to the SAME rule the shared serverless router uses
+        (``rag_routing.average_relevance`` vs ``web_search_fallback_threshold``)
+        so both deployment modes make the identical fallback decision from the
+        identical signal — a single source of truth. Previously the local path
+        used a divergent two-condition gate (avg AND (max<threshold+0.1 OR
+        <2 results)), which could disagree with the serverless path on the same
+        retrieval. ``distance`` is cosine similarity (0-1, higher = better).
         """
         if not kb_sources:
             logger.info("[WEB_SEARCH_FALLBACK] No KB sources found → Fallback: True")
             return True  # No KB results, definitely trigger web search
 
-        # Calculate average relevance (distance is cosine similarity 0-1, higher = better)
-        relevance_scores = [s.get("distance", 0) for s in kb_sources if "distance" in s]
-        if not relevance_scores:
-            logger.info("[WEB_SEARCH_FALLBACK] No relevance scores → Fallback: True")
-            return True
-
-        avg_relevance = sum(relevance_scores) / len(relevance_scores)
-        max_relevance = max(relevance_scores)
-        num_sources = len(kb_sources)
-
-        # More conservative fallback: only trigger if BOTH conditions are met:
-        # 1. Average relevance is very low (below threshold)
-        # 2. Even the best result is poor (below higher threshold) OR very few results
-        very_poor_avg = avg_relevance < self.settings.web_search_fallback_threshold
-        very_poor_best = max_relevance < (
-            self.settings.web_search_fallback_threshold + 0.1
-        )  # +0.1 buffer
-        very_few_results = num_sources < 2
-
-        # Only fallback if average is poor AND (best result is also poor OR very few results)
-        should_fallback = very_poor_avg and (very_poor_best or very_few_results)
+        avg_relevance = rag_routing.average_relevance(kb_sources)
+        should_fallback = avg_relevance < self.settings.web_search_fallback_threshold
 
         logger.info(
-            f"[WEB_SEARCH_FALLBACK] KB analysis: {num_sources} sources, "
-            f"avg: {avg_relevance:.3f}, max: {max_relevance:.3f} "
-            f"(threshold: {self.settings.web_search_fallback_threshold}) → "
-            f"Fallback: {should_fallback} (was too aggressive before)"
+            "[WEB_SEARCH_FALLBACK] %d sources, avg relevance %.3f (threshold %.3f) → Fallback: %s",
+            len(kb_sources),
+            avg_relevance,
+            self.settings.web_search_fallback_threshold,
+            should_fallback,
         )
 
         return should_fallback

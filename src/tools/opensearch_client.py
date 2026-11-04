@@ -46,7 +46,10 @@ logger = logging.getLogger(__name__)
 
 __all__ = ["OpenSearchClient"]
 
-# HNSW parameters mirroring the local Milvus configuration (Requirements 4.1, 4.6).
+# Fallback HNSW parameters, used only when settings are unavailable. These
+# mirror the local Milvus defaults (Requirements 4.1, 4.6). The live values are
+# read from Settings in __init__ so the two backends stay in sync and are
+# tunable via the same env vars rather than being hardcoded here.
 HNSW_M = 30
 HNSW_EF_CONSTRUCTION = 200
 VECTOR_DIM = 768
@@ -107,6 +110,14 @@ class OpenSearchClient:
         self.kb_index = settings.opensearch_kb_index
         self.cache_index = settings.opensearch_cache_index
         self.vector_dim = settings.bedrock_pca_target_dim or VECTOR_DIM
+        # HNSW params sourced from the shared Milvus settings so both backends
+        # stay in sync and are tunable via the same env vars (fall back to the
+        # module constants only if a setting is missing).
+        self.hnsw_m = getattr(settings, "milvus_hnsw_m", None) or HNSW_M
+        self.hnsw_ef_construction = (
+            getattr(settings, "milvus_hnsw_ef_construction", None) or HNSW_EF_CONSTRUCTION
+        )
+        self.search_ef = getattr(settings, "milvus_search_ef", None) or 64
 
         if client is not None:
             self.client = client
@@ -164,24 +175,40 @@ class OpenSearchClient:
         index: str,
         query_vector: list[float],
         k: int = 10,
+        filters: dict | None = None,
     ) -> list[dict]:
-        """k-NN search over ``index`` using HNSW (m=30, ef_construction=200), cosine.
+        """k-NN search over ``index`` using HNSW (cosine), with a recall knob.
 
         Returns up to ``k`` documents ranked **non-increasing** by cosine
         similarity score (highest similarity first), matching the local Milvus
         result shape: ``{"id", "text", "metadata", "distance"}`` where
         ``distance`` carries the cosine similarity score (Requirements 4.2).
+
+        Args:
+            index: Index to search.
+            query_vector: Query embedding.
+            k: Max number of results (top_k).
+            filters: Optional OpenSearch filter query (e.g.
+                ``{"term": {"metadata.source": "official"}}``) applied as a
+                metadata pre-filter inside the k-NN clause. ``None`` (default)
+                means pure vector similarity, unchanged behaviour.
+
+        The HNSW search-time beam width (``ef_search``) is set from
+        ``settings.milvus_search_ef`` (shared with the local Milvus backend),
+        clamped to at least ``k``; higher values trade latency for recall.
         """
+        knn_clause: dict[str, Any] = {
+            "vector": query_vector,
+            "k": k,
+            # ef_search must be >= k to return k candidates; shared recall knob.
+            "method_parameters": {"ef_search": max(self.search_ef, k)},
+        }
+        if filters is not None:
+            knn_clause["filter"] = filters
+
         body = {
             "size": k,
-            "query": {
-                "knn": {
-                    "vector": {
-                        "vector": query_vector,
-                        "k": k,
-                    }
-                }
-            },
+            "query": {"knn": {"vector": knn_clause}},
         }
 
         response = self.client.search(index=index, body=body)
@@ -313,8 +340,8 @@ class OpenSearchClient:
                     "space_type": SPACE_TYPE,
                     "engine": "nmslib",
                     "parameters": {
-                        "m": HNSW_M,
-                        "ef_construction": HNSW_EF_CONSTRUCTION,
+                        "m": self.hnsw_m,
+                        "ef_construction": self.hnsw_ef_construction,
                     },
                 },
             },

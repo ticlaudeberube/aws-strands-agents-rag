@@ -72,7 +72,12 @@ class TestSecurityGuardrailHook:
         # Detector would block everything; but with no screenable text the hook
         # must not call it and must not cancel.
         calls: list[str] = []
-        hook = SecurityGuardrailHook(detector=lambda q: calls.append(q) or True)
+
+        def tracking_detector(q: str) -> bool:
+            calls.append(q)
+            return True
+
+        hook = SecurityGuardrailHook(detector=tracking_detector)
         event = _run(hook, _make_event({"top_k": 5}))
         assert event.cancel_tool is False
         assert calls == []

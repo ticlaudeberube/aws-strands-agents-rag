@@ -154,57 +154,92 @@ Application code is Python (`uv run` tooling: ruff, mypy, pytest).
 
 ## Phase 2 — Make OpenSearch default and remove Milvus
 
+> **Scope reminder (Req 7.7):** remove Milvus **the vector-store engine** — the
+> database client, cache, settings, Docker stack, loader coupling. KEEP
+> `document_loaders/milvus_docs/` — that is the knowledge-base *content*
+> (documentation about Milvus), re-indexed into OpenSearch. The `grep` gate
+> excludes that corpus, `.kiro/specs/`, and incidental KB-topic mentions.
+
 - [ ] 10. Flip the default
-  - [ ] 10.1 Change `local_vector_backend` default to `opensearch`; add a docs
-    migration note (re-index existing content; keep Milvus via the selector until
-    removal)
+  - [ ] 10.1 Change `local_vector_backend` default to `opensearch`; docs
+    migration note (re-index content; `milvus` selectable until task 12 removes it)
     - _Requirements: 6.1, 6.2, 6.3_
 
 - [ ] 11. Converge the local path on `shared_route`
-  - [ ] 11.1 Make the single Local-Mode path the `shared_route`/protocol path
-    (retire the Milvus-native `answer_question`/`create_milvus_retrieval_tool`/
-    `retrieve_context` coupling, or refactor them backend-agnostic against
-    `VectorStore`/`SemanticCache`)
+  - [ ] 11.1 Make the single Local-Mode path the `shared_route`/protocol path;
+    retire the Milvus-native `answer_question`/`create_milvus_retrieval_tool`/
+    `retrieve_context` coupling (or refactor backend-agnostic). The
+    `StrandsGraphRAGAgent` Milvus path is removed; `LocalOpenSearchAgent`
+    becomes the sole local agent.
+    - _Requirements: 7.2_
+  - [ ] 11.2 Make the MCP server (`RAGAgentMCPServer`) use the selected backend
+    instead of always constructing a Milvus `StrandsGraphRAGAgent` (the
+    degraded-mode noise seen in the Phase 1 smoke test).
     - _Requirements: 7.2_
 
-- [ ] 12. Remove Milvus code
-  - [ ] 12.1 Delete `src/tools/milvus_client.py` (`MilvusVectorDB`) and the
-    Milvus-backed `MilvusResponseCache`; Local Mode L4 = OpenSearch semantic cache
+- [ ] 12. Remove Milvus engine code
+  - [ ] 12.1 Delete `src/tools/milvus_client.py` (`MilvusVectorDB`),
+    `src/tools/providers/milvus.py`, and the Milvus-backed `MilvusResponseCache`;
+    Local Mode L4 = OpenSearch semantic cache.
     - _Requirements: 7.1_
   - [ ] 12.2 Remove Milvus connection settings from `src/config/settings.py` and
-    all `MILVUS_*` entries (including the deprecated aliases) from `.env.example`;
-    keep the `vectordb_*` settings
+    all `MILVUS_*` entries (including the deprecated `vectordb_*` aliases) from
+    `.env.example`; keep the `vectordb_*` settings.
     - _Requirements: 7.3_
-  - [ ] 12.3 Migrate `document_loaders/` ingestion to OpenSearch (package-local
-    OpenSearch client per isolation rule) and remove Milvus loader code
-    - _Requirements: 7.5_
+  - [ ] 12.3 Remove `pymilvus` from project dependencies (`pyproject.toml`,
+    `requirements*`), and the `start-milvus.sh/.bat` scripts.
+    - _Requirements: 7.1_
 
-- [ ] 13. Infrastructure + health
-  - [ ] 13.1 Replace the Milvus stack (Milvus + etcd + MinIO) with OpenSearch in
-    `docker/docker-compose.yml`; update `docker/README.md`. As part of this:
-    - Wire the `rag-api` service to OpenSearch: replace the hardcoded
-      `MILVUS_HOST`/`MILVUS_PORT` env + `depends_on: milvus` with
-      `LOCAL_VECTOR_BACKEND=opensearch` + `OPENSEARCH_LOCAL_HOST/PORT` +
-      `depends_on: opensearch` (deferred from Phase 1 — the OpenSearch service
-      was added opt-in in task 7, but `rag-api` still points at Milvus).
-    - Mount `../api_server.py:/app/api_server.py` (and the top-level entrypoint)
-      into `rag-api` so edits don't require an image rebuild — a latent quirk
-      found during Phase 1 (only `src/`/`chatbots/` are mounted today, so a
-      stale baked `api_server.py` can crash the container).
-    - _Requirements: 7.4_
-  - [ ] 13.2 `api_server.py` `/health`: OpenSearch probe only; remove the
-    Milvus `list_collections` probe
+- [ ] 13. Document ingestion: OpenSearch + full vectorization parity
+  - [ ] 13.1 Rework `document_loaders/` to target OpenSearch via a package-local
+    OpenSearch client (source-isolation: no `src/` import); remove the Milvus
+    loader client. Preserve capabilities: recursive dir read, `max_chunk_length`
+    chunking, batch/parallel Ollama embedding, per-chunk metadata.
+    - _Requirements: 7.5, 10.2, 10.4_
+  - [ ] 13.2 Index the retained `document_loaders/milvus_docs/` corpus into
+    OpenSearch `rag-kb` (KB content kept; engine swapped).
+    - _Requirements: 7.5, 10.1_
+  - [ ] 13.3 Retain the `data/embeddings.json` snapshot behavior (or a documented
+    equivalent).
+    - _Requirements: 10.3_
+  - [ ] 13.4 Ensure `scripts/ingest_local_opensearch.py` either absorbs or
+    delegates to the reworked loader so there is ONE documented ingestion path
+    that does both demo-seed and arbitrary-directory vectorization.
+    - _Requirements: 10.2_
+  - [ ]* 13.5 Test: loader indexes a temp doc dir into a fake OpenSearch with the
+    expected chunk/metadata shape; embeddings.json written.
+    - _Requirements: 10.2, 10.3_
+
+- [ ] 14. Consolidated Docker stack (`agentcore-rag`)
+  - [ ] 14.1 Rewrite `docker/docker-compose.yml` as the single stack: services
+    `opensearch`, `redis`, `dynamodb`, `rag-api`, `rag-react`; compose
+    `name: agentcore-rag`; container names `agentcore-rag-*`. Remove the Milvus
+    services (Milvus/etcd/MinIO) and delete
+    `docker/serverless-local/docker-compose.yml` (folded in).
+    - _Requirements: 9.1, 9.2_
+  - [ ] 14.2 Wire `rag-api`: `DEPLOYMENT_MODE=local` +
+    `LOCAL_VECTOR_BACKEND=opensearch` + `OPENSEARCH_LOCAL_HOST/PORT`,
+    `depends_on: opensearch`; mount `../api_server.py` to avoid rebuild-on-edit.
+    - _Requirements: 9.3, 9.4_
+  - [ ] 14.3 Update scripts referencing `docker/serverless-local/...`
+    (`run_serverless_local.py`, `serverless_api_server.py`) and `docker/README.md`
+    for the consolidated stack.
+    - _Requirements: 9.5_
+  - [ ] 14.4 `api_server.py` `/health`: OpenSearch probe only; remove the Milvus
+    `list_collections` probe.
     - _Requirements: 7.8_
 
-- [ ] 14. Docs + tests scrub
-  - [ ] 14.1 Remove/rewrite every Milvus reference in `ARCHITECTURE`,
-    `GETTING_STARTED`, `HOW_TO`, `API_SERVER`, README, `docker/README`, and tests
+- [ ] 15. Docs + tests scrub
+  - [ ] 15.1 Remove/rewrite Milvus-as-engine references in `ARCHITECTURE`,
+    `GETTING_STARTED`, `HOW_TO`, `API_SERVER`, README, `docker/README`, and
+    tests. Keep references where Milvus is the KB subject matter.
     - _Requirements: 7.6_
-  - [ ] 14.2 Add a CI/repo gate: `grep -ri milvus` (excluding `.kiro/specs/` and
-    historical docs) returns no matches
+  - [ ] 15.2 Repo gate: `grep -ri milvus` excluding `document_loaders/milvus_docs/`,
+    `.kiro/specs/`, and historical docs returns no engine references.
     - _Requirements: 7.7_
 
-- [ ] 15. Phase 2 verification
-  - [ ] 15.1 ruff + mypy + full unit + serverless suites green; the `grep -ri
-    milvus` gate passes; smoke OpenSearch Local Mode end-to-end
-    - _Requirements: 7.7, 8.2_
+- [ ] 16. Phase 2 verification
+  - [ ] 16.1 ruff + mypy + full unit + serverless suites green; the scoped grep
+    gate passes; consolidated `docker compose up -d` healthy; smoke ingest →
+    query → answer end-to-end.
+    - _Requirements: 7.7, 8.2, 9.6, 10.5_

@@ -166,6 +166,9 @@ knowledge base without using AWS/Bedrock.
    compatible with what `OpenSearchClient.knn_search` returns
    (`{id, text, metadata, distance}`).
 
+> Note: Phase 1 ships a minimal ingest script. Requirement 10 (Phase 2) expands
+> it to full "vectorize documents as before" parity.
+
 ---
 
 ### Requirement 4: Local OpenSearch Container (Phase 1)
@@ -247,7 +250,15 @@ and documentation removed so there is a single vector-store engine to maintain.
    (`ARCHITECTURE`, `GETTING_STARTED`, `HOW_TO`, `API_SERVER`, README,
    `docker/README`) and in tests, so no stale Milvus guidance remains.
 7. WHEN Phase 2 is complete, a repository-wide search for `milvus` (case-
-   insensitive) SHALL return no references outside historical/spec documents.
+   insensitive) SHALL return no references to Milvus **as a vector-store engine**
+   in runtime code, configuration, or active docs, EXCLUDING:
+   - the knowledge-base corpus `document_loaders/milvus_docs/` — this is the
+     demo's subject-matter content (documentation *about* Milvus), not engine
+     code, and is retained as the KB (re-indexed into OpenSearch);
+   - `.kiro/specs/` and historical/archive documents;
+   - unavoidable incidental mentions where "milvus" is the KB topic being
+     described.
+   That is: remove Milvus-the-database-client, not Milvus-the-subject.
 8. THE `api_server.py` health check SHALL report OpenSearch availability in
    Local Mode (no Milvus-specific `list_collections` probe).
 
@@ -267,6 +278,63 @@ migration, so production behavior does not change.
 3. Changes to `OpenSearchClient` to support an injected local transport (if any)
    SHALL preserve its existing cloud (443/TLS/SigV4) behavior when no client is
    injected.
+
+---
+
+### Requirement 9: Consolidated Docker Stack (Phase 2)
+
+**User Story:** As a developer, I want a single Docker Compose stack for the
+whole local app (OpenSearch + Redis + DynamoDB + API + React), named
+consistently, so I run one command and there is no leftover Milvus or separate
+serverless-local compose to juggle.
+
+#### Acceptance Criteria
+
+1. THE project SHALL have ONE primary compose file (`docker/docker-compose.yml`)
+   defining: `opensearch`, `redis`, `dynamodb`, `rag-api`, `rag-react`. The
+   separate `docker/serverless-local/docker-compose.yml` and the Milvus services
+   (Milvus/etcd/MinIO) SHALL be removed/folded in.
+2. THE compose project and container names SHALL use the `agentcore-rag` prefix:
+   compose `name: agentcore-rag`; containers `agentcore-rag-opensearch`,
+   `agentcore-rag-redis`, `agentcore-rag-dynamodb`, `agentcore-rag-api`,
+   `agentcore-rag-react`.
+3. THE `rag-api` service SHALL run against OpenSearch: env
+   `DEPLOYMENT_MODE=local` + `LOCAL_VECTOR_BACKEND=opensearch` +
+   `OPENSEARCH_LOCAL_HOST`/`PORT`, `depends_on: opensearch` (no `MILVUS_*`, no
+   `depends_on: milvus`).
+4. THE `rag-api` service SHALL mount the top-level entrypoint (`api_server.py`)
+   so edits do not require an image rebuild (the Phase 1 stale-image quirk).
+5. THE scripts that referenced `docker/serverless-local/...`
+   (`run_serverless_local.py`, `serverless_api_server.py`) SHALL be updated or
+   retired consistently with the consolidated compose.
+6. THE consolidated stack SHALL start cleanly (`docker compose up -d`) with all
+   services healthy, validated by a smoke test (ingest → query → answer).
+
+---
+
+### Requirement 10: Full Document Vectorization Parity (Phase 2)
+
+**User Story:** As a developer, I want to vectorize my own documents into the
+knowledge base exactly as the old Milvus loader allowed — not just a demo seed —
+but targeting OpenSearch.
+
+#### Acceptance Criteria
+
+1. THE ingestion path SHALL index the existing `document_loaders/milvus_docs/`
+   corpus into OpenSearch KB_Index (the KB content is retained; only the engine
+   changes).
+2. THE ingestion path SHALL support vectorizing an arbitrary directory of
+   documents (not only the built-in demo set), preserving the old loader's
+   capabilities: recursive read, chunking by `max_chunk_length`, batch/parallel
+   Ollama embedding, and per-chunk metadata (filename/source).
+3. THE ingestion path SHALL retain the `data/embeddings.json` snapshot behavior
+   the old loader produced (or an explicitly documented equivalent), so an
+   embeddings export remains available.
+4. THE migrated `document_loaders/` package SHALL target OpenSearch via a
+   package-local OpenSearch client (source-isolation: no `src/` import) and
+   SHALL NOT retain Milvus client code.
+5. WHEN ingestion completes against a running OpenSearch, a query through the
+   app SHALL retrieve from the ingested content (validated by the smoke test).
 
 ---
 

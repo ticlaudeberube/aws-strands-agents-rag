@@ -4,17 +4,33 @@ This module implements the Model Context Protocol server that manages tools
 and enables agent communication with proper MCP compliance.
 """
 
-import logging
 import asyncio
 import json
+import logging
 from typing import Any
 
+from src.agents.skills import AnswerGenerationSkill, KnowledgeBaseSkill, RetreivalSkill
 from src.config import Settings
-from src.agents.strands_graph_agent import StrandsGraphRAGAgent
-from src.agents.skills import RetreivalSkill, AnswerGenerationSkill, KnowledgeBaseSkill
 from src.tools.tool_registry import get_registry
 
 logger = logging.getLogger(__name__)
+
+
+def _build_agent(settings: Settings) -> Any:
+    """Build the MCP server's backing agent for the selected local backend.
+
+    Mirrors api_server's selection: OpenSearch Local Mode uses the
+    LocalOpenSearchAgent (which implements the retrieval/answer/KB primitives
+    the skills bind to); otherwise the Milvus StrandsGraphRAGAgent. Imported
+    lazily so local-Milvus does not require opensearch-py and vice versa.
+    """
+    if settings.local_vector_backend == "opensearch":
+        from src.agents.local_opensearch_agent import LocalOpenSearchAgent
+
+        return LocalOpenSearchAgent(settings)
+    from src.agents.strands_graph_agent import StrandsGraphRAGAgent
+
+    return StrandsGraphRAGAgent(settings)
 
 
 class RAGAgentMCPServer:
@@ -27,7 +43,7 @@ class RAGAgentMCPServer:
             settings: Application settings
         """
         self.settings = settings
-        self.agent = StrandsGraphRAGAgent(settings)
+        self.agent = _build_agent(settings)
         self.registry = get_registry()
 
         # Register all skills on initialization

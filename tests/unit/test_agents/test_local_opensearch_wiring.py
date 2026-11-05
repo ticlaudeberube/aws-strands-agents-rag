@@ -101,7 +101,7 @@ def test_local_milvus_branch_unchanged_regression() -> None:
 
     settings = Settings()
     settings.deployment_mode = "local"
-    assert settings.local_vector_backend == "milvus"  # default
+    settings.local_vector_backend = "milvus"  # explicit (default is now opensearch)
 
     with (
         patch("src.agents.strands_graph_agent.MilvusVectorDB"),

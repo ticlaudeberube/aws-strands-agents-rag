@@ -4,8 +4,9 @@ import asyncio
 from types import SimpleNamespace
 from unittest.mock import Mock
 
-import api_server
 import pytest
+
+import api_server
 from src.config.settings import Settings
 
 
@@ -51,7 +52,11 @@ def test_health_reports_warning_when_vector_db_probe_fails(
 ) -> None:
     """A failed vector database probe is reported as degraded health."""
     list_collections = Mock(side_effect=ConnectionError("offline"))
-    monkeypatch.setattr(api_server, "settings", Settings())
+    # This test exercises the Milvus probe branch; pin the backend since the
+    # default is now opensearch (which uses a different health path).
+    monkeypatch.setattr(
+        api_server, "settings", Settings().model_copy(update={"local_vector_backend": "milvus"})
+    )
     monkeypatch.setattr(api_server, "strands_agent", _mock_agent(list_collections))
 
     data = api_server.health()
@@ -70,7 +75,9 @@ def test_health_reports_ok_when_vector_db_is_available(
 ) -> None:
     """A successful vector database probe preserves the normal healthy state."""
     list_collections = Mock(return_value=[])
-    monkeypatch.setattr(api_server, "settings", Settings())
+    monkeypatch.setattr(
+        api_server, "settings", Settings().model_copy(update={"local_vector_backend": "milvus"})
+    )
     monkeypatch.setattr(api_server, "strands_agent", _mock_agent(list_collections))
 
     data = api_server.health()
@@ -103,7 +110,9 @@ def test_health_tracks_vector_db_availability_changes(
 ) -> None:
     """Repeated health checks reflect a vector DB going offline."""
     list_collections = Mock(side_effect=[[], ConnectionError("offline")])
-    monkeypatch.setattr(api_server, "settings", Settings())
+    monkeypatch.setattr(
+        api_server, "settings", Settings().model_copy(update={"local_vector_backend": "milvus"})
+    )
     monkeypatch.setattr(api_server, "strands_agent", _mock_agent(list_collections))
 
     available = api_server.health()

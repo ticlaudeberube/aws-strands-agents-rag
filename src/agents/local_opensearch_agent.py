@@ -146,7 +146,12 @@ class LocalOpenSearchAgent:
 
         self._graph = create_rag_graph(settings, opensearch_client=self._opensearch)
         self._shared_route = self._graph["shared_route"]
-        self.web_search = self._graph.get("backends", {}).get("web_search")
+        backends = self._graph.get("backends", {})
+        self.web_search = backends.get("web_search")
+        # Ollama client (the graph's LLM backend) for the MCP-skill primitives
+        # (embed/generate) so this facade can back the MCP server too.
+        self.ollama_client = backends.get("llm")
+        self._kb_index = self._graph.get("kb_index", settings.opensearch_kb_index)
 
         # ``vector_db`` attribute for parity with StrandsGraphRAGAgent (some
         # endpoints read it); points at the OpenSearch client.
@@ -264,3 +269,150 @@ class LocalOpenSearchAgent:
         result = self._shared_route(question, force_web_search=True)
         self._last_stream_sources = list(result.sources)
         yield result.answer
+
+    def answer_question_web_search_only(
+        self,
+        question: str,
+        temperature: float | None = None,  # noqa: ARG002
+        max_tokens: int | None = None,  # noqa: ARG002
+    ) -> tuple[str, list[dict]]:
+        """Sync force-web answer (non-streaming chat path). Returns (answer, sources)."""
+        if self.web_search is None:
+            return (
+                "Web search is not enabled. Set ENABLE_WEB_SEARCH_SUPPLEMENT=true "
+                "and TAVILY_API_KEY, then restart.",
+                [],
+            )
+        result = self._shared_route(question, force_web_search=True)
+        return result.answer, list(result.sources)
+
+    # ------------------------------------------------------------------ #
+    # MCP-skill primitives (backend-agnostic, via OpenSearch + Ollama)   #
+    # ------------------------------------------------------------------ #
+    # These back the MCP server's retrieval/answer/KB skills. They operate
+    # through the OpenSearch VectorStore contract and the Ollama client — no
+    # Milvus. When OpenSearch is unavailable they degrade to empty/no-op.
+
+    def retrieve_context(
+        self, collection_name: str, query: str, top_k: int = 5
+    ) -> tuple[list[str], list[dict]]:
+        """Embed ``query`` with Ollama and k-NN search OpenSearch.
+
+        Returns ``(context_chunks, sources)``. ``collection_name`` is accepted
+        for interface parity but OpenSearch Local Mode uses the configured KB
+        index. Degrades to empty on any failure (mirrors the old Milvus agent).
+        """
+        if self._opensearch is None or self.ollama_client is None:
+            return [], []
+        try:
+            vector = self.ollama_client.embed_text(query, model=self.settings.ollama_embed_model)
+            results = self._opensearch.knn_search(self._kb_index, vector, top_k)
+        except Exception as exc:  # noqa: BLE001 - degrade to empty
+            logger.warning("retrieve_context failed: %s", exc)
+            return [], []
+
+        chunks: list[str] = []
+        sources: list[dict] = []
+        for r in results:
+            text = r.get("text", "")
+            metadata = r.get("metadata", {}) or {}
+            chunks.append(text)
+            sources.append(
+                {
+                    "source_type": "knowledge_base",
+                    "id": r.get("id"),
+                    "text": text[:200],
+                    "document_name": metadata.get("document_name", ""),
+                    "metadata": metadata,
+                    "distance": r.get("distance", 0.0),
+                    "collection": self._kb_index,
+                }
+            )
+        return chunks, sources
+
+    def retrieve_documents(
+        self,
+        collection_name: str,
+        query: str,
+        top_k: int = 5,
+        filter_source: str | None = None,
+    ) -> list[dict]:
+        """MCP retrieval tool: return source docs, optionally filtered by source."""
+        _, sources = self.retrieve_context(collection_name, query, top_k)
+        if filter_source:
+            sources = [d for d in sources if d.get("metadata", {}).get("source") == filter_source]
+        return sources
+
+    def search_by_source(
+        self, collection_name: str, query: str, source: str, top_k: int = 5
+    ) -> list[dict]:
+        """MCP retrieval tool: search filtered by a specific source."""
+        return self.retrieve_documents(collection_name, query, top_k, filter_source=source)
+
+    def list_collections(self) -> list[str]:
+        """MCP retrieval tool: list OpenSearch KB/cache index names present."""
+        if self._opensearch is None:
+            return []
+        names = [self.settings.opensearch_kb_index, self.settings.opensearch_cache_index]
+        try:
+            return [n for n in names if self._opensearch.client.indices.exists(index=n)]
+        except Exception as exc:  # noqa: BLE001 - degrade to empty
+            logger.warning("list_collections failed: %s", exc)
+            return []
+
+    def generate_answer(
+        self,
+        question: str,
+        context: str,
+        temperature: float = 0.1,
+        max_tokens: int | None = None,
+    ) -> str:
+        """MCP answer-generation tool: generate from context via Ollama."""
+        if self.ollama_client is None:
+            return "Generation backend unavailable."
+        from src.agents import prompts
+
+        system_instructions = prompts.RAGPrompts.SYSTEM_INSTRUCTIONS.format(
+            formatting_rules=prompts.FORMATTING_RULES
+        )
+        prompt = prompts.format_rag_prompt(
+            system_instructions=system_instructions, question=question, context=context
+        )
+        try:
+            answer = self.ollama_client.generate(
+                prompt=prompt,
+                model=self.settings.ollama_model,
+                temperature=temperature,
+                max_tokens=max_tokens if max_tokens is not None else self.settings.max_tokens,
+            )
+            return str(answer)
+        except Exception as exc:  # noqa: BLE001
+            logger.error("generate_answer failed: %s", exc)
+            return f"Error generating answer: {exc}"
+
+    def add_documents(self, collection_name: str, documents: list[dict]) -> dict:
+        """MCP knowledge-base tool: embed + index documents into OpenSearch.
+
+        Each document is ``{text, source?, metadata?}``. Returns a result dict.
+        """
+        if self._opensearch is None or self.ollama_client is None:
+            return {"success": False, "message": "OpenSearch/Ollama unavailable", "count": 0}
+        indexed = 0
+        try:
+            for i, doc in enumerate(documents):
+                text = doc.get("text", "")
+                if not text.strip():
+                    continue
+                vector = self.ollama_client.embed_text(text, model=self.settings.ollama_embed_model)
+                self._opensearch.index_document(
+                    index=self.settings.opensearch_kb_index,
+                    doc_id=doc.get("id") or f"mcp-{i}",
+                    vector=vector,
+                    text=text,
+                    metadata={"source": doc.get("source", "mcp"), **(doc.get("metadata") or {})},
+                )
+                indexed += 1
+        except Exception as exc:  # noqa: BLE001
+            logger.error("add_documents failed after %d: %s", indexed, exc)
+            return {"success": False, "message": str(exc), "count": indexed}
+        return {"success": True, "message": f"Indexed {indexed} document(s)", "count": indexed}

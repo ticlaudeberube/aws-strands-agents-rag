@@ -1180,7 +1180,7 @@ def _stream_chat_completions(
                     "❌ No response generated.\\n\\n"
                     "This can happen if:\\n"
                     "1. Ollama model is not running\\n"
-                    "2. Model is not loaded (try: ollama pull qwen2.5:0.5b)\\n"
+                    "2. Model is not loaded (try: ollama pull llama3.2:3b)\\n"
                     "3. Model ran out of memory\\n"
                     "4. API server crashed\\n\\n"
                     "Check the server logs for details."

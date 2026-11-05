@@ -119,7 +119,7 @@ class NodeConfigManager:
 # Preset configurations for common node types
 TOPIC_CHECKER_CONFIG = NodeConfig(
     name="TopicChecker",
-    model="qwen2.5:0.5b",
+    model="llama3.2:3b",
     timeout_seconds=5,
     max_retries=2,
     enable_circuit_breaker=False,
@@ -130,7 +130,7 @@ TOPIC_CHECKER_CONFIG = NodeConfig(
 
 SECURITY_CHECKER_CONFIG = NodeConfig(
     name="SecurityChecker",
-    model="qwen2.5:0.5b",
+    model="llama3.2:3b",
     timeout_seconds=5,
     max_retries=2,
     enable_circuit_breaker=False,
@@ -141,7 +141,7 @@ SECURITY_CHECKER_CONFIG = NodeConfig(
 
 RAG_WORKER_CONFIG = NodeConfig(
     name="RAGWorker",
-    model="qwen2.5:0.5b",
+    model="llama3.2:3b",
     timeout_seconds=30,
     max_retries=3,
     enable_circuit_breaker=True,

@@ -57,7 +57,7 @@ Both modes are validated by a final integration/smoke task.
 
   - [ ]* 2.3 Write unit tests for local-mode factory default path
     - `create_rag_graph` with default settings produces an Ollama + Milvus-backed graph; mode read once and stable
-    - Local `OllamaClient` uses `qwen2.5:0.5b` (generation) and `nomic-embed-text:v1.5` (embeddings)
+    - Local `OllamaClient` uses `llama3.2:3b` (generation) and `nomic-embed-text:v1.5` (embeddings)
     - _Requirements: 1.2, 5.1_
 
 - [ ] 3. Checkpoint - local mode intact

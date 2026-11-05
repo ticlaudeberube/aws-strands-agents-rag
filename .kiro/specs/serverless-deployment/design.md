@@ -38,7 +38,7 @@ Local Mode is the default developer experience and a fully supported runtime tar
 | Layer | Local component | Entry-point / file | Endpoint |
 |-------|-----------------|--------------------|----------|
 | HTTP server | **FastAPI** (OpenAI-compatible API + MCP endpoints) | `api_server.py` | `http://localhost:8000` |
-| LLM inference | **Ollama** running `qwen2.5:0.5b` | `src/tools/ollama_client.py` (`OllamaClient`) | `http://localhost:11434` |
+| LLM inference | **Ollama** running `llama3.2:3b` | `src/tools/ollama_client.py` (`OllamaClient`) | `http://localhost:11434` |
 | Embeddings | **Ollama** running `nomic-embed-text:v1.5` (768-dim) | `src/tools/ollama_client.py` (`OllamaClient`) | `http://localhost:11434` |
 | Vector DB | **Milvus** standalone (Docker) | `src/tools/milvus_client.py` (`MilvusVectorDB`) | `localhost:19530` |
 | Agent / graph | **StrandsGraphRAGAgent** (3-node Strands graph) | `src/agents/strands_graph_agent.py` | in-process |
@@ -62,7 +62,7 @@ Browser (localhost:3000)
           L1/L2/L3 check: in-memory dicts (embedding / search / answer)
           L4 check: Milvus response_cache collection (cosine ≥ 0.92, entity validation)
           KB search: Milvus milvus_rag_collection (OllamaClient embedding → Milvus k-NN HNSW)
-          generation: Ollama qwen2.5:0.5b
+          generation: Ollama llama3.2:3b
           web fallback (optional): Tavily when KB relevance < 0.15
     → FastAPI returns OpenAI-compatible JSON (answer + sources + timing)
   → React renders answer
@@ -91,7 +91,7 @@ DEPLOYMENT_MODE=local
 
 # Ollama (local inference + embeddings)
 OLLAMA_HOST=http://localhost:11434
-OLLAMA_MODEL=qwen2.5:0.5b
+OLLAMA_MODEL=llama3.2:3b
 OLLAMA_EMBED_MODEL=nomic-embed-text:v1.5
 
 # Milvus (local vector DB via Docker)
@@ -125,7 +125,7 @@ cd docker && docker-compose up -d milvus
 
 # 2. Ensure Ollama is running with the required models
 ollama serve
-ollama pull qwen2.5:0.5b
+ollama pull llama3.2:3b
 ollama pull nomic-embed-text:v1.5
 
 # 3. Start the FastAPI server (serves API + optional React static)
@@ -166,7 +166,7 @@ deployment_mode: Literal["local", "serverless"] = Field(
 | Concern | `deployment_mode = "local"` | `deployment_mode = "serverless"` |
 |---------|-----------------------------|----------------------------------|
 | Entry-point | `api_server.py` (FastAPI, long-running) | `agentcore_handler.lambda_handler` (per-invocation) |
-| LLM inference | `OllamaClient` → `qwen2.5:0.5b` | `BedrockClient` → `claude-3-haiku` |
+| LLM inference | `OllamaClient` → `llama3.2:3b` | `BedrockClient` → `claude-3-haiku` |
 | Embeddings | `OllamaClient` → `nomic-embed-text:v1.5` (768-dim) | `BedrockClient` → `titan-embed-text-v1` (1536→768-dim PCA) |
 | Vector DB | `MilvusVectorDB` (`localhost:19530`) | `OpenSearchClient` (OpenSearch Serverless, VPC) |
 | L2/L3 cache | In-memory dicts | `RedisCache` (ElastiCache) |
@@ -214,7 +214,7 @@ graph TB
     end
 
     subgraph Backends["LOCAL BACKENDS"]
-        OLLAMA["Ollama\nqwen2.5:0.5b (LLM)\nnomic-embed-text:v1.5 (embed)\nlocalhost:11434"]
+        OLLAMA["Ollama\nllama3.2:3b (LLM)\nnomic-embed-text:v1.5 (embed)\nlocalhost:11434"]
         MILVUS["Milvus (Docker)\nmilvus_rag_collection\n768-dim k-NN HNSW\nlocalhost:19530"]
     end
 
@@ -364,7 +364,7 @@ Every component has a **local equivalent** and a **cloud equivalent**. The graph
 | Role | Local Mode | Serverless Mode | Shared interface |
 |------|------------|-----------------|------------------|
 | HTTP entry-point | `api_server.py` (FastAPI) | `agentcore_handler.py` (Lambda) | drives the Strands graph |
-| LLM inference | `OllamaClient` (`qwen2.5:0.5b`) | `BedrockClient` (`claude-3-haiku`) | `generate(prompt, ...) -> str` |
+| LLM inference | `OllamaClient` (`llama3.2:3b`) | `BedrockClient` (`claude-3-haiku`) | `generate(prompt, ...) -> str` |
 | Embeddings | `OllamaClient` (`nomic-embed-text:v1.5`, 768-dim) | `BedrockClient` (`titan-embed-text-v1`, 1536→768-dim) | `embed_text(text) -> list[float]` |
 | Vector store | `MilvusVectorDB` (`localhost:19530`) | `OpenSearchClient` (OpenSearch Serverless) | `knn_search`, `index_document` |
 | L2/L3 cache | In-memory dicts | `RedisCache` (ElastiCache) | `get/set_embedding`, `get/set_search_results` |
@@ -418,7 +418,7 @@ Entry-point for all chat requests. Replaces the placeholder stub with a real imp
 
 #### 2a. OllamaClient (`src/tools/ollama_client.py`) — Local Mode
 
-Existing client, unchanged. Provides `embed_text`/`embed_texts` (768-dim via `nomic-embed-text:v1.5`), `generate`/`generate_stream` (via `qwen2.5:0.5b`), connection pooling, retries, and availability checks against `http://localhost:11434`.
+Existing client, unchanged. Provides `embed_text`/`embed_texts` (768-dim via `nomic-embed-text:v1.5`), `generate`/`generate_stream` (via `llama3.2:3b`), connection pooling, retries, and availability checks against `http://localhost:11434`.
 
 #### 2b. BedrockClient (`src/tools/bedrock_client.py`) — Serverless Mode (new)
 
@@ -1163,7 +1163,7 @@ Properties to implement as property-based tests:
 - BedrockClient uses default model ID `anthropic.claude-3-haiku-20240307-v1:0` when no override (Requirement 5.1)
 - BedrockClient uses `amazon.titan-embed-text-v1` for embeddings (Requirement 5.2)
 - Session table query uses `ScanIndexForward=True, Limit=20` (Requirement 1.3)
-- Local Mode: `OllamaClient` uses `qwen2.5:0.5b` for generation and `nomic-embed-text:v1.5` for embeddings
+- Local Mode: `OllamaClient` uses `llama3.2:3b` for generation and `nomic-embed-text:v1.5` for embeddings
 - Local Mode: `create_rag_graph` with default settings produces an Ollama + Milvus-backed graph
 - Local Mode: FastAPI starts in DEGRADED MODE when Milvus is unreachable (validation nodes still work)
 

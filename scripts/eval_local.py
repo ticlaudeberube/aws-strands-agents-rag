@@ -417,6 +417,18 @@ async def run_eval(cfg: EvalConfig) -> dict[str, float]:
     judge_model = cfg.judge_model or getattr(settings, "ollama_model", None)
     cfg.judge_model = judge_model
 
+    # A judge no stronger than the generator cannot meaningfully grade it (the
+    # thing being graded should not also be the grader). Warn when the judge is
+    # enabled but falls back to the pipeline's own generation model, and point
+    # the operator at a larger model via --judge-model.
+    if cfg.use_judge and judge_model == getattr(settings, "ollama_model", None):
+        logger.warning(
+            "LLM judge is using the pipeline's generation model (%s); scores will be "
+            "weak. Pass a larger model, e.g. --judge-model llama3.1:8b, for a "
+            "meaningful faithfulness grade.",
+            judge_model,
+        )
+
     tracking_uri = _resolve_tracking_uri(cfg.tracking_uri)
     if tracking_uri:
         mlflow.set_tracking_uri(tracking_uri)
@@ -513,7 +525,11 @@ def _parse_args(argv: list[str] | None = None) -> EvalConfig:
     parser.add_argument(
         "--judge-model",
         default=None,
-        help="Model id for the judge (defaults to settings.ollama_model).",
+        help=(
+            "Model id for the judge (defaults to settings.ollama_model). For a "
+            "meaningful grade, pass a model larger than the pipeline's generation "
+            "model, e.g. llama3.1:8b."
+        ),
     )
     parser.add_argument("--top-k", type=int, default=5, help="Retrieval top-k per question.")
     parser.add_argument(

@@ -157,8 +157,10 @@ SQLite stores record runs/metrics but the GenAI Traces UI is a server feature.
 # Deterministic run — lexical metrics only (fast, no extra tokens):
 uv run scripts/eval_local.py
 
-# Add the optional LLM-as-judge faithfulness score (slower, uses Ollama):
-uv run scripts/eval_local.py --judge
+# Add the optional LLM-as-judge faithfulness score (slower, uses Ollama).
+# Judge with a model LARGER than the pipeline's generation model, otherwise the
+# grader is no stronger than the thing it grades and the score is meaningless:
+uv run scripts/eval_local.py --judge --judge-model llama3.1:8b
 
 # Custom question set / experiment name / run label:
 uv run scripts/eval_local.py --questions eval/questions.jsonl \
@@ -182,7 +184,7 @@ Flags:
 | `--experiment`   | `rag-local-eval`      | MLflow experiment name.                              |
 | `--run-name`     | auto                  | Label the run so it's easy to find in the UI.        |
 | `--judge`        | off                   | Add the LLM-as-judge faithfulness score (uses Ollama)|
-| `--judge-model`  | `settings.ollama_model`| Override the judge model.                           |
+| `--judge-model`  | `settings.ollama_model`| Override the judge model. Use a model larger than the generation model (e.g. `llama3.1:8b`); defaulting to the generation model logs a warning. |
 | `--top-k`        | `5`                   | Retrieval depth per question.                        |
 | `--tracking-uri` | flag → `MLFLOW_TRACKING_URI` → `./mlruns` | Where to log. Use `http://127.0.0.1:5000` for a server (needed for GenAI traces), or `sqlite:///mlflow.db`. |
 

@@ -171,3 +171,4 @@ document_loaders/milvus_docs/**
 .playwright-mcp/page-2026-04-12T15-23-34-236Z.yml
 .playwright-mcp/page-2026-04-12T15-23-53-620Z.yml
 .playwright-mcp/page-2026-04-12T15-24-08-577Z.yml
+.env.serverless-local

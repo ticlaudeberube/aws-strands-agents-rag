@@ -232,7 +232,7 @@ class OllamaClient:
             Generated text
         """
         if model is None:
-            model = get_settings().ollama_model or "qwen2.5:0.5b"
+            model = get_settings().ollama_model or "llama3.2:3b"
         try:
             # Ollama uses 'num_predict' instead of 'max_tokens'
             # num_predict: number of tokens to predict (-1 = infinite, default behavior)
@@ -300,7 +300,7 @@ class OllamaClient:
             Chunks of generated text
         """
         if model is None:
-            model = get_settings().ollama_model or "qwen2.5:0.5b"
+            model = get_settings().ollama_model or "llama3.2:3b"
         import json
 
         try:

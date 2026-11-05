@@ -17,7 +17,7 @@ class TestConfigurationConsistency:
         # Default should come from env var or hardcoded fallback
         settings = Settings()
         assert settings.ollama_embed_model == "nomic-embed-text:v1.5"
-        assert settings.ollama_model == os.getenv("OLLAMA_MODEL", "qwen2.5:0.5b")
+        assert settings.ollama_model == os.getenv("OLLAMA_MODEL", "llama3.2:3b")
 
     def test_settings_loads_from_env_override(self):
         """Verify settings respects OLLAMA_EMBEDDING_MODEL env var."""
@@ -98,9 +98,10 @@ class TestConfigurationConsistency:
             # Call without model parameter - should use settings.ollama_model
             client.generate("test prompt")
 
-            # Since generate() defaults to "qwen2.5:0.5b", verify it respects that
+            # generate() with no model falls back to the configured default; verify
+            # it respects whatever settings.ollama_model resolves to.
             call_args = mock_post.call_args
-            assert call_args[1]["json"]["model"] == "qwen2.5:0.5b"
+            assert call_args[1]["json"]["model"] == Settings().ollama_model
 
     def test_ollama_client_generate_stream_uses_config(self):
         """Verify OllamaClient.generate_stream uses config when model not provided."""
@@ -114,7 +115,7 @@ class TestConfigurationConsistency:
             # Call without model parameter
             list(client.generate_stream("test prompt"))
 
-            # Should call with some model (defaults to qwen2.5:0.5b in current implementation)
+            # Should call with some model (defaults to the configured ollama_model)
             call_args = mock_post.call_args
             assert call_args[1]["json"]["model"] is not None
 

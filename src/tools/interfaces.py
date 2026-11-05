@@ -38,7 +38,7 @@ __all__ = [
 class LLMClient(Protocol):
     """LLM inference + embedding backend.
 
-    Local Mode: ``OllamaClient`` (``qwen2.5:0.5b`` / ``nomic-embed-text:v1.5``).
+    Local Mode: ``OllamaClient`` (``llama3.2:3b`` / ``nomic-embed-text:v1.5``).
     Serverless Mode: ``BedrockClient`` (``claude-3-haiku`` / ``titan-embed-text-v1``).
     """
 

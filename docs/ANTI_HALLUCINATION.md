@@ -272,8 +272,8 @@ uv run mlflow ui --port 5001             # compare runs at http://127.0.0.1:5001
 > 5001`. If the UI shows no runs, the eval and the UI are pointed at different
 > tracking stores — see the store/port notes in **[EVAL_LOCAL.md](EVAL_LOCAL.md)**.
 
-The judge defaults to `settings.ollama_model` (`qwen2.5:0.5b`), which is weak as
-an evaluator — point `--judge-model` at a larger installed model (e.g.
+The judge defaults to `settings.ollama_model` (`llama3.2:3b`), which is still
+modest as an evaluator — point `--judge-model` at a larger installed model (e.g.
 `llama3.1:8b`) for meaningful faithfulness scores. Keeping the pipeline's
 generation model small while judging with a larger one is the right split: the
 thing being graded should not also be the grader.

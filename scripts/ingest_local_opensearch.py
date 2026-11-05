@@ -108,11 +108,27 @@ def ingest(docs: list[dict[str, str]], *, settings: object | None = None) -> int
     max_tokens = s.max_chunk_length  # type: ignore[attr-defined]
 
     indexed = 0
+    skipped = 0
     for doc in docs:
         title = doc.get("title", "")
         chunks = chunk_text(doc["text"], max_tokens=max_tokens)
         for ci, chunk in enumerate(chunks):
-            vector = ollama.embed_text(chunk, model=embed_model)
+            # Embedding is best-effort per chunk: the local embedding model
+            # (e.g. nomic-embed-text) rejects over-long inputs with an HTTP 500,
+            # and one bad chunk must not abort ingestion of the whole corpus.
+            # Skip-and-log so the KB is populated with everything that embeds.
+            try:
+                vector = ollama.embed_text(chunk, model=embed_model)
+            except Exception as exc:  # noqa: BLE001 - skip unembeddable chunk, keep going
+                skipped += 1
+                logger.warning(
+                    "Skipping chunk %s-%d (len=%d): embedding failed: %s",
+                    title or "doc",
+                    ci,
+                    len(chunk),
+                    str(exc).splitlines()[0][:160],
+                )
+                continue
             doc_id = f"{title or 'doc'}-{ci}"
             metadata = {
                 "document_name": title,
@@ -127,6 +143,8 @@ def ingest(docs: list[dict[str, str]], *, settings: object | None = None) -> int
                 metadata=metadata,
             )
             indexed += 1
+    if skipped:
+        logger.warning("Skipped %d chunk(s) that could not be embedded", skipped)
     logger.info("Indexed %d chunk(s) into %s", indexed, kb_index)
     return indexed
 

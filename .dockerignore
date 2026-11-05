@@ -1,0 +1,72 @@
+# Docker reads .dockerignore from the BUILD CONTEXT ROOT. The compose build
+# context is the project root (`context: ..`), so this file — not
+# docker/.dockerignore — is what actually trims the context. Without it,
+# `COPY . .` ships .venv, node_modules, .git, etc. (a ~1.4GB context) and the
+# rag-api image build/export is painfully slow.
+
+# Version control
+.git
+.gitignore
+.gitattributes
+
+# Python virtualenv + caches (huge; never needed in the image)
+.venv
+venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+*.egg
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Node (both the root and the React app pull deps at build time)
+node_modules/
+**/node_modules/
+npm-debug.log
+yarn-error.log
+
+# React build output + Playwright artifacts
+chatbots/react-chatbot/build/
+chatbots/react-chatbot/playwright-report/
+chatbots/react-chatbot/test-results/
+test-results/
+.playwright-mcp/
+
+# Local env files and secrets (never bake into an image)
+.env
+.env.local
+.env.*.local
+.env.serverless-local
+
+# Eval / experiment artifacts
+mlruns/
+mlflow.db
+data/embeddings.json
+
+# SAM / IaC scratch
+.aws-sam-iacs/
+
+# IDE / OS noise
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Docs and the local KB corpus are not needed by the runtime image.
+# (The KB is seeded into OpenSearch via ingestion, not read from the image.)
+docs/
+document_loaders/milvus_docs/
+
+# Docker build files themselves
+docker/
+**/Dockerfile
+**/.dockerignore
+docker-compose*.yml

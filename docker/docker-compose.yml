@@ -138,7 +138,10 @@ services:
       - rag-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000"]
+      # Use 127.0.0.1 (not localhost): nginx listens on IPv4 only, but
+      # "localhost" can resolve to IPv6 [::1] in the container, giving a false
+      # "connection refused" even though the UI is served fine.
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:3000"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -153,6 +156,5 @@ volumes:
 networks:
   rag-network:
     driver: bridge
-    ipam:
-      config:
-        - subnet: 172.28.0.0/16
+    # No hardcoded subnet: let Docker pick a free range to avoid
+    # "pool overlaps" conflicts with leftover or unrelated networks.

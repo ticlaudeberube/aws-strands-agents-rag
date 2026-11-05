@@ -4,11 +4,12 @@
 Exposes the RAG agent as an OpenAI-compatible API endpoint.
 Can be used with Ollama GUI and other compatible clients.
 
-Uses StrandsGraphRAGAgent with Strands agents:
-- Node 1: TopicChecker agent (fast model, ~100ms) - validates scope
-- Node 2: SecurityChecker agent (fast model, ~100ms) - validates safety
-- Node 3: RAGWorker agent (powerful model, ~1500ms) - retrieval & generation
-- Conditional routing: early exit if validation fails (saves 60-70% cost)
+Uses LocalOpenSearchAgent (Ollama + local OpenSearch) routed through the shared
+Cache → KB → Web pipeline:
+- TopicChecker (fast model) - validates scope
+- SecurityChecker (fast model) - validates safety
+- Shared routing (powerful model) - retrieval & generation
+- Early exit if validation fails (saves 60-70% cost)
 - Multi-layer caching and semantic response caching
 - MCP server for tool exposure to external agents
 """
@@ -34,7 +35,6 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from src.agents.node_metrics import GraphMetrics
-from src.agents.strands_graph_agent import StrandsGraphRAGAgent as StrandsRAGAgent
 from src.config.settings import Settings, get_settings
 from src.mcp.mcp_server import RAGAgentMCPServer
 from src.tools.tool_registry import get_registry
@@ -197,9 +197,9 @@ class ChatCompletionResponse(BaseModel):
 # Lifespan Manager
 # ============================================================================
 
-# Global state. The agent is either the Milvus-backed StrandsGraphRAGAgent
-# (default) or the OpenSearch-backed LocalOpenSearchAgent facade; both are
-# duck-typed drop-ins for the endpoints, so the global is typed ``Any`` to
+# Global state. Local Mode uses the OpenSearch-backed LocalOpenSearchAgent
+# facade; serverless swaps in the ServerlessAgentShim. Both are duck-typed
+# drop-ins for the endpoints, so the global is typed ``Any`` to
 # accommodate either without per-call casts.
 strands_agent: Any = None
 mcp_server: RAGAgentMCPServer | None = None
@@ -228,36 +228,28 @@ async def lifespan(app: FastAPI):
         # Load settings
         settings = get_settings()
 
-        # Select the Local-Mode agent by vector backend. Default "milvus" keeps
-        # the existing StrandsGraphRAGAgent (Ollama + Milvus). "opensearch" uses
-        # the LocalOpenSearchAgent facade (Ollama + local OpenSearch, routed
-        # through the shared pipeline) for prod parity.
-        if settings.local_vector_backend == "opensearch":
-            logger.info(
-                "Local vector backend: OpenSearch (local container at %s:%s)",
-                settings.opensearch_local_host,
-                settings.opensearch_local_port,
-            )
-            from src.agents.local_opensearch_agent import LocalOpenSearchAgent
+        # Local Mode is OpenSearch-backed: the LocalOpenSearchAgent facade
+        # (Ollama + local OpenSearch) routed through the shared pipeline.
+        logger.info(
+            "Local vector backend: OpenSearch (local container at %s:%s)",
+            settings.opensearch_local_host,
+            settings.opensearch_local_port,
+        )
+        from src.agents.local_opensearch_agent import LocalOpenSearchAgent
 
-            logger.info("\nInitializing LocalOpenSearchAgent (Ollama + OpenSearch)...")
-            strands_agent = LocalOpenSearchAgent(settings)
-        else:
-            logger.info(f"Vector database endpoint: {settings.milvus_host}:{settings.milvus_port}")
-            # Initialize StrandsGraphRAGAgent (Graph-based architecture)
-            logger.info("\nInitializing StrandsGraphRAGAgent (Graph-based)...")
-            strands_agent = StrandsRAGAgent(settings)
+        logger.info("\nInitializing LocalOpenSearchAgent (Ollama + OpenSearch)...")
+        strands_agent = LocalOpenSearchAgent(settings)
 
         if strands_agent.initialization_error:
             logger.warning(
-                "✓ StrandsGraphRAGAgent initialized in DEGRADED MODE (vector database unavailable)"
+                "✓ LocalOpenSearchAgent initialized in DEGRADED MODE (vector database unavailable)"
             )
             logger.warning(f"  Reason: {strands_agent.initialization_error}")
             logger.warning(
                 "  Validation nodes (topic, security) will work, but RAG search will fail"
             )
         else:
-            logger.info("✓ StrandsGraphRAGAgent initialized")
+            logger.info("✓ LocalOpenSearchAgent initialized")
             logger.info("  - Node 1: Topic Check (fast model, ~100ms)")
             logger.info("  - Node 2: Security Check (fast model, ~100ms)")
             logger.info("  - Node 3: RAG Worker (full model, ~1500ms)")
@@ -574,21 +566,18 @@ def validate_user_input(text: str, settings) -> tuple[bool, str | None]:
     return True, None
 
 
-def warm_response_cache(agent: StrandsRAGAgent, settings) -> None:
+def warm_response_cache(agent: Any, settings) -> None:
     """Pre-warm response cache with responses from responses.json on startup.
 
-    Note: StrandsGraphRAGAgent doesn't have built-in response caching.
-    This function is kept for compatibility but will be skipped.
+    Kept for compatibility; skipped when the agent exposes no writable response
+    cache (the OpenSearch-backed local agent manages its own L4 cache).
 
     Args:
-        agent: StrandsGraphRAGAgent instance
+        agent: The local RAG agent instance
         settings: Application settings
     """
-    # StrandsGraphRAGAgent doesn't have response_cache attribute
     if not hasattr(agent, "response_cache"):
-        logger.debug(
-            "Response cache not available (using StrandsGraphRAGAgent), skipping cache warming"
-        )
+        logger.debug("Response cache not available, skipping cache warming")
         return
 
     try:
@@ -721,40 +710,14 @@ def health():
             "persistent cached questions are unavailable."
         )
 
-        # OpenSearch Local Mode: probe OpenSearch via the facade, not Milvus.
-        if s.local_vector_backend == "opensearch":
-            if current_agent is not None and hasattr(current_agent, "opensearch_healthy"):
-                vector_db_available = bool(current_agent.opensearch_healthy())
-            return {
-                "status": "ok" if vector_db_available else "warning",
-                "model": "rag-agent",
-                "ollama": s.ollama_host,
-                "vector_db": f"opensearch (local {s.opensearch_local_host}:{s.opensearch_local_port})",
-                "vector_db_available": vector_db_available,
-                "warning": None if vector_db_available else warning,
-                "web_search_enabled": bool(
-                    s.enable_web_search_supplement and s.tavily_api_key and s.tavily_api_key.strip()
-                ),
-            }
-
-        # Milvus Local Mode (default): the existing Milvus probe.
-        vector_db = getattr(current_agent, "vector_db", None)
-        if vector_db is not None:
-            try:
-                vector_db.client.list_collections(
-                    db_name=s.milvus_db_name,
-                    timeout=VECTOR_DB_HEALTH_CHECK_TIMEOUT_SECONDS,
-                )
-            except Exception as e:
-                logger.warning("Vector database health check failed: %s", e)
-            else:
-                vector_db_available = True
-
+        # Local Mode probes the OpenSearch backend via the agent facade.
+        if current_agent is not None and hasattr(current_agent, "opensearch_healthy"):
+            vector_db_available = bool(current_agent.opensearch_healthy())
         return {
             "status": "ok" if vector_db_available else "warning",
             "model": "rag-agent",
             "ollama": s.ollama_host,
-            "vector_db": f"{s.milvus_host}:{s.milvus_port}",
+            "vector_db": f"opensearch (local {s.opensearch_local_host}:{s.opensearch_local_port})",
             "vector_db_available": vector_db_available,
             "warning": None if vector_db_available else warning,
             "web_search_enabled": bool(
@@ -781,18 +744,11 @@ async def health_detailed():
         if ollama_available:
             ollama_models = current_agent.ollama_client.get_available_models()
 
-        # Check the configured vector database.
-        try:
-            vector_db_collections = current_agent.vector_db.client.list_collections(
-                db_name=current_settings.milvus_db_name,
-                timeout=VECTOR_DB_HEALTH_CHECK_TIMEOUT_SECONDS,
-            )
-            vector_db_status = "healthy"
-            vector_db_collection_count = len(vector_db_collections)
-        except Exception as e:
-            vector_db_status = "unhealthy"
-            vector_db_collection_count = 0
-            logger.warning(f"Vector database health check failed: {e}")
+        # Check the local OpenSearch vector database via the agent facade.
+        vector_db_healthy = bool(
+            hasattr(current_agent, "opensearch_healthy") and current_agent.opensearch_healthy()
+        )
+        vector_db_status = "healthy" if vector_db_healthy else "unhealthy"
 
         return {
             "status": (
@@ -807,17 +763,16 @@ async def health_detailed():
                 },
                 "vector_db": {
                     "status": vector_db_status,
-                    "host": current_settings.milvus_host,
-                    "port": current_settings.milvus_port,
-                    "database": current_settings.milvus_db_name,
-                    "collections": vector_db_collection_count,
+                    "host": current_settings.opensearch_local_host,
+                    "port": current_settings.opensearch_local_port,
+                    "backend": "opensearch",
                 },
             },
             "caches": {
-                "embedding_cache_size": len(current_agent.embedding_cache),
-                "search_cache_size": len(current_agent.search_cache),
-                "answer_cache_size": len(current_agent.answer_cache),
-                "max_cache_size": current_agent.cache_size,
+                "embedding_cache_size": len(getattr(current_agent, "embedding_cache", {}) or {}),
+                "search_cache_size": len(getattr(current_agent, "search_cache", {}) or {}),
+                "answer_cache_size": len(getattr(current_agent, "answer_cache", {}) or {}),
+                "max_cache_size": getattr(current_agent, "cache_size", 0),
             },
         }
     except Exception as e:
@@ -848,23 +803,27 @@ async def health_ollama():
 
 
 @app.get("/health/vector-db", tags=["health"])
-@app.get("/health/milvus", tags=["health"], deprecated=True, include_in_schema=False)
 async def health_vector_db():
-    """Health check for the configured local vector database."""
+    """Health check for the local OpenSearch vector database."""
     try:
         current_agent = await get_or_init_agent()
         current_settings = settings if settings else get_settings()
 
-        collections = current_agent.vector_db.client.list_collections(
-            db_name=current_settings.milvus_db_name
+        healthy = bool(
+            hasattr(current_agent, "opensearch_healthy") and current_agent.opensearch_healthy()
         )
+        if not healthy:
+            raise RuntimeError("OpenSearch backend is not responding")
 
+        collections = (
+            current_agent.list_collections() if hasattr(current_agent, "list_collections") else []
+        )
         return {
             "service": "vector_db",
             "status": "healthy",
-            "host": current_settings.milvus_host,
-            "port": current_settings.milvus_port,
-            "database": current_settings.milvus_db_name,
+            "host": current_settings.opensearch_local_host,
+            "port": current_settings.opensearch_local_port,
+            "backend": "opensearch",
             "collections": collections,
             "collection_count": len(collections),
         }

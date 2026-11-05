@@ -11,7 +11,6 @@ from unittest.mock import Mock
 import pytest
 
 from src.config import Settings
-from src.tools.response_cache import MilvusResponseCache
 
 # ============================================================================
 # FIXTURES
@@ -25,16 +24,13 @@ def settings():
         ollama_host="http://localhost:11434",
         ollama_model="qwen2.5:0.5b",
         ollama_embed_model="nomic-embed-text",
-        milvus_host="localhost",
-        milvus_port=19530,
-        milvus_db_name="test_db",
     )
 
 
 @pytest.fixture
 def mock_response_cache():
     """Fixture providing a mocked response cache."""
-    cache = Mock(spec=MilvusResponseCache)
+    cache = Mock()
     cache.store_response = Mock(return_value=True)
     cache.get_response = Mock(return_value=None)
     return cache

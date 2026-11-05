@@ -6,8 +6,6 @@ properly initialize with the `system_prompt` parameter (Strands 1.27.0+).
 This is a CRITICAL test suite for validating the framework API migration.
 """
 
-from unittest.mock import patch
-
 import pytest
 from strands import Agent
 
@@ -26,9 +24,6 @@ def settings():
         ollama_host="http://localhost:11434",
         ollama_model="qwen2.5:0.5b",
         ollama_embed_model="nomic-embed-text",
-        milvus_host="localhost",
-        milvus_port=19530,
-        milvus_db_name="test_db",
     )
 
 
@@ -196,24 +191,13 @@ class TestPromptClassStructure:
 class TestAgentCreationWithMocks:
     """Test agent creation functions with mocked dependencies."""
 
-    @patch("src.agents.strands_graph_agent.OllamaClient")
-    @patch("src.agents.strands_graph_agent.MilvusVectorDB")
-    def test_create_rag_graph_builds_config_dict(self, mock_milvus, mock_ollama, settings):
-        """Test that create_rag_graph returns a valid graph configuration."""
-        # Skip actual graph creation to avoid Strands framework instantiation
-        # Just verify that the graph config structure would be correct
+    def test_create_rag_graph_includes_all_nodes(self, settings):
+        """Test that RAG graph includes all required nodes.
 
-        # The function should return a dict with nodes and edges
-        # This is structurally validated if the function doesn't raise exceptions
-        # Full integration test below
-
-    @patch("src.agents.strands_graph_agent.MilvusVectorDB")
-    @patch("src.agents.strands_graph_agent.OllamaClient")
-    def test_create_rag_graph_includes_all_nodes(self, mock_ollama, mock_milvus, settings):
-        """Test that RAG graph includes all required nodes."""
-        # Verify the graph has the expected nodes defined
-        # Actual nodes tested: topic_check, security_check, rag_worker, rejection handlers
-        pass  # Full graph testing done in integration tests
+        Full wiring is exercised in test_strands_graph_agent.py and
+        test_local_opensearch_wiring.py with injected backends.
+        """
+        # Placeholder: graph wiring coverage lives in the dedicated graph tests.
 
 
 # ============================================================================

@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 """Interactive Q&A chatbot using Strands RAG Agent."""
 
+import asyncio
 import logging
 import sys
 from pathlib import Path
-from src.config.settings import get_settings
-from src.agents.strands_graph_agent import StrandsGraphRAGAgent
 
 # Load environment variables from .env file (required for TAVILY_API_KEY and other secrets)
 from dotenv import load_dotenv
+
+from src.agents.local_opensearch_agent import LocalOpenSearchAgent
+from src.config.settings import get_settings
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -40,21 +42,24 @@ def main():
     settings = get_settings()
 
     # Check Ollama availability
-    logger.info("Initializing StrandsGraphRAGAgent...")
+    logger.info("Initializing LocalOpenSearchAgent...")
     try:
-        agent = StrandsGraphRAGAgent(settings=settings)
+        agent = LocalOpenSearchAgent(settings=settings)
     except Exception as e:
         logger.error(f"Failed to initialize agent: {e}")
         sys.exit(1)
 
-    if not agent.ollama_client.is_available():
+    if not agent.ollama_client or not agent.ollama_client.is_available():
         logger.error("✗ Ollama is not available")
         logger.error(f"  Please ensure Ollama is running at {settings.ollama_host}")
         sys.exit(1)
 
     logger.info("✓ Ollama is available")
-    logger.info(f"✓ Milvus connected to {settings.milvus_host}:{settings.milvus_port}")
-    logger.info(f"✓ Database: {settings.milvus_db_name}")
+    logger.info(
+        "✓ OpenSearch (local %s:%s)",
+        settings.opensearch_local_host,
+        settings.opensearch_local_port,
+    )
 
     # Default collection for queries
     collection_name = settings.ollama_collection_name
@@ -82,17 +87,20 @@ def main():
 
                 if user_input.lower() == "/collections":
                     print(f"Using collection: {collection_name}")
-                    print(f"Available databases: {settings.milvus_db_name}")
+                    print(f"Available indexes: {agent.list_collections()}")
                     continue
 
                 # Answer the question
                 print("\nAssistant: ", end="", flush=True)
                 try:
-                    answer, sources = agent.answer_question(
-                        collection_name=collection_name,
-                        question=user_input,
-                        top_k=5,
+                    result = asyncio.run(
+                        agent.answer_question(
+                            collection_name=collection_name,
+                            question=user_input,
+                            top_k=5,
+                        )
                     )
+                    answer = result["answer"]
                     print(answer)
                     print()
                 except Exception as e:

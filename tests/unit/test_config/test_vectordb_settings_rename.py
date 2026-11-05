@@ -1,13 +1,11 @@
-"""Tests for the vendor-neutral vector-tuning settings rename.
+"""Tests for the vendor-neutral vector-tuning settings.
 
-Phase 1 of the OpenSearch migration renames the engine-agnostic HNSW/search
-tuning settings from ``milvus_*`` to ``vectordb_*`` while still accepting the
-old ``MILVUS_*`` env vars as deprecated aliases. These tests verify:
+The engine-agnostic HNSW/search tuning settings use the ``vectordb_*`` names
+and ``VECTORDB_*`` env vars. The deprecated ``MILVUS_*`` aliases were removed in
+Phase 2 of the OpenSearch migration. These tests verify:
 
 - defaults are unchanged;
-- the new ``VECTORDB_*`` env var sets the field;
-- the old ``MILVUS_*`` env var still sets the field (deprecated alias);
-- ``VECTORDB_*`` wins when both are set.
+- the ``VECTORDB_*`` env var sets the field.
 
 Env vars are set via monkeypatch and a fresh ``Settings()`` is constructed each
 time (pydantic-settings reads the environment at instantiation).
@@ -38,16 +36,10 @@ def test_new_vectordb_env_sets_field(monkeypatch: pytest.MonkeyPatch) -> None:
     assert s.vectordb_hnsw_m == 48
 
 
-def test_old_milvus_env_still_works_as_alias(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Deprecated alias path: a pre-migration .env with MILVUS_* must still apply.
+def test_old_milvus_env_is_no_longer_an_alias(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The deprecated MILVUS_* aliases were removed; a stale MILVUS_SEARCH_EF must
+    # NOT change the vectordb_search_ef field (it falls back to the default).
     monkeypatch.delenv("VECTORDB_SEARCH_EF", raising=False)
     monkeypatch.setenv("MILVUS_SEARCH_EF", "200")
     s = Settings()
-    assert s.vectordb_search_ef == 200
-
-
-def test_new_name_wins_when_both_set(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("VECTORDB_SEARCH_EF", "256")
-    monkeypatch.setenv("MILVUS_SEARCH_EF", "32")
-    s = Settings()
-    assert s.vectordb_search_ef == 256
+    assert s.vectordb_search_ef == 64

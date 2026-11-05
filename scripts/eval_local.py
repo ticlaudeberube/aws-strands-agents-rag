@@ -2,7 +2,7 @@
 """Offline RAG evaluation harness for Local Mode, logged to MLflow.
 
 Runs a fixed, tagged question set (``eval/questions.jsonl``) through the real
-Local Mode pipeline (``StrandsGraphRAGAgent``, Ollama + Milvus) and logs, per
+Local Mode pipeline (``LocalOpenSearchAgent``, Ollama + OpenSearch) and logs, per
 question and in aggregate, the signals the pipeline already produces —
 grounding score, confidence score, tier used, whether it refused, whether a
 caveat fired, latency — plus a pass/fail against each question's
@@ -309,12 +309,12 @@ async def _answer_with_trace(agent: Any, question: str, top_k: int) -> tuple[str
     try:
         span_cm = mlflow.start_span(name="answer_question", span_type="AGENT")
     except Exception:  # noqa: BLE001 - tracing must never break the eval
-        answer, sources = await agent.answer_question(question=question, top_k=top_k)
+        answer, sources = await agent.answer_question_no_cache(question=question, top_k=top_k)
         return answer, sources
 
     with span_cm as span:
         span.set_inputs({"question": question, "top_k": top_k})
-        answer, sources = await agent.answer_question(question=question, top_k=top_k)
+        answer, sources = await agent.answer_question_no_cache(question=question, top_k=top_k)
         span.set_outputs({"answer": answer, "num_sources": len(sources)})
         return answer, sources
 
@@ -368,9 +368,9 @@ async def _run_one(agent: Any, item: dict, cfg: EvalConfig, judge_client: Any) -
 
 def _build_agent(settings: Any) -> Any:
     """Construct the Local Mode agent, raising a clear error if deps are missing."""
-    from src.agents.strands_graph_agent import StrandsGraphRAGAgent
+    from src.agents.local_opensearch_agent import LocalOpenSearchAgent
 
-    return StrandsGraphRAGAgent(settings)
+    return LocalOpenSearchAgent(settings)
 
 
 def _resolve_tracking_uri(cfg_uri: str | None) -> str | None:
@@ -405,8 +405,8 @@ async def run_eval(cfg: EvalConfig) -> dict[str, float]:
 
     settings = Settings()
     # Override the HNSW search-time beam width for this run when sweeping ef.
-    # Read at search time by MilvusVectorDB.search, so setting it before the
-    # agent is built applies to every retrieval in the run.
+    # Read at search time by the vector store, so setting it before the agent is
+    # built applies to every retrieval in the run.
     if cfg.search_ef is not None:
         settings.vectordb_search_ef = cfg.search_ef
     items = load_questions(cfg.questions_path)

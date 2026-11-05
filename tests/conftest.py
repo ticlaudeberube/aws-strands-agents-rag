@@ -43,23 +43,22 @@ except ImportError:
     # Hypothesis not installed yet; property tests will add it as a dependency.
     pass
 
-from src.agents.strands_graph_agent import StrandsGraphRAGAgent
 from src.config.settings import Settings
 from src.mcp.mcp_server import RAGAgentMCPServer
 
 # ---------------------------------------------------------------------------
-# Milvus availability detection
+# Live vector-DB availability detection
 #
-# Integration tests that need a live Milvus server are skipped automatically
+# Integration tests that need a live vector database are skipped automatically
 # when the server is unreachable. This keeps the suite (and the pre-push
-# pytest hook) green on machines without a running Milvus, instead of failing
-# with "Milvus connection failed at localhost:19530".
+# pytest hook) green on machines without a running backend. The Milvus engine
+# has been removed, so the local backend is OpenSearch.
 # ---------------------------------------------------------------------------
 
 
 @lru_cache(maxsize=None)
-def _milvus_reachable(host: str, port: int, timeout: float = 1.0) -> bool:
-    """Return True if a TCP connection to the Milvus server succeeds.
+def _tcp_reachable(host: str, port: int, timeout: float = 1.0) -> bool:
+    """Return True if a TCP connection to ``host:port`` succeeds.
 
     Result is cached per (host, port) so we probe at most once per session.
     """
@@ -71,10 +70,15 @@ def _milvus_reachable(host: str, port: int, timeout: float = 1.0) -> bool:
 
 
 def milvus_available() -> bool:
-    """Check whether the configured Milvus server is reachable."""
+    """Whether a live local vector database is reachable.
+
+    The Milvus engine has been removed; the local backend is OpenSearch. This
+    keeps the historical name used by the ``requires_milvus`` marker and the
+    auto-skip logic, now probing the local OpenSearch endpoint.
+    """
     try:
         settings = Settings()
-        return _milvus_reachable(settings.milvus_host, settings.milvus_port)
+        return _tcp_reachable(settings.opensearch_local_host, settings.opensearch_local_port)
     except Exception:
         return False
 
@@ -83,8 +87,8 @@ def pytest_configure(config: pytest.Config) -> None:
     """Register custom markers."""
     config.addinivalue_line(
         "markers",
-        "requires_milvus: mark test as requiring a reachable Milvus server; "
-        "skipped automatically when Milvus is unavailable.",
+        "requires_milvus: mark test as requiring a reachable local vector database; "
+        "skipped automatically when the backend is unavailable.",
     )
 
 
@@ -129,30 +133,8 @@ def test_settings():
         ollama_host="http://localhost:11434",
         ollama_timeout=30,
         ollama_pool_size=5,
-        milvus_host="localhost",
-        milvus_port=19530,
-        milvus_user="root",
-        milvus_password="Milvus",
-        milvus_timeout=30,
-        milvus_pool_size=10,
-        milvus_db_name="test_db",
         agent_cache_size=100,
     )
-
-
-@pytest.fixture
-def strands_agent(test_settings):
-    """Create a StrandsGraphRAGAgent for testing."""
-    try:
-        agent = StrandsGraphRAGAgent(test_settings)
-        yield agent
-    finally:
-        # Cleanup
-        try:
-            if hasattr(agent, "close"):
-                agent.close()
-        except Exception as e:
-            print(f"Cleanup error: {e}")
 
 
 @pytest.fixture

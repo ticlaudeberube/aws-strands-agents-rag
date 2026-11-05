@@ -17,20 +17,15 @@ logger = logging.getLogger(__name__)
 
 
 def _build_agent(settings: Settings) -> Any:
-    """Build the MCP server's backing agent for the selected local backend.
+    """Build the MCP server's backing agent.
 
-    Mirrors api_server's selection: OpenSearch Local Mode uses the
-    LocalOpenSearchAgent (which implements the retrieval/answer/KB primitives
-    the skills bind to); otherwise the Milvus StrandsGraphRAGAgent. Imported
-    lazily so local-Milvus does not require opensearch-py and vice versa.
+    Local Mode is OpenSearch-backed: the LocalOpenSearchAgent implements the
+    retrieval/answer/KB primitives the skills bind to. Imported lazily so the
+    module does not require opensearch-py at import time.
     """
-    if settings.local_vector_backend == "opensearch":
-        from src.agents.local_opensearch_agent import LocalOpenSearchAgent
+    from src.agents.local_opensearch_agent import LocalOpenSearchAgent
 
-        return LocalOpenSearchAgent(settings)
-    from src.agents.strands_graph_agent import StrandsGraphRAGAgent
-
-    return StrandsGraphRAGAgent(settings)
+    return LocalOpenSearchAgent(settings)
 
 
 class RAGAgentMCPServer:

@@ -1,11 +1,10 @@
-"""Tests for the create_rag_graph Local-Mode vector-backend branching.
+"""Tests for the create_rag_graph Local-Mode OpenSearch wiring.
 
-Phase 1 adds an OpenSearch sub-branch to the local path. These tests assert the
-wiring for `local_vector_backend == "opensearch"` (OpenSearch client as both
-vector_store and semantic_cache, Ollama llm, cache per REDIS_CACHE_ENABLED,
-kb_index = rag-kb) and guard that the default Milvus branch is unchanged.
+Local Mode is OpenSearch-backed (the Milvus engine was removed). These tests
+assert the wiring (OpenSearch client as both vector_store and semantic_cache,
+Ollama llm, cache per REDIS_CACHE_ENABLED, kb_index = rag-kb).
 
-Backends are injected so no live Ollama/OpenSearch/Milvus/Redis is needed.
+Backends are injected so no live Ollama/OpenSearch/Redis is needed.
 """
 
 from __future__ import annotations
@@ -91,29 +90,3 @@ def test_local_opensearch_uses_redis_when_enabled() -> None:
         redis_cache=RedisCache.for_local(Settings()),
     )
     assert isinstance(graph["backends"]["cache"], RedisCache)
-
-
-def test_local_milvus_branch_unchanged_regression() -> None:
-    # Default local backend is milvus; wiring must be Milvus + MilvusResponseCache
-    # + InMemory + "milvus_docs", exactly as before this feature. Patch the
-    # Milvus clients (matching the existing suite) so no live Milvus is needed.
-    from unittest.mock import patch
-
-    settings = Settings()
-    settings.deployment_mode = "local"
-    settings.local_vector_backend = "milvus"  # explicit (default is now opensearch)
-
-    with (
-        patch("src.agents.strands_graph_agent.MilvusVectorDB"),
-        patch("src.agents.strands_graph_agent.OllamaClient"),
-        patch("src.agents.strands_graph_agent.MilvusResponseCache") as mock_cache,
-        patch("src.agents.strands_graph_agent.Agent"),
-    ):
-        graph = create_rag_graph(settings=settings)
-
-    backends = graph["backends"]
-    assert backends["vector_store"] is not None
-    assert isinstance(backends["cache"], InMemoryCache)
-    # L4 cache is the Milvus-backed response cache (the patched class instance).
-    assert backends["semantic_cache"] is mock_cache.return_value
-    assert graph["kb_index"] == "milvus_docs"

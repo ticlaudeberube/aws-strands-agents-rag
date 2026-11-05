@@ -4,35 +4,10 @@ import logging
 import os
 from typing import Literal
 
-from pydantic import AliasChoices, Field
+from pydantic import Field
 from pydantic_settings import BaseSettings
 
 logger = logging.getLogger(__name__)
-
-# Deprecated MILVUS_* env vars that are still accepted as aliases for the
-# renamed VECTORDB_* settings during Phase 1 of the OpenSearch migration. A
-# one-time warning is logged when any are present so users can migrate. These
-# aliases (and this check) are removed in Phase 2.
-_DEPRECATED_MILVUS_ENV_ALIASES = (
-    "MILVUS_INDEX_TYPE",
-    "MILVUS_METRIC_TYPE",
-    "MILVUS_HNSW_M",
-    "MILVUS_HNSW_EF_CONSTRUCTION",
-    "MILVUS_IVF_NLIST",
-    "MILVUS_SEARCH_EF",
-)
-
-
-def _warn_deprecated_milvus_env() -> None:
-    """Log a one-time deprecation warning if any MILVUS_* tuning var is set."""
-    present = [name for name in _DEPRECATED_MILVUS_ENV_ALIASES if os.environ.get(name)]
-    if present:
-        logger.warning(
-            "Deprecated env var(s) %s are read as aliases for their VECTORDB_* "
-            "equivalents during the OpenSearch migration and will be removed. "
-            "Rename MILVUS_<X> -> VECTORDB_<X>.",
-            ", ".join(sorted(present)),
-        )
 
 
 class Settings(BaseSettings):
@@ -86,48 +61,35 @@ class Settings(BaseSettings):
     ollama_temperature: float = 0.1  # LLM temperature for generation
     ollama_max_tokens: int = 2000  # Maximum tokens for LLM generation
 
-    # Milvus Configuration
-    milvus_host: str = "localhost"
-    milvus_port: int = 19530
-    milvus_db_name: str = "knowledge_base"
-    loader_milvus_db_name: str = "knowledge_base"
-    milvus_user: str = "root"
-    milvus_password: str = "Milvus"
-    milvus_timeout: int = 30  # Request timeout in seconds
-    milvus_pool_size: int = 10  # Connection pool size
-    # Engine-agnostic vector tuning knobs. Renamed off the vendor-specific
-    # ``milvus_`` prefix to ``vectordb_`` (both backends read them). The old
-    # ``MILVUS_*`` env vars remain accepted as deprecated aliases during Phase 1.
+    # Engine-agnostic vector tuning knobs. Both backends read them.
     vectordb_index_type: str = Field(
         default="HNSW",
-        validation_alias=AliasChoices("VECTORDB_INDEX_TYPE", "MILVUS_INDEX_TYPE"),
+        validation_alias="VECTORDB_INDEX_TYPE",
         description="Vector index type (HNSW, IVF_FLAT, FLAT).",
     )
     vectordb_metric_type: str = Field(
         default="COSINE",
-        validation_alias=AliasChoices("VECTORDB_METRIC_TYPE", "MILVUS_METRIC_TYPE"),
+        validation_alias="VECTORDB_METRIC_TYPE",
         description="Similarity metric (COSINE, L2, IP).",
     )
     vectordb_hnsw_m: int = Field(
         default=30,
-        validation_alias=AliasChoices("VECTORDB_HNSW_M", "MILVUS_HNSW_M"),
+        validation_alias="VECTORDB_HNSW_M",
         description="HNSW max connections per element (graph connectivity).",
     )
     vectordb_hnsw_ef_construction: int = Field(
         default=200,
-        validation_alias=AliasChoices(
-            "VECTORDB_HNSW_EF_CONSTRUCTION", "MILVUS_HNSW_EF_CONSTRUCTION"
-        ),
+        validation_alias="VECTORDB_HNSW_EF_CONSTRUCTION",
         description="HNSW build-time beam width (ef_construction).",
     )
     vectordb_ivf_nlist: int = Field(
         default=128,
-        validation_alias=AliasChoices("VECTORDB_IVF_NLIST", "MILVUS_IVF_NLIST"),
+        validation_alias="VECTORDB_IVF_NLIST",
         description="IVF_FLAT nlist parameter (number of clusters).",
     )
     vectordb_search_ef: int = Field(
         default=64,
-        validation_alias=AliasChoices("VECTORDB_SEARCH_EF", "MILVUS_SEARCH_EF"),
+        validation_alias="VECTORDB_SEARCH_EF",
         description="HNSW search-time beam width (ef). Higher = better recall, slower. >= top_k.",
     )
 
@@ -425,5 +387,4 @@ class Settings(BaseSettings):
 
 def get_settings() -> Settings:
     """Get application settings."""
-    _warn_deprecated_milvus_env()
     return Settings()

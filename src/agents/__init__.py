@@ -1,8 +1,9 @@
 """Agents module with Strands integration."""
 
-from .strands_graph_agent import StrandsGraphRAGAgent
+from .local_opensearch_agent import LocalOpenSearchAgent
 
-# Backward compatibility: export graph agent as main RAG agent
-StrandsRAGAgent = StrandsGraphRAGAgent
+# Backward-compatibility alias: the OpenSearch-backed local agent is the main
+# RAG agent entrypoint after the Milvus engine removal.
+StrandsRAGAgent = LocalOpenSearchAgent
 
-__all__ = ["StrandsRAGAgent", "StrandsGraphRAGAgent"]
+__all__ = ["StrandsRAGAgent", "LocalOpenSearchAgent"]

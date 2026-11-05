@@ -1,7 +1,7 @@
 {
-  "name": "milvus-rag-chatbot",
+  "name": "vectorDB-rag-chatbot",
   "version": "1.0.0",
-  "description": "React chatbot for Milvus RAG with streaming responses",
+  "description": "React chatbot for vectorDB RAG with streaming responses",
   "private": true,
   "dependencies": {
     "@types/dompurify": "^3.0.5",

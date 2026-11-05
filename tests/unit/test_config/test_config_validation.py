@@ -28,15 +28,7 @@ def test_settings():
                 "ollama_pool_size",
                 "ollama_num_threads",
             ],
-            "Milvus Configuration": [
-                "milvus_host",
-                "milvus_port",
-                "milvus_db_name",
-                "loader_milvus_db_name",
-                "milvus_user",
-                "milvus_password",
-                "milvus_timeout",
-                "milvus_pool_size",
+            "Vector DB Configuration": [
                 "vectordb_index_type",
                 "vectordb_metric_type",
                 "vectordb_hnsw_m",
@@ -93,7 +85,7 @@ def test_settings():
                 try:
                     value = getattr(settings, field)
                     # Mask sensitive values
-                    if field in ["milvus_password", "aws_secret_access_key", "tavily_api_key"]:
+                    if field in ["aws_secret_access_key", "tavily_api_key"]:
                         display_value = "***" if value else "NOT SET"
                     elif isinstance(value, bool):
                         display_value = value
@@ -120,7 +112,6 @@ def test_settings():
 
         # Validate critical settings
         critical_checks = [
-            ("Milvus connectivity", lambda: settings.milvus_host and settings.milvus_port > 0),
             (
                 "Ollama connectivity",
                 lambda: (

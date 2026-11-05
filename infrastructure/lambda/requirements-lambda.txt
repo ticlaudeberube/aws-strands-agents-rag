@@ -1,7 +1,7 @@
 # Runtime dependencies for the SERVERLESS Lambda deployment package.
 #
 # This is intentionally the serverless-runtime subset — NOT the full project
-# dependency set. Local-Mode-only deps (ollama, pymilvus, fastapi, uvicorn) are
+# dependency set. Local-Mode-only deps (ollama, fastapi, uvicorn) are
 # excluded to keep the package small and avoid arm64-wheel issues; the Lambda
 # handlers (agentcore_handler, indexing_handler) and the shared src/ code they
 # import only use the libraries below.

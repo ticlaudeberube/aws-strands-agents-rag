@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
+
 from src.agents.strands_graph_agent import create_rag_graph
 from src.config.settings import Settings
 from src.tools.in_memory_cache import InMemoryCache
@@ -81,6 +83,7 @@ def test_local_opensearch_uses_inmemory_cache_by_default() -> None:
 
 
 def test_local_opensearch_uses_redis_when_enabled() -> None:
+    pytest.importorskip("redis", reason="redis-py (serverless extra) not installed")
     from src.tools.redis_cache import RedisCache
 
     graph = create_rag_graph(

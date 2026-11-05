@@ -44,6 +44,7 @@ def test_opensearch_cloud_path_untouched_without_for_local() -> None:
 
 
 def test_redis_for_local_builds_non_tls_client(monkeypatch: pytest.MonkeyPatch) -> None:
+    pytest.importorskip("redis", reason="redis-py (serverless extra) not installed")
     monkeypatch.setenv("REDIS_ENDPOINT", "localhost:6380")
     cache = RedisCache.for_local(Settings())
 
@@ -57,6 +58,7 @@ def test_redis_for_local_builds_non_tls_client(monkeypatch: pytest.MonkeyPatch) 
 
 
 def test_redis_for_local_defaults_endpoint() -> None:
+    pytest.importorskip("redis", reason="redis-py (serverless extra) not installed")
     cache = RedisCache.for_local(Settings())
     kwargs = cache.client.get_connection_kwargs()
     assert kwargs["host"] == "localhost"

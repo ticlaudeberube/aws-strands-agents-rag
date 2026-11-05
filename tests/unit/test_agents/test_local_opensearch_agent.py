@@ -1,7 +1,7 @@
 """Tests for the LocalOpenSearchAgent facade (Phase 1 of the migration).
 
-The facade is a duck-typed drop-in for StrandsGraphRAGAgent that delegates
-answering to the graph's ``shared_route``. These tests verify delegation and
+The facade is the local-mode agent that delegates answering to the graph's
+``shared_route``. These tests verify delegation and
 the degraded-mode behavior when the local OpenSearch container is unreachable,
 using injected fakes (no live OpenSearch/Ollama).
 """

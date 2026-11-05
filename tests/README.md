@@ -87,7 +87,7 @@ Tests are organized using pytest markers. Run specific test categories:
 # Duration: ~5-10 seconds
 pytest -m unit
 
-# Run only integration tests (requires Ollama + Milvus services)
+# Run only integration tests (requires Ollama + OpenSearch services)
 # Duration: ~20-30 seconds
 pytest -m integration
 
@@ -296,7 +296,7 @@ def test_ollama_embedding_generation():
 def test_end_to_end_rag_pipeline(strands_agent, test_settings):
     """Test the complete RAG pipeline.
 
-    This test requires actual Milvus and Ollama services running.
+    This test requires actual OpenSearch and Ollama services running.
     """
     # ===== ARRANGE =====
     test_question = "What is Milvus?"
@@ -428,7 +428,7 @@ test_<class/function>_<scenario>_<expected_result>
 Examples:
 - test_security_detection_jailbreak_returns_rejected()
 - test_ollama_client_connection_timeout_raises_error()
-- test_milvus_search_empty_results_returns_empty_list()
+- test_vector_search_empty_results_returns_empty_list()
 - test_api_health_check_returns_200()
 ```
 
@@ -445,7 +445,7 @@ Examples:
 
 **Characteristics**:
 - Test one behavior at a time
-- Mock all external dependencies (Ollama, Milvus, APIs)
+- Mock all external dependencies (Ollama, OpenSearch, APIs)
 - Fast, repeatable, deterministic
 - Can run without services running
 
@@ -470,7 +470,7 @@ pytest -m unit  # Every unit test, no services needed
 
 **Purpose**: Test multiple components working together
 **Duration**: Slower (1-5s per test)
-**Dependencies**: Requires actual services (Ollama, Milvus)
+**Dependencies**: Requires actual services (Ollama, OpenSearch)
 **When to use**: Verify components work together correctly
 
 **Characteristics**:
@@ -492,7 +492,7 @@ def test_question_to_answer_flow(strands_agent):
 
 **Run**:
 ```bash
-pytest -m integration  # Requires Ollama + Milvus running
+pytest -m integration  # Requires Ollama + OpenSearch running
 ```
 
 ---
@@ -708,13 +708,12 @@ pytest --cov=src --cov-fail-under=70
 
 #### Low Coverage (<50%) ❌
 - **src/tools/web_search.py**: 47% (21/45 statements)
-- **src/tools/milvus_client.py**: 27% (24/89 statements)
+- **src/tools/opensearch_client.py**: 27% (24/89 statements)
 - **src/mcp/mcp_server.py**: 18% (11/61 statements)
-- **src/tools/response_cache.py**: 13% (8/61 statements)
 
 Check coverage for specific file:
 ```bash
-pytest --cov=src/tools/milvus_client --cov-report=term-missing
+pytest --cov=src/tools/opensearch_client --cov-report=term-missing
 ```
 
 ---
@@ -737,28 +736,27 @@ pytest --cov=src/tools/milvus_client --cov-report=term-missing
 | Module | Current | Target | Gap | Priority |
 |--------|---------|--------|-----|----------|
 | mcp_server.py | 18% | 60% | +42% | 🔴 High |
-| response_cache.py | 13% | 60% | +47% | 🔴 High |
 | web_search.py | 47% | 75% | +28% | 🟡 Medium |
-| milvus_client.py | 27% | 70% | +43% | 🔴 High |
+| opensearch_client.py | 27% | 70% | +43% | 🔴 High |
 
 **Strategy**:
 - Add error path tests to low-coverage modules
 - Test cache hit/miss scenarios
-- Add Milvus client edge cases and failures
+- Add OpenSearch client edge cases and failures
 
 **Example tests to add**:
 ```python
-def test_response_cache_miss_returns_none():
+def test_in_memory_cache_miss_returns_none():
     """Cache miss should return None."""
-    cache = ResponseCache()
-    result = cache.get("unknown_key")
+    cache = InMemoryCache()
+    result = cache.get_answer("unknown_key")
     assert result is None
 
-def test_milvus_connection_failure_raises_error():
-    """Connection failure should raise MilvusConnectionError."""
-    with pytest.raises(MilvusConnectionError):
-        client = MilvusVectorDB(host="invalid_host")
-        client.search(...)
+def test_opensearch_connection_failure_degrades_gracefully():
+    """Connection failure should degrade to empty results, not crash."""
+    agent = LocalOpenSearchAgent(settings_with_bad_host)
+    context, sources = agent.retrieve_context("rag-kb", "query")
+    assert context == [] and sources == []
 ```
 
 #### Phase 2: Medium Effort (Target: 65%)
@@ -846,14 +844,13 @@ def test_settings() -> Settings:
 
     Provides:
     - ollama_host: http://localhost:11434
-    - milvus_host: localhost (port 19530)
-    - milvus_db_name: test_db
+    - opensearch_local_host: localhost (port 9200)
     - Disabled in CI to prevent service requirements
     """
 
 @pytest.fixture
-def strands_agent(test_settings) -> StrandsGraphRAGAgent:
-    """Initialized graph RAG agent for testing.
+def strands_agent(test_settings) -> LocalOpenSearchAgent:
+    """Initialized local RAG agent for testing.
 
     Provides:
     - Fully configured 3-node agent
@@ -960,12 +957,8 @@ Before running integration tests, start required services:
 # Start Ollama (required for embeddings + generation)
 ollama serve &
 
-# Start Milvus (required for vector search)
-# Using Docker (recommended)
-docker run -d -p 19530:19530 -p 9091:9091 milvusdb/milvus:latest
-
-# Or using Docker Compose
-docker-compose -f docker/docker-compose.yml up -d milvus
+# Start OpenSearch (required for vector search)
+docker compose -f docker/docker-compose.yml up -d opensearch
 ```
 
 ### Configuring Test Services
@@ -1014,18 +1007,17 @@ from unittest.mock import MagicMock, patch
 def test_search_with_empty_db():
     """Test search when database returns no results."""
     # ===== ARRANGE =====
-    with patch('src.tools.milvus_client.MilvusClient') as mock_milvus:
-        mock_milvus.return_value.search.return_value = []
+    with patch('src.tools.opensearch_client.OpenSearchClient') as mock_os:
+        mock_os.return_value.knn_search.return_value = []
 
-        from src.tools.milvus_client import MilvusVectorDB
-        client = MilvusVectorDB()
+        client = mock_os.return_value
 
         # ===== ACT =====
-        results = client.search([0.1, 0.2, 0.3])
+        results = client.knn_search("rag-kb", [0.1, 0.2, 0.3])
 
         # ===== ASSERT =====
         assert results == []
-        assert mock_milvus.return_value.search.called
+        assert mock_os.return_value.knn_search.called
 ```
 
 ### Pattern 3: Testing Exceptions

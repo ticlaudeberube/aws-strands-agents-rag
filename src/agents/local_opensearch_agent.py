@@ -1,22 +1,20 @@
 """Local-Mode agent facade backed by OpenSearch (Phase 1 of the migration).
 
-When ``DEPLOYMENT_MODE=local`` and ``LOCAL_VECTOR_BACKEND=opensearch``,
-``api_server.py`` uses this facade instead of :class:`StrandsGraphRAGAgent`
-(which is Milvus-native). The facade exposes the same method surface the chat
-endpoints call, but delegates answering to the backend-agnostic
-``shared_route`` built by :func:`create_rag_graph` — the SAME pipeline the
-serverless Lambda uses — wired with Ollama + local OpenSearch (+ optional local
-Redis). This mirrors the proven ``ServerlessAgentShim`` in
-``scripts/serverless_api_server.py`` but with local Ollama backends.
+When ``DEPLOYMENT_MODE=local`` (and ``LOCAL_VECTOR_BACKEND=opensearch``, the only
+supported local engine), ``api_server.py`` uses this facade as the local-mode
+agent. It exposes the same method surface the chat endpoints call, but delegates
+answering to the backend-agnostic ``shared_route`` built by
+:func:`create_rag_graph` — the SAME pipeline the serverless Lambda uses — wired
+with Ollama + local OpenSearch (+ optional local Redis). This mirrors the proven
+``ServerlessAgentShim`` in ``scripts/serverless_api_server.py`` but with local
+Ollama backends.
 
 Design notes:
 - No Bedrock, no AWS. Embeddings + generation are Ollama; retrieval + Layer 4
   cache are the local OpenSearch container; Layer 2/3 is InMemory or local Redis
   per ``REDIS_CACHE_ENABLED`` (both resolved inside ``create_rag_graph``).
-- Retrieval goes through ``VectorStore.knn_search`` (the protocol path), NOT the
-  Milvus-native ``.search`` path, so this facade is byte-compatible with the
-  serverless answer path.
-- ``StrandsGraphRAGAgent`` is NOT modified; this is a separate class.
+- Retrieval goes through ``VectorStore.knn_search`` (the protocol path), so this
+  facade is byte-compatible with the serverless answer path.
 """
 
 from __future__ import annotations
@@ -33,13 +31,13 @@ __all__ = ["LocalOpenSearchAgent"]
 
 
 class _OpenSearchCacheQueryClient:
-    """Milvus-``client``-shaped shim exposing ``query(...)`` over rag-cache.
+    """``client``-shaped shim exposing ``query(...)`` over rag-cache.
 
     GET /v1/cache/responses/{id} calls
     ``vector_db.client.query(collection_name=..., db_name=..., output_fields=...,
     limit=...)`` expecting ``{"id","text","metadata"}`` entities. Maps the
     OpenSearch ``rag-cache`` docs (``question``/``answer``/``sources``) into that
-    shape so the Milvus-oriented endpoint works unchanged.
+    shape so the cache endpoint works unchanged.
     """
 
     def __init__(self, opensearch_client: Any) -> None:
@@ -110,7 +108,7 @@ class _OpenSearchQuestionLister:
 
 
 class _OpenSearchResponseCacheAdapter:
-    """Stands in for ``MilvusResponseCache`` for the cached-questions endpoints."""
+    """Response-cache adapter backing the cached-questions endpoints."""
 
     def __init__(self, opensearch_client: Any, settings: Settings) -> None:
         self.vector_db = _OpenSearchQuestionLister(opensearch_client)
@@ -139,7 +137,7 @@ class LocalOpenSearchAgent:
         try:
             self._opensearch = OpenSearchClient.for_local(settings)
             self._opensearch.ensure_indexes()
-        except Exception as exc:  # noqa: BLE001 - degrade like Milvus connect failure
+        except Exception as exc:  # noqa: BLE001 - degrade on connect failure
             self._opensearch = None  # type: ignore[assignment]
             self.initialization_error = f"OpenSearch connection failed: {exc}"
             logger.warning("Local OpenSearch unavailable, degraded mode: %s", exc)
@@ -290,8 +288,8 @@ class LocalOpenSearchAgent:
     # MCP-skill primitives (backend-agnostic, via OpenSearch + Ollama)   #
     # ------------------------------------------------------------------ #
     # These back the MCP server's retrieval/answer/KB skills. They operate
-    # through the OpenSearch VectorStore contract and the Ollama client — no
-    # Milvus. When OpenSearch is unavailable they degrade to empty/no-op.
+    # through the OpenSearch VectorStore contract and the Ollama client. When
+    # OpenSearch is unavailable they degrade to empty/no-op.
 
     def retrieve_context(
         self, collection_name: str, query: str, top_k: int = 5
@@ -300,7 +298,7 @@ class LocalOpenSearchAgent:
 
         Returns ``(context_chunks, sources)``. ``collection_name`` is accepted
         for interface parity but OpenSearch Local Mode uses the configured KB
-        index. Degrades to empty on any failure (mirrors the old Milvus agent).
+        index. Degrades to empty on any failure.
         """
         if self._opensearch is None or self.ollama_client is None:
             return [], []

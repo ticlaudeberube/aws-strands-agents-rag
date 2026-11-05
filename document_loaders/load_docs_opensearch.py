@@ -146,10 +146,7 @@ def process(insert_index=True, recreate=False):
         print(f"   Error: {e}")
         print("\n   To fix this:")
         print("   1. Start the local OpenSearch container:")
-        print(
-            "      docker compose -f docker/docker-compose.yml "
-            "--profile opensearch up -d opensearch"
-        )
+        print("      docker compose -f docker/docker-compose.yml up -d opensearch")
         print("   2. Wait a few seconds for OpenSearch to be ready")
         print("   3. Try again: python document_loaders/load_docs_opensearch.py")
         sys.exit(1)

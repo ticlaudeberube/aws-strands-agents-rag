@@ -25,7 +25,7 @@ This is the current, active documentation set for the project.
 ## Interfaces and tooling
 
 - MCP server: the `/api/mcp/*` REST surface (see [API_SERVER.md](API_SERVER.md)) exposes the agent's tools (`src/mcp/mcp_server.py`)
-- Document ingestion (Milvus): `uv run python document_loaders/load_milvus_docs_ollama.py` (see [HOW_TO.md](HOW_TO.md))
+- Document ingestion (corpus seed): `uv run python document_loaders/load_docs_opensearch.py` (see [HOW_TO.md](HOW_TO.md))
 - Document ingestion (local OpenSearch): `uv run python scripts/ingest_local_opensearch.py` (see [GETTING_STARTED.md](GETTING_STARTED.md))
 - Playwright E2E agents: three Kiro agents in `.kiro/agents/` (see [tests/README.md](../tests/README.md))
 

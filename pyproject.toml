@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "aws-strands-agents-rag"
 version = "0.1.0"
-description = "AWS Strands Agents RAG with Ollama and Milvus"
+description = "AWS Strands Agents RAG with Ollama and OpenSearch"
 requires-python = ">=3.10"
 authors = [
     {name = "Claude Berube", email = "cberube@ipsofactointeractif.ca"}
@@ -140,7 +140,7 @@ markers = [
     "async: Async tests",
     "slow: Slow running tests",
     "health: Health check tests",
-    "requires_milvus: Tests requiring a reachable Milvus server (auto-skipped when unavailable)",
+    "requires_vector_db: Tests requiring a reachable local vector database (auto-skipped when unavailable)",
 ]
 
 [tool.coverage.run]

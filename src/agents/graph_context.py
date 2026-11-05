@@ -94,8 +94,8 @@ class GraphContext:
     question: str
 
     # Knowledge base configuration
-    collection_name: str = "milvus_docs"
-    collections: list[str] = field(default_factory=lambda: ["milvus_docs"])
+    collection_name: str = "rag-kb"
+    collections: list[str] = field(default_factory=lambda: ["rag-kb"])
     top_k: int = 5
 
     # Execution flags

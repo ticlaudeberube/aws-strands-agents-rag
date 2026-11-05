@@ -185,7 +185,7 @@ Lambda rather than the placeholder.
 
 > The package is the serverless-runtime subset (see
 > `requirements-lambda.txt`) — not the full project deps — so Local-Mode-only
-> libraries (ollama, pymilvus, fastapi, uvicorn) are excluded to keep it small
+> libraries (ollama, fastapi, uvicorn) are excluded to keep it small
 > and avoid arm64-wheel issues. The `--platform` flags pull the correct arm64
 > wheels without emulation on any host.
 

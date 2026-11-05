@@ -24,7 +24,7 @@ class TestGraphContext:
         """Test creating context with default values."""
         ctx = GraphContext(question="What is Milvus?")
         assert ctx.question == "What is Milvus?"
-        assert ctx.collection_name == "milvus_docs"
+        assert ctx.collection_name == "rag-kb"
         assert ctx.top_k == 5
         assert ctx.is_time_sensitive is False
         assert ctx.topic_result is None

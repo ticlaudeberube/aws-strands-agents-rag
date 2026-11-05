@@ -2,7 +2,7 @@
 
 A dual-mode RAG system that currently supports both local development and AWS serverless deployment.
 
-- Local: FastAPI + Ollama + a vector DB (currently Milvus)
+- Local: FastAPI + Ollama + a local OpenSearch container
 - Serverless AWS: Lambda + AgentCore + Bedrock + OpenSearch Serverless
 
 ## Start here
@@ -62,7 +62,7 @@ User query
 
 | Mode | Use case | Active stack |
 |------|----------|--------------|
-| Local | development and debugging | FastAPI, Ollama, vector DB (currently Milvus) |
+| Local | development and debugging | FastAPI, Ollama, local OpenSearch |
 | Serverless AWS | production deployment | Lambda, AgentCore, Bedrock, OpenSearch |
 
 The source of truth for mode selection is `DEPLOYMENT_MODE` in `.env` and `src/config/settings.py`.
@@ -80,7 +80,7 @@ the runtime/serverless path.
 
 ```bash
 uv pip install -e '.[eval]'                               # install the eval extra once
-uv run scripts/eval_local.py --tracking-uri sqlite:///mlflow.db   # run the eval (needs Ollama + Milvus)
+uv run scripts/eval_local.py --tracking-uri sqlite:///mlflow.db   # run the eval (needs Ollama + OpenSearch)
 uv run mlflow ui --backend-store-uri sqlite:///mlflow.db --port 5001   # browse runs at http://127.0.0.1:5001
 ```
 

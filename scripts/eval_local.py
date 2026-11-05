@@ -32,7 +32,7 @@ Compare runs in the MLflow UI:
 
 The behaviour classification and scoring are pure functions (``classify_answer``,
 ``grade``, ``summarize``) so they can be unit-tested without MLflow, Ollama, or
-Milvus. See ``tests/unit/test_eval_local.py``.
+OpenSearch. See ``tests/unit/test_eval_local.py``.
 """
 
 from __future__ import annotations

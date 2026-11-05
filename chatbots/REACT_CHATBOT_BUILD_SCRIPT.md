@@ -84,9 +84,9 @@ The `build.sh` script provides a unified interface for React chatbot development
 - **Services Started**:
   - React: http://localhost:3000
   - API: http://localhost:8000
-  - Milvus: http://localhost:19530
-  - Milvus UI: http://localhost:9091
-  - MinIO: http://localhost:9001
+  - OpenSearch: http://localhost:9200
+  - Redis: localhost:6379
+  - DynamoDB Local: http://localhost:8001
 - **Use Case**: Full development/testing environment
 
 ### ⚕️ **Monitoring Commands**

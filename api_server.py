@@ -309,8 +309,8 @@ async def lifespan(app: FastAPI):
         # Store initialization error but try to continue for graceful degradation
         initialization_error = str(e)
 
-        # Check if it's a Milvus connection error - show user-friendly message but allow graceful degradation
-        if "Milvus connection failed" in str(e) or "Cannot connect to Milvus" in str(e):
+        # Check if it's an OpenSearch connection error - show user-friendly message but allow graceful degradation
+        if "OpenSearch connection failed" in str(e) or "Cannot connect to OpenSearch" in str(e):
             logger.error("\n" + "=" * 70)
             logger.error("⚠️  Warning: The local vector database is not running")
             logger.error("=" * 70)
@@ -318,12 +318,12 @@ async def lifespan(app: FastAPI):
             logger.error("  ✓ Validation and security checks will work")
             logger.error("  ⚠️  Knowledge base search will be unavailable")
             logger.error("  ✓ Web search will still work if enabled")
-            logger.error("\nTo enable full functionality, start the configured vector database:")
+            logger.error("\nTo enable full functionality, start the local OpenSearch container:")
             logger.error("  1. Make sure Docker is running")
             logger.error("  2. cd docker")
-            logger.error("  3. docker-compose up -d")
+            logger.error("  3. docker compose up -d opensearch")
             logger.error("\nTo check vector database status:")
-            logger.error("  docker-compose ps")
+            logger.error("  docker compose ps")
             logger.error("=" * 70 + "\n")
             # Don't set strands_agent to None - let it continue in degraded mode
             # initialization_error remains set so handlers can check for degraded mode
@@ -1102,7 +1102,7 @@ def _stream_chat_completions(
             # Check if agent has unrecoverable initialization error
             if (
                 agent.initialization_error
-                and "Milvus connection failed" not in agent.initialization_error
+                and "OpenSearch connection failed" not in agent.initialization_error
             ):
                 # Unrecoverable error - return error message through stream
                 error_msg = f"Service error: {agent.initialization_error}"

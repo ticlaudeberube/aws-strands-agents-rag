@@ -182,17 +182,17 @@ class TestServiceErrorFactory:
         assert error.error_code == ErrorCode.SERVICE_UNAVAILABLE.value
         assert error.category == ErrorCategory.SERVICE_ERROR
 
-    def test_create_service_error_milvus(self):
-        """Test creating a Milvus unavailable error."""
+    def test_create_service_error_opensearch(self):
+        """Test creating an OpenSearch unavailable error."""
         error = create_service_error(
-            error_code=ErrorCode.SERVICE_MILVUS_UNAVAILABLE,
-            message="Milvus database connection failed",
-            suggestion="Please check if Milvus is running and accessible",
+            error_code=ErrorCode.SERVICE_OPENSEARCH_UNAVAILABLE,
+            message="OpenSearch connection failed",
+            suggestion="Please check if OpenSearch is running and accessible",
         )
 
-        assert error.error_code == ErrorCode.SERVICE_MILVUS_UNAVAILABLE.value
+        assert error.error_code == ErrorCode.SERVICE_OPENSEARCH_UNAVAILABLE.value
         assert error.category == ErrorCategory.SERVICE_ERROR
-        assert "Milvus" in error.message
+        assert "OpenSearch" in error.message
 
     def test_create_service_error_ollama(self):
         """Test creating an Ollama unavailable error."""
@@ -262,7 +262,7 @@ class TestErrorCodeEnum:
     def test_service_error_codes(self):
         """Test that service error codes exist."""
         assert ErrorCode.SERVICE_UNAVAILABLE.value == "SERVICE_UNAVAILABLE"
-        assert ErrorCode.SERVICE_MILVUS_UNAVAILABLE.value == "SERVICE_MILVUS_UNAVAILABLE"
+        assert ErrorCode.SERVICE_OPENSEARCH_UNAVAILABLE.value == "SERVICE_OPENSEARCH_UNAVAILABLE"
         assert ErrorCode.SERVICE_OLLAMA_UNAVAILABLE.value == "SERVICE_OLLAMA_UNAVAILABLE"
 
     def test_system_error_code(self):

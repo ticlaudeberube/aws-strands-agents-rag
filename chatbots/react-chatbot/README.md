@@ -1,6 +1,6 @@
 # Vector Database RAG Chatbot (React)
 
-A self-contained React chatbot interface for the vector database RAG system with real-time response streaming. The current local deployment uses Milvus.
+A self-contained React chatbot interface for the vector database RAG system with real-time response streaming. The local deployment uses OpenSearch.
 
 ## Features
 
@@ -48,7 +48,7 @@ User: "What is Milvus?"
 ### How It Works
 
 1. **User sends question** → "What is Milvus?"
-2. **Server processes** → Retrieves context from Milvus (0.5s)
+2. **Server processes** → Retrieves context from OpenSearch (0.5s)
 3. **First chunk arrives** → Client receives initial answer text (2-3s)
 4. **Streaming continues** → Answer words appear progressively
 5. **Response completes** → Message shows response time
@@ -278,7 +278,7 @@ The API server already has CORS enabled. If you get CORS errors:
 ### Slow Responses
 - Check API server logs for bottlenecks
 - Verify you have embeddings cached (run the same question twice)
-- Check if Ollama and the configured vector DB (Milvus in the current local stack) are running
+- Check if Ollama and the local OpenSearch container are running
 
 ## Building for Production
 

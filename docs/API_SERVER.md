@@ -21,8 +21,8 @@ as a warning rather than leaving the GUI on a stale connected status.
 The health response's `vector_db` and `vector_db_available` fields are provider-neutral.
 `web_search_enabled` is true only when web search is enabled in settings and a
 Tavily API key is configured.
-The current local adapter uses Milvus. `/health/vector-db` provides detailed
-vector DB health; `/health/milvus` remains as a deprecated compatibility route.
+The local adapter uses OpenSearch. `/health/vector-db` provides detailed
+vector DB health.
 
 ## Chat completions
 
@@ -76,7 +76,7 @@ The live routes in `api_server.py` (local mode):
 | `GET /health` | Health check with local vector-DB availability (used by the GUI). |
 | `GET /health/detailed` | Per-service status (Ollama, vector DB) plus cache sizes. |
 | `GET /health/ollama` | Ollama service health. |
-| `GET /health/vector-db` | Detailed vector-DB health (`/health/milvus` is a deprecated alias). |
+| `GET /health/vector-db` | Detailed OpenSearch vector-DB health. |
 | `GET /metrics` | RAG graph node metrics (counts, durations, early-exit rates, uptime). |
 | `GET /metrics/reset` | Clears accumulated metrics (testing/benchmarking — destructive). |
 | `GET /v1/models` | OpenAI-compatible model list. |

@@ -10,7 +10,7 @@
 #   react-chatbot — React UI
 #
 # Ollama runs on the host (http://host.docker.internal:11434) and is NOT
-# containerized here. Milvus has been removed — OpenSearch is the sole engine.
+# containerized here. OpenSearch is the sole engine.
 name: agentcore-rag
 
 services:

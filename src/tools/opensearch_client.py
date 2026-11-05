@@ -1,22 +1,20 @@
 """OpenSearch Serverless vector store + Layer 4 semantic cache (Serverless Mode).
 
-This module provides :class:`OpenSearchClient`, the serverless-mode replacement
-for the local :class:`~src.tools.milvus_client.MilvusVectorDB` (knowledge base
-retrieval + document indexing) and :class:`~src.tools.response_cache.MilvusResponseCache`
-(Layer 4 semantic response cache). It wraps the ``opensearch-py`` library against
-an Amazon OpenSearch Serverless collection endpoint.
+This module provides :class:`OpenSearchClient`, the sole vector-store engine for
+both knowledge-base retrieval + document indexing and the Layer 4 semantic
+response cache. In serverless mode it wraps the ``opensearch-py`` library against
+an Amazon OpenSearch Serverless collection endpoint; in Local Mode
+:meth:`OpenSearchClient.for_local` points the same client at a local OpenSearch
+container over plain HTTP.
 
-Two indexes mirror the two local Milvus collections (see the design document,
-section "3b. OpenSearchClient"):
+Two indexes back the system (see the design document, section "3b.
+OpenSearchClient"):
 
 - ``rag-kb``    — knowledge base documents (768-dim k-NN HNSW, cosine).
-                  Local equivalent: ``milvus_rag_collection``.
 - ``rag-cache`` — Layer 4 semantic response cache (768-dim k-NN HNSW, cosine).
-                  Local equivalent: the Milvus ``response_cache`` collection.
 
 Both indexes use the HNSW algorithm with ``m=30`` / ``ef_construction=200`` and
-cosine similarity, matching the existing Milvus HNSW configuration
-(Requirements 4.1, 4.6).
+cosine similarity (Requirements 4.1, 4.6).
 
 The class conforms structurally to the :class:`~src.tools.interfaces.VectorStore`
 and :class:`~src.tools.interfaces.SemanticCache` protocols so the
@@ -46,10 +44,10 @@ logger = logging.getLogger(__name__)
 
 __all__ = ["OpenSearchClient"]
 
-# Fallback HNSW parameters, used only when settings are unavailable. These
-# mirror the local Milvus defaults (Requirements 4.1, 4.6). The live values are
-# read from Settings in __init__ so the two backends stay in sync and are
-# tunable via the same env vars rather than being hardcoded here.
+# Fallback HNSW parameters, used only when settings are unavailable
+# (Requirements 4.1, 4.6). The live values are read from Settings in __init__ so
+# local and serverless stay in sync and are tunable via the same env vars rather
+# than being hardcoded here.
 HNSW_M = 30
 HNSW_EF_CONSTRUCTION = 200
 VECTOR_DIM = 768
@@ -209,9 +207,9 @@ class OpenSearchClient:
         """k-NN search over ``index`` using HNSW (cosine), with a recall knob.
 
         Returns up to ``k`` documents ranked **non-increasing** by cosine
-        similarity score (highest similarity first), matching the local Milvus
-        result shape: ``{"id", "text", "metadata", "distance"}`` where
-        ``distance`` carries the cosine similarity score (Requirements 4.2).
+        similarity score (highest similarity first) in the shape
+        ``{"id", "text", "metadata", "distance"}`` where ``distance`` carries the
+        cosine similarity score (Requirements 4.2).
 
         Args:
             index: Index to search.
@@ -223,8 +221,8 @@ class OpenSearchClient:
                 means pure vector similarity, unchanged behaviour.
 
         The HNSW search-time beam width (``ef_search``) is set from
-        ``settings.vectordb_search_ef`` (shared with the local Milvus backend),
-        clamped to at least ``k``; higher values trade latency for recall.
+        ``settings.vectordb_search_ef``, clamped to at least ``k``; higher values
+        trade latency for recall.
         """
         knn_clause: dict[str, Any] = {
             "vector": query_vector,

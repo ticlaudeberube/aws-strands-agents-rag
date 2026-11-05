@@ -45,7 +45,7 @@ jobs:
       - name: Type check (mypy)
         run: uv run mypy .
 
-      # No Milvus, Ollama, or API server runs in CI. Service-dependent
+      # No OpenSearch, Ollama, or API server runs in CI. Service-dependent
       # integration tests skip automatically (see tests/conftest.py), so this
       # verifies the suite stays green without local dependencies.
       - name: Run tests

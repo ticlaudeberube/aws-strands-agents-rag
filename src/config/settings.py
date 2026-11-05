@@ -11,12 +11,13 @@ logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
-    # Default collection name for knowledge base RAG search (Option A: Semantic Cache Only)
-    # Data: 6,878 document chunks from embeddings.json
+    # Legacy collection-name label passed through to agent methods for metadata
+    # parity. The active OpenSearch path uses ``opensearch_kb_index`` ("rag-kb");
+    # this value is retained only for response metadata and the CLI default.
     ollama_collection_name: str = Field(
-        default="milvus_rag_collection",
+        default="rag_collection",
         validation_alias="OLLAMA_COLLECTION_NAME",
-        description="Collection name for knowledge base RAG search (contains embeddings.json).",
+        description="Legacy KB collection label (metadata only; retrieval uses opensearch_kb_index).",
     )
     # Maximum number of tokens for LLM responses
     max_tokens: int = Field(
@@ -105,13 +106,14 @@ class Settings(BaseSettings):
         ),
     )
     # Local Mode vector store selector (only consulted when deployment_mode ==
-    # "local"; serverless always uses OpenSearch Serverless). Default "milvus"
-    # preserves current behavior; "opensearch" runs Local Mode on a local
-    # OpenSearch container (Ollama embeddings) for prod parity.
-    local_vector_backend: Literal["milvus", "opensearch"] = Field(
+    # "local"; serverless always uses OpenSearch Serverless). OpenSearch is the
+    # sole engine: Local Mode runs on a local OpenSearch container (Ollama
+    # embeddings) for parity with serverless. Retained as a Literal for forward
+    # compatibility should another local backend be added.
+    local_vector_backend: Literal["opensearch"] = Field(
         default="opensearch",
         validation_alias="LOCAL_VECTOR_BACKEND",
-        description='Local Mode vector store: "opensearch" (default) or "milvus".',
+        description='Local Mode vector store engine (currently only "opensearch").',
     )
     # Local OpenSearch connection (plain HTTP, security plugin disabled). Used
     # only when deployment_mode == "local" and local_vector_backend ==

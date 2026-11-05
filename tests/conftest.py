@@ -51,8 +51,8 @@ from src.mcp.mcp_server import RAGAgentMCPServer
 #
 # Integration tests that need a live vector database are skipped automatically
 # when the server is unreachable. This keeps the suite (and the pre-push
-# pytest hook) green on machines without a running backend. The Milvus engine
-# has been removed, so the local backend is OpenSearch.
+# pytest hook) green on machines without a running backend. The local backend
+# is OpenSearch.
 # ---------------------------------------------------------------------------
 
 
@@ -69,13 +69,8 @@ def _tcp_reachable(host: str, port: int, timeout: float = 1.0) -> bool:
         return False
 
 
-def milvus_available() -> bool:
-    """Whether a live local vector database is reachable.
-
-    The Milvus engine has been removed; the local backend is OpenSearch. This
-    keeps the historical name used by the ``requires_milvus`` marker and the
-    auto-skip logic, now probing the local OpenSearch endpoint.
-    """
+def vector_db_available() -> bool:
+    """Whether a live local vector database (OpenSearch) is reachable."""
     try:
         settings = Settings()
         return _tcp_reachable(settings.opensearch_local_host, settings.opensearch_local_port)
@@ -87,7 +82,7 @@ def pytest_configure(config: pytest.Config) -> None:
     """Register custom markers."""
     config.addinivalue_line(
         "markers",
-        "requires_milvus: mark test as requiring a reachable local vector database; "
+        "requires_vector_db: mark test as requiring a reachable local vector database; "
         "skipped automatically when the backend is unavailable.",
     )
 
@@ -96,17 +91,17 @@ _INTEGRATION_DIR = Path(__file__).parent.resolve() / "integration"
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
-    """Auto-skip Milvus-dependent tests when the server is unreachable.
+    """Auto-skip vector-DB-dependent tests when the server is unreachable.
 
-    Applies to any test marked `requires_milvus` or `integration`, and to any
+    Applies to any test marked `requires_vector_db` or `integration`, and to any
     test located under tests/integration/ (path-based, so it does not depend
     on marker-application ordering across conftests).
     """
-    if milvus_available():
+    if vector_db_available():
         return
 
-    skip_milvus = pytest.mark.skip(
-        reason="Milvus server not reachable; skipping Milvus-dependent test"
+    skip_vector_db = pytest.mark.skip(
+        reason="Vector DB (OpenSearch) not reachable; skipping vector-DB-dependent test"
     )
     for item in items:
         in_integration_dir = False
@@ -119,11 +114,11 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
             in_integration_dir = False
 
         if (
-            "requires_milvus" in item.keywords
+            "requires_vector_db" in item.keywords
             or "integration" in item.keywords
             or in_integration_dir
         ):
-            item.add_marker(skip_milvus)
+            item.add_marker(skip_vector_db)
 
 
 @pytest.fixture

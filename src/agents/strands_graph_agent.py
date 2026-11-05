@@ -252,7 +252,7 @@ def _is_competitor_database_query(question: str) -> bool:
 
     These queries require web search to provide accurate information.
     When web search is unavailable, we should return a proper "not available" message
-    instead of hallucinating information from the Milvus knowledge base.
+    instead of hallucinating information from the knowledge base.
     """
     question_lower = question.lower()
 

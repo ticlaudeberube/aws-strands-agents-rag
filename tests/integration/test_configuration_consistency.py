@@ -1,8 +1,10 @@
 """Test suite to verify configuration consistency across embedding and LLM models."""
 
 import os
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
+
 from src.config.settings import Settings, get_settings
 from src.tools.ollama_client import OllamaClient
 
@@ -131,17 +133,14 @@ class TestConfigurationConsistency:
             assert hasattr(settings, param), f"Settings missing: {param}"
             assert getattr(settings, param) is not None, f"Settings.{param} is None"
 
-    def test_settings_all_milvus_params_defined(self):
-        """Verify Settings class has all required Milvus configuration parameters."""
+    def test_settings_all_opensearch_params_defined(self):
+        """Verify Settings class has all required OpenSearch configuration parameters."""
         settings = Settings()
         required_params = [
-            "milvus_host",
-            "milvus_port",
-            "milvus_db_name",
-            "milvus_user",
-            "milvus_password",
-            "milvus_timeout",
-            "milvus_pool_size",
+            "opensearch_local_host",
+            "opensearch_local_port",
+            "opensearch_kb_index",
+            "opensearch_cache_index",
         ]
 
         for param in required_params:
@@ -154,10 +153,10 @@ class TestHardcodedDefaults:
 
     def test_no_hardcoded_embedding_model_in_functions(self):
         """Verify no hardcoded embedding models in agent functions."""
-        from src.agents.strands_graph_agent import StrandsGraphRAGAgent
+        from src.agents.local_opensearch_agent import LocalOpenSearchAgent
 
         settings = Settings()
-        agent = StrandsGraphRAGAgent(settings)
+        agent = LocalOpenSearchAgent(settings)
 
         # Agent should have access to settings
         assert agent.settings is not None

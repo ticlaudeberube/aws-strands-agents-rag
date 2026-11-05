@@ -1,11 +1,11 @@
 # Project Context
 
-AWS Strands Agents RAG system. Uses Milvus for vector storage and implements a Retrieval Augmented Generation pipeline with real `strands.Agent` instances.
+AWS Strands Agents RAG system. Uses OpenSearch for vector storage (local container in local mode, OpenSearch Serverless in AWS mode) and implements a Retrieval Augmented Generation pipeline with real `strands.Agent` instances.
 
 ## Code Structure
 
 - `src/agents/` — Strands agent implementations (graph agent, RAG routing)
-- `src/tools/` — Reusable tools including the `MilvusVectorDB` wrapper
+- `src/tools/` — Reusable tools including the `OpenSearchClient` wrapper
 - `src/config/` — Configuration (`settings.py`, pydantic-settings)
 - `src/mcp/` — Model Context Protocol server exposing agent tools
 - `document_loaders/` — Standalone document loading and embedding utilities
@@ -26,7 +26,7 @@ AWS Strands Agents RAG system. Uses Milvus for vector storage and implements a R
 
 ## Helpful Commands
 
-- Load docs into Milvus: `uv run python document_loaders/load_milvus_docs_ollama.py`
+- Load docs into OpenSearch (corpus seed): `uv run python document_loaders/load_docs_opensearch.py`
 - Interactive chat: `uv run python chatbots/interactive_chat.py`
 - API server: `uv run python api_server.py`
 - Tests: `uv run pytest` (coverage: `uv run pytest --cov`)

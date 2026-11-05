@@ -1,7 +1,7 @@
 # Local RAG evaluation harness (MLflow)
 
 `scripts/eval_local.py` runs a fixed, tagged question set through the **Local
-Mode** pipeline (Ollama + Milvus) and logs the anti-hallucination signals the
+Mode** pipeline (Ollama + OpenSearch) and logs the anti-hallucination signals the
 pipeline already produces to [MLflow](https://mlflow.org/), so you can measure
 whether a change (e.g. tuning a threshold or a prompt) made the system better or
 worse — instead of guessing.
@@ -67,13 +67,13 @@ Per question and in aggregate:
 
 The thresholds in effect (`answer_grounding_threshold`,
 `answer_confidence_threshold`, `web_search_fallback_threshold`), the
-`milvus_search_ef` recall knob, and the model id are logged as run **params**,
+`vectordb_search_ef` recall knob, and the model id are logged as run **params**,
 so two runs with different settings are directly comparable in the MLflow UI.
 The full per-question table is attached to each run as `results.json`.
 
 ## Tuning HNSW recall (`ef` sweep)
 
-The HNSW search-time beam width (`ef`, set by `MILVUS_SEARCH_EF`) is the main
+The HNSW search-time beam width (`ef`, set by `VECTORDB_SEARCH_EF`) is the main
 recall-vs-latency dial: higher `ef` searches more of the graph (better recall,
 more latency). To see the tradeoff for your corpus instead of guessing, sweep it:
 
@@ -82,7 +82,7 @@ uv run scripts/eval_local.py --sweep-ef 32,64,128,256
 ```
 
 This runs one MLflow run per value (named `ef-sweep-ef32`, `-ef64`, …), each
-logging `milvus_search_ef` as a param, and prints a comparison table of
+logging `vectordb_search_ef` as a param, and prints a comparison table of
 `pass_rate` / `avg_grounding_score` (recall proxies) against `avg_latency_ms`.
 
 Read it this way: pass_rate / grounding rising with `ef` means recall was being
@@ -95,8 +95,8 @@ is not the bottleneck.
 
 ## Prerequisites
 
-- Local Mode backends running: Ollama and Milvus (see `docs/GETTING_STARTED.md`).
-  If Milvus/Ollama are unreachable the run will record per-question errors
+- Local Mode backends running: Ollama and OpenSearch (see `docs/GETTING_STARTED.md`).
+  If OpenSearch/Ollama are unreachable the run will record per-question errors
   rather than silently passing.
 - The `eval` extra installed:
 
@@ -227,12 +227,12 @@ In the UI (`http://127.0.0.1:<port>`):
 | Connection refused to `127.0.0.1:5000`    | No server is running there. Start one (`mlflow server --host 127.0.0.1 --port 5000 ...`) before pointing the eval at it, or use a file/SQLite store instead. On macOS, port 5000 may be AirPlay — use another port. |
 | `mlflow is not installed`                 | Install the eval extra: `uv pip install -e '.[eval]'`.                                           |
 | DB/schema or alembic revision error on UI start | The `mlflow.db` was created by a different MLflow major. Stay on the pinned 3.x, or archive/delete `mlflow.db` to start fresh (loses prior runs). |
-| `Errored questions` in the summary        | Ollama/Milvus unreachable. Start Local Mode backends (see `docs/GETTING_STARTED.md`).           |
+| `Errored questions` in the summary        | Ollama/OpenSearch unreachable. Start Local Mode backends (see `docs/GETTING_STARTED.md`).       |
 
 ## Typical dev loop
 
 ```bash
-# 1. Start Local Mode backends (Ollama + Milvus) — see GETTING_STARTED.md
+# 1. Start Local Mode backends (Ollama + OpenSearch) — see GETTING_STARTED.md
 # 2. Baseline:
 uv run scripts/eval_local.py --tracking-uri sqlite:///mlflow.db --run-name before
 # 3. Change a threshold in src/config/settings.py or a prompt.

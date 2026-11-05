@@ -79,8 +79,8 @@ repos:
         stages: [pre-push]
 
       # Unit and integration tests (runs on push, not every commit)
-      # Milvus-dependent integration tests skip automatically when Milvus
-      # is unreachable (see tests/conftest.py).
+      # Vector-DB-dependent integration tests skip automatically when the
+      # local OpenSearch backend is unreachable (see tests/conftest.py).
       - id: pytest
         name: pytest - Test suite
         description: Runs unit and integration tests (excludes slow tests)

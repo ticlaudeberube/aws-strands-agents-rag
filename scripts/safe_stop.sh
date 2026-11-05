@@ -66,7 +66,7 @@ if command -v docker-compose &>/dev/null; then
             echo "  Stopping containers gracefully..."
             docker-compose -f docker/docker-compose.yml stop --timeout=15 2>/dev/null || {
                 echo "  ⚠ docker-compose stop failed, trying docker stop..."
-                docker ps --format "{{.Names}}" | grep -E "rag-|milvus" | xargs -r docker stop --time=15 2>/dev/null || true
+                docker ps --format "{{.Names}}" | grep -E "rag-|agentcore-rag-" | xargs -r docker stop --time=15 2>/dev/null || true
             }
             sleep 2
             echo "  ✓ Containers stopped"

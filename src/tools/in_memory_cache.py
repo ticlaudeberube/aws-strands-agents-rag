@@ -16,7 +16,7 @@ L1 and L3 live for the lifetime of the process (fast, zero-dependency, reset on
 restart). L2 honors ``settings.embedding_cache_ttl`` (``EMBEDDING_CACHE_TTL``,
 default 3600 seconds): embeddings older than the TTL are treated as a miss and
 evicted lazily on access. Layer 4 (the persistent semantic response cache) is
-served separately by ``MilvusResponseCache`` in Local Mode, not by this class.
+served separately by the OpenSearch ``rag-cache`` index, not by this class.
 
 This class conforms to the :class:`~src.tools.interfaces.CacheBackend` protocol
 (``get/set_embedding``, ``get/set_search_results``) and adds L1 answer-cache

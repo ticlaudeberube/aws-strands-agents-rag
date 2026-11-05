@@ -2,9 +2,9 @@
 
 import logging
 import time
+from collections.abc import Callable
 from enum import Enum
 from typing import Any, TypeVar
-from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
 
@@ -161,13 +161,13 @@ class CircuitBreaker:
         }
 
 
-class MilvusCircuitBreaker(CircuitBreaker):
-    """Circuit breaker specialized for Milvus database operations."""
+class OpenSearchCircuitBreaker(CircuitBreaker):
+    """Circuit breaker specialized for OpenSearch vector-store operations."""
 
     def __init__(self) -> None:
-        """Initialize Milvus-specific circuit breaker."""
+        """Initialize OpenSearch-specific circuit breaker."""
         super().__init__(
-            name="Milvus",
+            name="OpenSearch",
             failure_threshold=5,
             success_threshold=3,
             timeout_seconds=30.0,

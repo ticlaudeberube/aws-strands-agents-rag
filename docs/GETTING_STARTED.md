@@ -90,20 +90,18 @@ The settings file is the live source of truth for runtime selection:
 
 The app does not rely on a legacy `use_agentcore` flag. The supported switch is `DEPLOYMENT_MODE`.
 
-### Local vector backend (Milvus or OpenSearch)
+### Local vector backend (OpenSearch)
 
-In local mode, `LOCAL_VECTOR_BACKEND` selects the vector store:
+In local mode the vector store is a local OpenSearch container, matching the
+serverless engine for dev/prod parity. Embeddings stay Ollama
+(`nomic-embed-text:v1.5`, 768-dim). `LOCAL_VECTOR_BACKEND` selects the local
+engine and currently accepts only `opensearch` (the default).
 
-- `milvus` (default) — Ollama + Milvus, the existing local stack.
-- `opensearch` — Ollama + a local OpenSearch container, matching the serverless
-  engine for dev/prod parity. Embeddings stay Ollama (`nomic-embed-text:v1.5`,
-  768-dim); only the vector store changes.
-
-To run OpenSearch Local Mode end-to-end:
+To run Local Mode end-to-end:
 
 ```bash
-# 1. Start the local OpenSearch container (opt-in profile):
-docker compose -f docker/docker-compose.yml --profile opensearch up -d opensearch
+# 1. Start the consolidated local stack (OpenSearch + Redis + DynamoDB):
+docker compose -f docker/docker-compose.yml up -d opensearch
 
 # 2. Point the app at it and ingest documents (Ollama embeddings, no AWS):
 export DEPLOYMENT_MODE=local
@@ -120,7 +118,7 @@ The Layer 2/3 cache defaults to in-process (`InMemoryCache`); set
 
 ## What is actually supported
 
-- Local mode uses Ollama and the configured vector DB.
+- Local mode uses Ollama and a local OpenSearch container.
 - Serverless mode uses Bedrock, OpenSearch, Redis/DynamoDB, and AWS Lambda/AgentCore patterns.
 - Web search is optional and controlled by the current Tavily configuration.
 - The Strands graph remains the shared business flow: TopicChecker → SecurityChecker → RAGWorker.

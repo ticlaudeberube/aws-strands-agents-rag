@@ -50,12 +50,11 @@ python chatbot/interactive_chat.py
 ### Requirements
 
 Before running the chatbot, ensure:
-1. **The vector DB is running** - The current local provider is Milvus; start it with `docker-compose up -d` in the docker directory
+1. **The vector DB is running** - The local provider is OpenSearch; start it with `docker compose up -d opensearch` in the docker directory
 2. **Ollama is installed and running** - Make sure Ollama is available at the configured host (default: http://localhost:11434)
 3. **Documents are loaded** - Follow the [GETTING_STARTED.md](../docs/GETTING_STARTED.md) guide to:
-   - Load sample documents with `python document-loaders/add_sample_docs.py`, OR
-   - Load full Milvus documentation with `python document-loaders/load_milvus_docs_ollama.py`, OR
-   - Load cached embeddings with `python document-loaders/load_embeddings_from_json.py`
+   - Seed the knowledge-base corpus with `python document_loaders/load_docs_opensearch.py`, OR
+   - Ingest an arbitrary directory with `python scripts/ingest_local_opensearch.py --docs ./data/docs`
 
 ### Features
 
@@ -91,9 +90,9 @@ The chatbot uses settings from your `.env` file:
 - `OLLAMA_HOST` - Ollama server host
 - `OLLAMA_MODEL` - LLM model to use for generating answers
 - `OLLAMA_EMBED_MODEL` - Embedding model for vector search
-- `OLLAMA_COLLECTION_NAME` - Collection to search for documents
-- `MILVUS_HOST` / `MILVUS_PORT` - Milvus server connection
-- `MILVUS_DB_NAME` - Database name
+- `OLLAMA_COLLECTION_NAME` - Legacy KB collection label (metadata only)
+- `OPENSEARCH_LOCAL_HOST` / `OPENSEARCH_LOCAL_PORT` - Local OpenSearch connection
+- `OPENSEARCH_KB_INDEX` - Knowledge-base index name (default `rag-kb`)
 
 ### Troubleshooting
 
@@ -101,10 +100,10 @@ The chatbot uses settings from your `.env` file:
 - Ensure Ollama is running: `ollama serve`
 - Check `OLLAMA_HOST` in `.env` matches your setup
 
-**"Vector database unavailable"** (the current local provider reports a Milvus connection error)
-- Start the configured local vector DB: `cd docker && docker-compose up -d`
+**"Vector database unavailable"** (OpenSearch connection error)
+- Start the local OpenSearch container: `cd docker && docker compose up -d opensearch`
 - Wait for services to initialize (30-60 seconds)
 
 **"No results found"**
-- Ensure documents are loaded: `python document-loaders/load_milvus_docs_ollama.py`
-- Check that `OLLAMA_COLLECTION_NAME` matches the loaded collection
+- Ensure documents are loaded: `python document_loaders/load_docs_opensearch.py`
+- Check that `OPENSEARCH_KB_INDEX` matches the loaded index

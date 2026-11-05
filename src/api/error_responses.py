@@ -95,7 +95,7 @@ class ErrorCode(str, Enum):
     SERVICE_UNAVAILABLE = "SERVICE_UNAVAILABLE"
     SERVICE_AGENT_NOT_INITIALIZED = "SERVICE_AGENT_NOT_INITIALIZED"
     SERVICE_MCP_NOT_INITIALIZED = "SERVICE_MCP_NOT_INITIALIZED"
-    SERVICE_MILVUS_UNAVAILABLE = "SERVICE_MILVUS_UNAVAILABLE"
+    SERVICE_OPENSEARCH_UNAVAILABLE = "SERVICE_OPENSEARCH_UNAVAILABLE"
     SERVICE_OLLAMA_UNAVAILABLE = "SERVICE_OLLAMA_UNAVAILABLE"
 
     # System errors
@@ -137,9 +137,9 @@ def create_validation_error(
                 field=field,
                 constraint=constraint,
                 constraint_value=constraint_value or "",
-                value_received=value_received[:50]
-                if value_received
-                else None,  # Truncate for security
+                value_received=(
+                    value_received[:50] if value_received else None
+                ),  # Truncate for security
             )
         )
 

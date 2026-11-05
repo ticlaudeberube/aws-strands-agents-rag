@@ -27,9 +27,8 @@ def settings():
         ollama_host="http://localhost:11434",
         ollama_model="qwen2.5:0.5b",
         ollama_embed_model="nomic-embed-text",
-        milvus_host="localhost",
-        milvus_port=19530,
-        milvus_db_name="test_db",
+        opensearch_local_host="localhost",
+        opensearch_local_port=9200,
     )
 
 
@@ -110,7 +109,7 @@ class TestHealthCheckEndpoint:
             "status": "ok",
             "model": "rag-agent",
             "ollama": "http://localhost:11434",
-            "vector_db": "localhost:19530",
+            "vector_db": "localhost:9200",
             "vector_db_available": True,
             "web_search_enabled": True,
         }
@@ -132,7 +131,7 @@ class TestHealthCheckEndpoint:
         health = {
             "status": "ok",
             "ollama": "http://localhost:11434",
-            "vector_db": "localhost:19530",
+            "vector_db": "localhost:9200",
             "vector_db_available": True,
         }
 

@@ -193,9 +193,9 @@ def average_relevance(sources: list[dict]) -> float:
     """Compute the average cosine-similarity relevance of KB ``sources``.
 
     Each source carries its similarity under the ``distance`` key (cosine
-    similarity, higher = more relevant), matching both ``OpenSearchClient`` and
-    the local Milvus result shape. Returns ``0.0`` when there are no scored
-    sources so an empty/unscored result set triggers the web-search fallback.
+    similarity, higher = more relevant), matching the ``OpenSearchClient``
+    result shape. Returns ``0.0`` when there are no scored sources so an
+    empty/unscored result set triggers the web-search fallback.
     """
     scores = [float(s["distance"]) for s in sources if isinstance(s.get("distance"), (int, float))]
     if not scores:

@@ -8,10 +8,11 @@ This script:
 """
 
 import json
-import time
 import logging
-import requests
+import time
 from pathlib import Path
+
+import requests
 from dotenv import load_dotenv
 
 # Load settings
@@ -154,7 +155,7 @@ def generate_responses():
                 {
                     "question": question,
                     "answer": response_text,
-                    "collection": "milvus_rag_collection",
+                    "collection": "rag_collection",
                 }
             )
         else:

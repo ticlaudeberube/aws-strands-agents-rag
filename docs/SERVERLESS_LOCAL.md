@@ -26,13 +26,13 @@ What runs where:
   Terraform hook needs a clean `terraform plan`, but the compute module has a
   `count` that depends on an apply-time output, so planning fails. SAM's own
   workaround is "run `terraform apply` first" — i.e. deploy real infra. Not local.
-- **`api_server.py` directly** is hardwired for Local Mode: its agent class
-  (`StrandsGraphRAGAgent`) always builds Ollama + Milvus and only injects the
-  Milvus backend into `create_rag_graph`. It has no path to inject the
-  serverless Bedrock/OpenSearch/Redis clients.
-- The production serverless clients also assume the cloud: `OpenSearchClient`
-  hardcodes TLS + SigV4 (`aoss`) on port 443, and `RedisCache` hardcodes
-  `ssl=True`. Neither can point at a plain local container through settings.
+- **`api_server.py` directly** runs Local Mode (Ollama embeddings + a local
+  OpenSearch container via `LocalOpenSearchAgent`). It has no path to inject the
+  serverless **Bedrock** client, which is what this guide needs.
+- The production serverless clients default to the cloud: `OpenSearchClient`
+  uses TLS + SigV4 (`aoss`) on port 443 and `RedisCache` uses `ssl=True` unless
+  built through their `for_local(...)` helpers. The wrapper scripts use those
+  helpers to point at the plain local containers while still calling real Bedrock.
 
 So the local serverless path is driven by two **wrapper scripts** that inject
 local-pointed clients into the real `create_rag_graph` / `shared_route`. They do
@@ -70,23 +70,26 @@ works across Claude, Nova, and Llama with no per-provider body code.
 
 ## Step 1 — Start the local backing services
 
+Start only the backing services from the consolidated `agentcore-rag` stack
+(the `rag-api`/`react-chatbot` containers are Local Mode and not needed here —
+the serverless path runs via the host wrapper scripts against real Bedrock):
+
 ```bash
-docker compose -f docker/serverless-local/docker-compose.yml up -d
+docker compose -f docker/docker-compose.yml up -d opensearch redis dynamodb
 ```
 
 This starts:
-- `rag-serverless-opensearch` on `localhost:9200` (security plugin disabled, so
+- `agentcore-rag-opensearch` on `localhost:9200` (security plugin disabled, so
   the wrapper connects over plain HTTP, no SigV4/TLS).
-- `rag-serverless-redis` on `localhost:6379` (plain TCP, no TLS).
-- `rag-serverless-dynamodb` on `localhost:8001` (DynamoDB Local, in-memory;
+- `agentcore-rag-redis` on `localhost:6379` (plain TCP, no TLS).
+- `agentcore-rag-dynamodb` on `localhost:8001` (DynamoDB Local, in-memory;
   stand-in for the serverless session + analytics tables).
 
-Ports are chosen to avoid colliding with the Local-Mode Milvus stack
-(19530/9091/9000/9001), so both can run at once. Verify:
+Verify:
 
 ```bash
 curl -s http://localhost:9200/_cluster/health
-docker exec rag-serverless-redis redis-cli ping   # -> PONG
+docker exec agentcore-rag-redis redis-cli ping   # -> PONG
 curl -s http://localhost:8001/ -o /dev/null -w "dynamodb: %{http_code}\n"
 ```
 
@@ -202,12 +205,11 @@ resolves the reference using the history loaded from DynamoDB, confirming
 search and persistent cached questions are unavailable."* even though chat
 answers returned real sources.
 
-**Cause:** the stock `/health` endpoint in `api_server.py` is Local-Mode only.
-It probes `agent.vector_db.client.list_collections(db_name=milvus_db_name, ...)`
-— a **Milvus-specific** call. The serverless shim has no `vector_db` attribute
-(it uses OpenSearch), so the probe was skipped and health always reported
-`vector_db_available: false` against the Milvus endpoint. Retrieval was never
-actually broken; only the health check was wrong.
+**Cause:** the stock `/health` endpoint in `api_server.py` is Local-Mode only
+and probed the local agent's `vector_db` attribute. The serverless shim is
+wired differently, so the probe was skipped and health always reported
+`vector_db_available: false`. Retrieval was never actually broken; only the
+health check was wrong.
 
 **Fix (local-only):** `scripts/serverless_api_server.py` overrides the `/health`
 route with a serverless-aware version that pings the local **OpenSearch** and
@@ -257,8 +259,8 @@ makes the client model-agnostic.
 ## Teardown
 
 ```bash
-# stop the servers (Ctrl+C in their terminals), then the containers:
-docker compose -f docker/serverless-local/docker-compose.yml down
+# stop the servers (Ctrl+C in their terminals), then the backing containers:
+docker compose -f docker/docker-compose.yml down
 ```
 
 To also drop the local index data, add `-v` to remove volumes (there are none
@@ -302,11 +304,11 @@ complete.
   about HNSW). Embeddings and cache keys stay keyed on the raw question, so
   caching is unchanged. The real Lambda handler and the serverless shim load
   history from DynamoDB and pass it in.
-  **Local Mode (`DEPLOYMENT_MODE=local`, Ollama + Milvus + `api_server.py`) does
-  NOT have this** — its `StrandsGraphRAGAgent.answer_question` is a separate,
-  older answer path that does not call `shared_route`, has no `history`
-  parameter, and no per-session history store. Adding it there is tracked as a
-  TODO below.
+  **Local Mode (`DEPLOYMENT_MODE=local`, Ollama + OpenSearch + `api_server.py`)**
+  now routes answering through the same `shared_route` pipeline via
+  `LocalOpenSearchAgent`, so the `history` plumbing is shared. Local Mode has no
+  DynamoDB session store, so it does not persist history across requests on its
+  own; it relies on the request's `conversation_history`.
 - **DynamoDB session persistence IS wired** — the shim builds a local
   `DynamoDBClient` and, when a `session_id` is supplied, loads history before
   and persists the Q/A turn after answering, matching the Lambda. Note the GUI's
@@ -328,14 +330,11 @@ For the full list of what separates this local setup from a real AWS deploy, see
   currently returns a finished `RoutingResult`), so it is deferred.
 - **Richer seed KB** or a loader so retrieval reflects real content instead of
   the two demonstration documents.
-- **Multi-turn memory in Local Mode.** Currently serverless-path only (via
-  `shared_route`'s `history`). Local Mode uses a separate
-  `StrandsGraphRAGAgent.answer_question` flow that routes through the Strands
-  agents / `rag_worker` node rather than `shared_route`, so it would need its
-  own history wiring: add a `history` param, inject it into the generation
-  context (the `rag_agent` context / `rag_worker`), and source it from the
-  request's already-built `conversation_history` (Local Mode has no DynamoDB
-  session store). Scoped as a separate change to avoid destabilizing that path.
+- **Per-session history persistence in Local Mode.** Local Mode now shares the
+  `shared_route` `history` plumbing via `LocalOpenSearchAgent`, but has no
+  DynamoDB session store, so it cannot persist history across stateless requests
+  on its own. Sourcing it from the request's `conversation_history` (or adding a
+  local session store) is a possible future enhancement.
 
 ## Cached questions list (GUI sidebar)
 
@@ -346,16 +345,16 @@ L4 semantic cache), surfaced through two endpoints:
 - `GET /v1/cache/questions` — lists cached questions.
 - `GET /v1/cache/responses/{id}` — returns a specific cached answer + sources.
 
-Both are Milvus-oriented in `api_server.py`; the serverless shim adapts them to
-OpenSearch via a small `response_cache` adapter (no `api_server.py` / `src/`
-changes). Entries only appear **after** a question has been asked (each answer
-is written to `rag-cache`).
+Both endpoints read through a small `response_cache` adapter that maps the
+OpenSearch `rag-cache` documents into the shape the GUI expects. Entries only
+appear **after** a question has been asked (each answer is written to
+`rag-cache`).
 
 ## Files involved
 
 | Path | Purpose |
 |------|---------|
-| `docker/serverless-local/docker-compose.yml` | Local OpenSearch + Redis |
+| `docker/docker-compose.yml` | Consolidated `agentcore-rag` stack (OpenSearch + Redis + DynamoDB) |
 | `.env.serverless-local` | Serverless-local configuration |
 | `scripts/run_serverless_local.py` | CLI runner (injects local backends into `shared_route`); also holds the shared local-backend builders (OpenSearch/Redis/DynamoDB) |
 | `scripts/serverless_api_server.py` | GUI server (serverless agent shim + serverless `/health`) |

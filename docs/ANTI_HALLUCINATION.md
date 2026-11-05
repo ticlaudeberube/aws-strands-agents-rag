@@ -243,7 +243,7 @@ evaluation harness closes that loop.
   drops (topic gate got looser).
 - **It's isolated and free.** `mlflow` lives in the `eval` optional-dependency
   group, is imported lazily, and is never reachable from the runtime/serverless
-  path. Local mode runs fully offline (Ollama + Milvus), so there is no AWS
+  path. Local mode runs fully offline (Ollama + OpenSearch), so there is no AWS
   dependency or cost. (Managed MLflow on SageMaker/Databricks exists, but is
   unnecessary for the dev loop.)
 

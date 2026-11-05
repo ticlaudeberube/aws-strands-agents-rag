@@ -258,7 +258,7 @@ Run: `npx playwright test e2e/chatbot-search.spec.ts`
 
 Features tested:
 - API status indicator (Connected/Warning/Checking/Offline)
-- Warning state when local Milvus is unavailable while the API remains reachable
+- Warning state when local VectorDB is unavailable while the API remains reachable
 - Health check on app mount
 - Web search capability detection
 - Button disabling when offline

@@ -7,7 +7,7 @@ The project maintains strict, intentional separation between two independent pac
 
 ## Rules
 
-1. `src/` MUST NOT import from `document_loaders/`. Duplicate the implementation in `src/` instead (e.g. `src/tools/milvus_client.py`).
+1. `src/` MUST NOT import from `document_loaders/`. Duplicate the implementation in `src/` instead (e.g. `src/tools/opensearch_client.py` is the `src` OpenSearch client; `document_loaders/core/tools.py` has its own `OpenSearchVectorDB`).
 2. `document_loaders/` MUST NOT import from `src/`. Use `document_loaders/local_settings.py` instead.
 3. Duplicated logic between the two packages is intentional and correct — not a DRY violation. Each serves a different purpose and can evolve independently.
 4. Each package owns its configuration: `src/config/settings.py` vs `document_loaders/local_settings.py`. They can differ (e.g. different default models).

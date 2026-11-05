@@ -1,8 +1,8 @@
 """Tests for the LOCAL_VECTOR_BACKEND selector (Phase 1 of OpenSearch migration).
 
-The selector chooses the Local-Mode vector store (milvus | opensearch) without
-changing deployment_mode. Default is milvus so current behavior is unchanged;
-an invalid value fails fast at settings load; serverless mode ignores it.
+The selector chooses the Local-Mode vector store. After the Milvus removal
+OpenSearch is the only accepted engine; an invalid value fails fast at settings
+load; serverless mode ignores the selector entirely.
 """
 
 from __future__ import annotations
@@ -20,10 +20,11 @@ def test_default_is_opensearch(monkeypatch: pytest.MonkeyPatch) -> None:
     assert Settings().local_vector_backend == "opensearch"
 
 
-def test_milvus_value_still_accepted(monkeypatch: pytest.MonkeyPatch) -> None:
-    # milvus remains selectable until it is removed later in Phase 2.
+def test_milvus_value_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Milvus is no longer a selectable backend after the engine removal.
     monkeypatch.setenv("LOCAL_VECTOR_BACKEND", "milvus")
-    assert Settings().local_vector_backend == "milvus"
+    with pytest.raises(ValidationError):
+        Settings()
 
 
 def test_opensearch_value_accepted(monkeypatch: pytest.MonkeyPatch) -> None:

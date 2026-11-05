@@ -31,8 +31,8 @@ def integration_settings(test_project_root: Path):
     """Provide integration test settings."""
     settings = MagicMock()
     settings.OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-    settings.MILVUS_HOST = os.getenv("MILVUS_HOST", "localhost")
-    settings.MILVUS_PORT = int(os.getenv("MILVUS_PORT", "19530"))
+    settings.OPENSEARCH_LOCAL_HOST = os.getenv("OPENSEARCH_LOCAL_HOST", "localhost")
+    settings.OPENSEARCH_LOCAL_PORT = int(os.getenv("OPENSEARCH_LOCAL_PORT", "9200"))
     settings.EMBEDDING_MODEL = "nomic-embed-text"
     settings.FAST_MODEL = "qwen2.5:0.5b"
     settings.POWERFUL_MODEL = "llama3.1:8b"
@@ -48,8 +48,8 @@ def integration_settings(test_project_root: Path):
 def integration_env_vars(test_project_root: Path):
     """Set up environment for integration tests."""
     env = {
-        "MILVUS_HOST": "localhost",
-        "MILVUS_PORT": "19530",
+        "OPENSEARCH_LOCAL_HOST": "localhost",
+        "OPENSEARCH_LOCAL_PORT": "9200",
         "OLLAMA_BASE_URL": "http://localhost:11434",
         "TAVILY_API_KEY": "test-key-integration",
         "ENABLE_WEB_SEARCH": "true",
@@ -115,7 +115,7 @@ def pytest_collection_modifyitems(config, items):
 
     Every test collected under tests/integration/ is tagged with the
     `integration` marker. The root conftest uses this marker to auto-skip
-    Milvus-dependent tests when Milvus is unreachable.
+    vector-DB-dependent tests when OpenSearch is unreachable.
     """
     integration_dir = Path(__file__).parent.resolve()
     for item in items:

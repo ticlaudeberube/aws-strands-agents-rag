@@ -25,26 +25,23 @@ grounding retry are anti-hallucination defenses; see
 [docs/ANTI_HALLUCINATION.md](ANTI_HALLUCINATION.md) (Layers 3 and 4b) for the
 full design. The difference between modes is the backend wiring, not the agent logic itself.
 The graph uses a vector-store role rather than requiring one vendor's product.
-The current adapters are Milvus or OpenSearch for local mode and OpenSearch
-Serverless for AWS mode; another provider needs a compatible adapter and
-configuration.
+OpenSearch is the vector engine in both modes — a local OpenSearch container for
+local mode and OpenSearch Serverless for AWS mode; another provider needs a
+compatible adapter and configuration.
 
-Local mode's vector store is selected by `LOCAL_VECTOR_BACKEND`: `milvus`
-(default) runs the Milvus stack via `StrandsGraphRAGAgent`; `opensearch` runs a
-local OpenSearch container and routes answering through the same backend-agnostic
-`shared_route` pipeline the serverless Lambda uses (via `LocalOpenSearchAgent`),
-giving dev/prod parity on the OpenSearch engine. Embeddings stay Ollama (768-dim)
-in both local variants. See [docs/GETTING_STARTED.md](GETTING_STARTED.md) for the
-setup steps.
+Local mode routes answering through the same backend-agnostic `shared_route`
+pipeline the serverless Lambda uses (via `LocalOpenSearchAgent`), giving dev/prod
+parity on the OpenSearch engine. Embeddings stay Ollama (768-dim) locally and
+Bedrock in serverless. `LOCAL_VECTOR_BACKEND` selects the local engine and
+currently accepts only `opensearch`. See
+[docs/GETTING_STARTED.md](GETTING_STARTED.md) for the setup steps.
 
-Retrieval uses pure vector (k-NN) similarity with HNSW. Both adapters share the
-same recall knob, `MILVUS_SEARCH_EF` (HNSW `ef` / OpenSearch `ef_search`,
-clamped to at least `top_k`), and the same web-search fallback decision
-(`average_relevance` vs `WEB_SEARCH_FALLBACK_THRESHOLD`). Both `search()` /
-`knn_search()` also accept an optional metadata filter (`expr` / `filter`),
-which is unused by default — retrieval is unfiltered unless a caller passes one.
-When searching multiple local collections, hits are re-ranked by similarity
-before the `top_k` cut so the best matches survive regardless of collection.
+Retrieval uses pure vector (k-NN) similarity with HNSW. Local and serverless
+share the same recall knob, `VECTORDB_SEARCH_EF` (OpenSearch `ef_search`, clamped
+to at least `top_k`), and the same web-search fallback decision
+(`average_relevance` vs `WEB_SEARCH_FALLBACK_THRESHOLD`). `knn_search()` also
+accepts an optional metadata filter, which is unused by default — retrieval is
+unfiltered unless a caller passes one.
 
 ## Local mode
 
@@ -52,8 +49,8 @@ Local mode is the default path for development and debugging.
 
 - FastAPI app in `api_server.py`
 - Ollama for LLM and embeddings
-- A vector DB for retrieval; the current local adapter uses Milvus
-- Docker Compose for the current Milvus-backed local stack
+- A local OpenSearch container for retrieval
+- Docker Compose for the consolidated `agentcore-rag` local stack
 
 ## Serverless AWS mode
 
@@ -80,7 +77,8 @@ This is the actual source of truth in the current project. There is no supported
 
 - `api_server.py` exposes the OpenAI-compatible REST API
 - `src/config/settings.py` selects the active backend stack
-- `src/agents/strands_graph_agent.py` handles the topic/security/RAG flow
+- `src/agents/strands_graph_agent.py` builds the shared graph (`create_rag_graph`) and the topic/security/RAG routing
+- `src/agents/local_opensearch_agent.py` is the local-mode agent facade over `shared_route`
 - `src/agents/guardrail_hooks.py` adds a framework-level hard block on the RAGWorker's tool calls (see [docs/ANTI_HALLUCINATION.md](ANTI_HALLUCINATION.md) Layer 4b)
 - `src/tools/` contains the retrieval, embedding, cache, and web-search clients
 - The app captures sources and response metadata for the frontend and API callers
@@ -89,7 +87,7 @@ This is the actual source of truth in the current project. There is no supported
 
 Use local mode when:
 - you are developing locally
-- you want Ollama with the currently configured Milvus vector DB
+- you want Ollama with a local OpenSearch vector DB
 - you need offline or quick demos
 
 Use serverless mode when:

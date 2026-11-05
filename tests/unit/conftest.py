@@ -15,8 +15,8 @@ def mock_settings():
     """Provide mock settings for unit tests."""
     settings = MagicMock()
     settings.OLLAMA_BASE_URL = "http://localhost:11434"
-    settings.MILVUS_HOST = "localhost"
-    settings.MILVUS_PORT = 19530
+    settings.OPENSEARCH_LOCAL_HOST = "localhost"
+    settings.OPENSEARCH_LOCAL_PORT = 9200
     settings.EMBEDDING_MODEL = "nomic-embed-text"
     settings.FAST_MODEL = "qwen2.5:0.5b"
     settings.POWERFUL_MODEL = "llama3.1:8b"
@@ -36,8 +36,8 @@ def mock_ollama_client():
 
 
 @pytest.fixture
-def mock_milvus_client():
-    """Provide mock Milvus client for unit tests."""
+def mock_vector_db_client():
+    """Provide a mock vector-DB client for unit tests."""
     client = MagicMock()
     client.search = MagicMock(
         return_value=[
@@ -54,8 +54,8 @@ def mock_env_vars():
     with patch.dict(
         os.environ,
         {
-            "MILVUS_HOST": "localhost",
-            "MILVUS_PORT": "19530",
+            "OPENSEARCH_LOCAL_HOST": "localhost",
+            "OPENSEARCH_LOCAL_PORT": "9200",
             "OLLAMA_BASE_URL": "http://localhost:11434",
         },
     ):

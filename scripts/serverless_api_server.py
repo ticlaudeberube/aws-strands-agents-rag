@@ -62,14 +62,14 @@ from scripts.run_serverless_local import (  # noqa: E402
 
 
 class _OpenSearchCacheQueryClient:
-    """Milvus-``client``-shaped shim exposing ``query(...)`` over rag-cache.
+    """``client``-shaped shim exposing ``query(...)`` over rag-cache.
 
     The GUI's GET /v1/cache/responses/{id} endpoint calls
     ``vector_db.client.query(collection_name=..., db_name=..., output_fields=...,
     limit=...)`` and expects entities shaped ``{"id","text","metadata"}`` where
     ``text`` is the answer and ``metadata.sources`` the source list. This maps
     the OpenSearch ``rag-cache`` docs (fields ``question``/``answer``/``sources``)
-    into that shape so a Milvus-oriented endpoint works unchanged.
+    into that shape so the cache endpoint works unchanged.
     """
 
     def __init__(self, opensearch_client):
@@ -104,8 +104,8 @@ class _OpenSearchQuestionLister:
     """``vector_db``-shaped object for the cached-questions/response endpoints.
 
     Exposes ``list_all_cached_questions(...)`` (for GET /v1/cache/questions) and
-    a Milvus-like ``client.query(...)`` + ``db_name`` (for GET
-    /v1/cache/responses/{id}), both backed by the OpenSearch ``rag-cache`` index.
+    a ``client.query(...)`` + ``db_name`` (for GET /v1/cache/responses/{id}),
+    both backed by the OpenSearch ``rag-cache`` index.
     """
 
     def __init__(self, opensearch_client):
@@ -138,7 +138,7 @@ class _OpenSearchQuestionLister:
 
 
 class _OpenSearchResponseCacheAdapter:
-    """Stands in for MilvusResponseCache for the cached-questions endpoints."""
+    """Response-cache adapter backing the cached-questions endpoints."""
 
     def __init__(self, opensearch_client, settings):
         self.vector_db = _OpenSearchQuestionLister(opensearch_client)
@@ -210,8 +210,8 @@ class ServerlessAgentShim:
         """Return True when the local OpenSearch backend responds.
 
         Used by the serverless-aware /health override. The default api_server
-        /health probes a Milvus vector_db that this shim doesn't have, which is
-        why it must be overridden for serverless-local use.
+        /health probes the local agent's vector_db that this shim doesn't have,
+        which is why it must be overridden for serverless-local use.
         """
         try:
             return bool(self._opensearch.client.ping())
@@ -407,10 +407,10 @@ class ServerlessAgentShim:
 def _install_serverless_health(api_server, shim: "ServerlessAgentShim", settings) -> None:
     """Replace the app's /health route with a serverless-aware version.
 
-    Removes the existing GET /health route (which probes a Milvus vector_db)
-    and registers one that reports the local OpenSearch + Redis backends. This
-    keeps the GUI's status indicator accurate for serverless-local use without
-    editing api_server.py.
+    Removes the existing GET /health route (which probes the local agent's
+    vector_db) and registers one that reports the local OpenSearch + Redis
+    backends. This keeps the GUI's status indicator accurate for
+    serverless-local use without editing api_server.py.
     """
     app = api_server.app
 
@@ -466,9 +466,9 @@ def main() -> int:
     shim = ServerlessAgentShim(settings)
 
     # Replace the module globals the FastAPI app/handlers read, and neutralise
-    # the Local-Mode lifespan so it does not try to build Ollama/Milvus.
-    # ServerlessAgentShim is a duck-typed drop-in for the StrandsGraphRAGAgent
-    # the handlers expect, so the monkeypatch is intentional.
+    # the Local-Mode lifespan so it does not try to build Ollama/OpenSearch.
+    # ServerlessAgentShim is a duck-typed drop-in for the local agent the
+    # handlers expect, so the monkeypatch is intentional.
     api_server.strands_agent = shim  # type: ignore[assignment]
     api_server.settings = settings
     api_server.initialization_error = None
@@ -476,7 +476,7 @@ def main() -> int:
     # The /api/cache/questions and /v1/cache/questions endpoints serve the
     # module-level `common_questions` list, which the Local-Mode lifespan loads
     # from config/common_questions.json. Our no-op lifespan skips that, so load
-    # it here. This is a static config file — no AWS / Milvus dependency.
+    # it here. This is a static config file — no AWS / OpenSearch dependency.
     try:
         api_server.common_questions = api_server.load_common_questions()
         logger.info("Loaded %d common question(s)", len(api_server.common_questions))
@@ -484,9 +484,9 @@ def main() -> int:
         logger.warning("Could not load common questions: %s", exc)
 
     # Override /health with a serverless-aware version. The default route in
-    # api_server probes a Milvus `vector_db` attribute this shim does not have,
-    # so it always reports "vector database unavailable" even though OpenSearch
-    # retrieval is working. This replacement reports the real serverless
+    # api_server probes the local agent's `vector_db` attribute this shim does
+    # not have, so it always reports "vector database unavailable" even though
+    # OpenSearch retrieval is working. This replacement reports the real serverless
     # backends (OpenSearch + Redis). LOCAL-ONLY: it lives in this wrapper and
     # never touches api_server.py / src.
     _install_serverless_health(api_server, shim, settings)

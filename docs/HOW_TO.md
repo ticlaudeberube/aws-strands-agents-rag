@@ -18,11 +18,10 @@ Use this when you want to run the app on a laptop or dev machine.
 
 - `FastAPI` app via `api_server.py`
 - `Ollama` for LLM and embeddings
-- A vector DB for document search — Milvus (default) or a local OpenSearch
-  container, selected by `LOCAL_VECTOR_BACKEND`. The OpenSearch option matches
-  the serverless engine for dev/prod parity; see
+- A local OpenSearch container for document search, matching the serverless
+  engine for dev/prod parity; see
   [docs/GETTING_STARTED.md](GETTING_STARTED.md) for the start → ingest → run steps.
-- Docker Compose for the local vector DB service
+- Docker Compose for the consolidated `agentcore-rag` local stack
 
 ### Serverless mode
 

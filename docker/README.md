@@ -1,303 +1,108 @@
-# RAG Application Docker Configuration
+# AgentCore RAG — Docker Configuration
 
-Optimized Docker deployment for the AWS Strands Agents RAG system with Milvus vector database, MinIO object storage, and etcd configuration management.
+Consolidated local stack for the AWS Strands Agents RAG system. One Compose file
+(`docker-compose.yml`, project name `agentcore-rag`) brings up the whole local
+app on the **OpenSearch** vector engine. Milvus has been removed — OpenSearch is
+the sole vector store in both local and serverless modes.
 
-## Quick Start
+## Services
 
-### 1. Automatic Setup (Recommended)
+| Service | Container | Image | Port(s) | Purpose |
+|---|---|---|---|---|
+| opensearch | `agentcore-rag-opensearch` | `opensearchproject/opensearch:2.17.1` | 9200 | Vector store (`rag-kb`) + Layer 4 semantic cache (`rag-cache`). Security plugin disabled — local-only, plain HTTP, no TLS/auth. |
+| redis | `agentcore-rag-redis` | `redis:7.4-alpine` | 6379 | Layer 2/3 cache (plain TCP, no TLS). |
+| dynamodb | `agentcore-rag-dynamodb` | `amazon/dynamodb-local:2.5.2` | 8001 | Session/analytics store (DynamoDB Local, in-memory). |
+| rag-api | `agentcore-rag-api` | built from `docker/Dockerfile` | 8000 | FastAPI app, Local Mode on OpenSearch. |
+| react-chatbot | `agentcore-rag-react` | built from `docker/Dockerfile.react` | 3000 | React chatbot UI. |
 
-Run the optimization script to configure Docker and start all services:
+> **Ollama runs on the host**, not in Docker — the app reaches it at
+> `http://host.docker.internal:11434`. Make sure `ollama serve` is running and
+> the embedding model is pulled: `ollama pull nomic-embed-text:v1.5`.
+
+## Quick start
 
 ```bash
 cd docker
-chmod +x optimize.sh
-./optimize.sh --all
+docker compose up -d          # starts all 5 services
+docker compose ps             # wait for opensearch + rag-api to be healthy
 ```
 
-### 2. Manual Startup
-
-Start services without optimization:
+Then ingest documents into OpenSearch (Ollama embeddings) and query:
 
 ```bash
-cd docker
-docker-compose up -d
+# from the repo root, with the stack up:
+uv run python document_loaders/load_docs_opensearch.py    # index the KB corpus
+# or an arbitrary directory:
+uv run python scripts/ingest_local_opensearch.py --docs ./data/docs
+
+curl http://localhost:8000/health        # vector_db: "opensearch (local ...)"
+open http://localhost:3000               # chat UI
 ```
 
-## Docker Compose Services
-
-### milvus (Vector Database)
-- **Image**: `milvusdb/milvus:v2.6.0`
-- **Port**: 19530 (gRPC), 9091 (HTTP/WebUI)
-- **Resources**: 4 CPU cores, 8GB RAM
-- **Features**:
-  - 2GB query cache
-  - 50GB disk cache enabled
-  - 8 parallel index builders
-  - Disk-based search enabled
-
-### minio (Object Storage)
-- **Image**: `minio/minio:RELEASE.2024-12-18T13-15-44Z`
-- **Ports**: 9000 (API), 9001 (Console)
-- **Resources**: 2 CPU cores, 2GB RAM
-- **Console**: http://localhost:9001
-- **Credentials**: minioadmin / minioadmin
-
-### etcd (Configuration Storage)
-- **Image**: `quay.io/coreos/etcd:v3.5.18`
-- **Port**: 2379
-- **Resources**: 1 CPU core, 1GB RAM
-- **Features**:
-  - Auto-compaction enabled
-  - 4GB quota backend
-  - High snapshot count (50000)
-
-### rag-api (RAG Application)
-- **Build**: From project Dockerfile
-- **Port**: 8000
-- **Resources**: 2 CPU cores, 2GB RAM
-- **Health Check**: Every 30 seconds
-- **Dependencies**: Requires milvus to be healthy
-
-## Performance Optimizations Applied
-
-### Docker-level Optimizations
-- **Memory Limits**: Strict per-service limits to prevent resource exhaustion
-- **CPU Allocation**: CPUs pinned to specific cores for isolation
-- **tmpfs Volumes**: Temporary files use in-memory storage
-- **Init Process**: `init: true` for proper signal handling
-- **Healthchecks**: Automated service monitoring and recovery
-- **Restart Policy**: Automatic restart on failure
-
-### Milvus-specific Optimizations
-```yaml
-GOMAXPROCS: "4"           # Go runtime optimization
-GOMEMLIMIT: "6GiB"        # Memory ceiling
-Cache Size: 2GB           # Query node cache
-Disk Cache: Enabled       # Disk-based searching
-Parallel IndexBuilders: 8 # Concurrent index building
-```
-
-### System-level Optimizations
-- File descriptor limits: 65536
-- Memory locking enabled
-- No memory swap for stable performance
-- Custom bridge network for isolation
-
-## macOS Docker Desktop Settings
-
-For optimal performance, configure Docker Desktop:
-
-1. **Open Docker Desktop Preferences** (⌘ + ,)
-2. **Resources Tab**:
-   - CPUs: 8+ cores
-   - Memory: 16GB+
-   - Swap: 2GB
-   - Disk image size: 100GB+
-
-3. **Features in development tab** (Experimental):
-   - Enable **VirtioFS** (faster than osxfs)
-   - Enable **Rosetta 2** (if using Apple Silicon)
-
-4. **File Sharing**:
-   - Ensure project directory is shared
-
-## Linux System Optimization
-
-Run the optimization script:
+## Common commands
 
 ```bash
-./optimize.sh --linux
+docker compose up -d                 # start
+docker compose down                  # stop (add -v to drop the opensearch volume)
+docker compose logs -f rag-api       # tail a service
+docker compose logs -f opensearch
+docker compose ps                    # health
+docker stats                         # resource usage
 ```
 
-This automatically configures:
-- File descriptor limits (65536)
-- vm.swappiness = 1
-- vm.max_map_count = 262144
-- Network optimizations
+## rag-api configuration
 
-## Usage Commands
+The `rag-api` service runs Local Mode against OpenSearch via these env vars
+(set in `docker-compose.yml`):
 
-### Start All Services
+- `DEPLOYMENT_MODE=local`
+- `LOCAL_VECTOR_BACKEND=opensearch`
+- `OPENSEARCH_LOCAL_HOST=opensearch` / `OPENSEARCH_LOCAL_PORT=9200`
+- `OLLAMA_HOST=http://host.docker.internal:11434`
+- `API_PORT=8000`
+
+`api_server.py`, `src/`, `chatbots/`, and `document_loaders/` are bind-mounted,
+so source edits take effect without rebuilding the image. Rebuild only when
+`Dockerfile` or dependencies change: `docker compose build rag-api`.
+
+## Health checks
+
 ```bash
-docker-compose up -d
+curl http://localhost:8000/health                 # RAG API (reports OpenSearch)
+curl http://localhost:9200/_cluster/health        # OpenSearch
+docker exec agentcore-rag-redis redis-cli ping     # Redis -> PONG
+curl http://localhost:8000/health/vector-db        # detailed vector-store health
 ```
 
-### Stop All Services
-```bash
-docker-compose down
-```
+## Access
 
-### View Logs
-```bash
-# All services
-docker-compose logs -f
+| Service | URL |
+|---|---|
+| RAG API | http://localhost:8000 |
+| React UI | http://localhost:3000 |
+| OpenSearch | http://localhost:9200 |
 
-# Specific service
-docker-compose logs -f milvus
-docker-compose logs -f rag-api
-docker-compose logs -f minio
-```
+## Serverless-local (optional)
 
-### Monitor Resources
-```bash
-docker stats
-```
-
-### Check Service Health
-```bash
-docker-compose ps
-```
-
-### Access Services
-
-| Service | URL | Purpose |
-|---------|-----|---------|
-| Milvus gRPC | localhost:19530 | Vector database API |
-| Milvus WebUI | http://localhost:9091/webui | Database management |
-| MinIO API | localhost:9000 | Object storage API |
-| MinIO Console | http://localhost:9001 | Storage management |
-| RAG API | http://localhost:8000 | RAG application API |
-
-### Health Checks
-```bash
-# RAG API health
-curl http://localhost:8000/health
-
-# Milvus health
-curl http://localhost:9091/healthz
-
-# MinIO health
-curl http://localhost:9000/minio/health/live
-```
-
-## Environment Variables
-
-The services use these key environment variables:
-
-### For rag-api Service
-- `MILVUS_HOST`: Vector database host (default: milvus)
-- `MILVUS_PORT`: Vector database port (default: 19530)
-- `OLLAMA_HOST`: Ollama server URL (currently http://host.docker.internal:11434)
-- `LOG_LEVEL`: Logging level (default: INFO)
-
-### For milvus Service
-- `ETCD_ENDPOINTS`: etcd configuration store
-- `MINIO_ADDRESS`: Object storage endpoint
-- `MQ_TYPE`: Message queue type (woodpecker)
+To exercise the **serverless** code path locally (real Bedrock + these same
+local OpenSearch/Redis/DynamoDB containers), bring this stack up and run the
+wrapper scripts — see [docs/SERVERLESS_LOCAL.md](../docs/SERVERLESS_LOCAL.md).
+Those scripts reuse the `agentcore-rag` OpenSearch/Redis/DynamoDB services on
+ports 9200/6379/8001.
 
 ## Troubleshooting
 
-### Services Won't Start
-```bash
-# Check Docker daemon
-docker ps
-
-# View initialization logs
-docker-compose logs etcd
-docker-compose logs minio
-docker-compose logs milvus
-
-# Restart services
-docker-compose down && docker-compose up -d
-```
-
-### Out of Memory
-```bash
-# Check current resource usage
-docker stats
-
-# Increase Docker Desktop memory limits
-# Docker Desktop Preferences → Resources → Memory
-```
-
-### Slow Performance
-```bash
-# Check CPU allocation
-docker stats
-
-# Monitor with extended information
-docker stats --no-stream
-
-# Check disk usage
-docker system df
-
-# Clean up unused resources
-docker system prune -a
-```
-
-### Port Already in Use
-```bash
-# Find process using port (macOS/Linux)
-lsof -i :19530  # Milvus
-lsof -i :9001   # MinIO
-lsof -i :8000   # RAG API
-
-# Kill process if needed
-kill -9 <PID>
-```
-
-## Performance Monitoring
-
-### Real-time Statistics
-```bash
-docker stats
-```
-
-### Inspect Container Resources
-```bash
-docker inspect rag-milvus --format='{{json .HostConfig.Memory}}'
-docker inspect rag-api --format='{{json .HostConfig.Memory}}'
-```
-
-### View Docker Disk Usage
-```bash
-docker system df
-```
-
-### Check Container CPU and Memory Limits
-```bash
-docker inspect rag-milvus | grep -A 5 "MemoryLimit\|CpuQuota"
-```
-
-## Deployment Checklist
-
-- [ ] Docker Desktop is running
-- [ ] Project directory is in Docker file sharing (macOS)
-- [ ] Port 19530, 9000, 9001, 8000 are available
-- [ ] At least 16GB RAM available to Docker
-- [ ] At least 8 CPU cores allocated to Docker
-- [ ] VirtioFS enabled on macOS (if available)
-- [ ] Run `./optimize.sh --all` for initial setup
-- [ ] Verify all services are healthy: `docker-compose ps`
-- [ ] Test API health: `curl http://localhost:8000/health`
-
-## Advanced Configuration
-
-### Modify Service Resources
-Edit `docker-compose.yml`:
-
-```yaml
-services:
-  milvus:
-    mem_limit: 16g          # Increase memory
-    cpus: 8.0               # Increase CPUs
-    cpuset_cpus: "0-7"      # Specific cores
-```
-
-### Enable Debug Logging
-```yaml
-services:
-  milvus:
-    environment:
-      LOG_LEVEL: "debug"
-```
-
-### Custom Network
-Currently uses custom bridge network `rag-network` (172.28.0.0/16) for isolation.
+- **Port already in use (8000/9200/6379/3000):** find and stop the holder
+  (`lsof -nP -iTCP:8000 -sTCP:LISTEN`), or stop a stale container
+  (`docker compose stop rag-api`).
+- **`vector database is unavailable` in the UI:** OpenSearch isn't up or the KB
+  index is empty. Check `docker compose ps` and run the ingest step above.
+- **Out of memory / container killed (exit 137):** raise Docker Desktop memory
+  (Preferences → Resources). OpenSearch wants ~2GB.
+- **React restart loop:** rebuild after editing `nginx.conf`
+  (`docker compose build react-chatbot`), since it's baked into the image.
 
 ## References
 
-- [Milvus Documentation](https://milvus.io/docs)
-- [MinIO Documentation](https://docs.min.io/)
+- [OpenSearch Documentation](https://opensearch.org/docs/)
 - [Docker Compose Reference](https://docs.docker.com/compose/compose-file/)
-- [Docker Performance Best Practices](https://docs.docker.com/build/building/best-practices/)

@@ -15,7 +15,7 @@ Why a standalone runner (not api_server.py)?
     clients WITHOUT modifying any ``src/`` production code.
 
 Prereqs:
-    1. docker/serverless-local/docker-compose.yml up (OpenSearch + Redis).
+    1. docker/docker-compose.yml up (OpenSearch + Redis + DynamoDB).
     2. AWS creds for account 996428372683 in us-east-1 (Bedrock access).
     3. .env.serverless-local present (loaded automatically).
 

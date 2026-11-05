@@ -16,7 +16,7 @@ including DynamoDB session persistence and multi-turn history.
 Run:
     .venv/bin/python scripts/run_lambda_handler_local.py "your question"
 
-Prereqs: docker/serverless-local/docker-compose.yml up (incl. dynamodb);
+Prereqs: docker/docker-compose.yml up (OpenSearch + Redis + DynamoDB);
 AWS creds for Bedrock in us-east-1; .env.serverless-local present.
 """
 

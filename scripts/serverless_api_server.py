@@ -20,8 +20,8 @@ Run:
     .venv/bin/python scripts/serverless_api_server.py
 Then point the React app at http://localhost:8000 (its default) and chat.
 
-Prereqs: docker/serverless-local/docker-compose.yml up; AWS creds for
-996428372683 in us-east-1.
+Prereqs: docker/docker-compose.yml up (OpenSearch + Redis + DynamoDB); AWS
+creds for 996428372683 in us-east-1.
 """
 
 from __future__ import annotations

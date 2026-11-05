@@ -3,8 +3,8 @@
 ###############################################################################
 # RAG Application Docker Performance Optimization Script
 #
-# This script optimizes Docker and system settings for the RAG application
-# with Milvus, MinIO, and etcd services.
+# This script optimizes Docker and system settings for the AgentCore RAG
+# application (OpenSearch + Redis + DynamoDB + API + React).
 ###############################################################################
 
 # Use set +e to handle errors gracefully
@@ -192,16 +192,18 @@ show_service_info() {
     cat << 'EOF'
 
 Services:
-  - Milvus Vector DB:    http://localhost:19530
-  - Milvus Web UI:       http://localhost:9091/webui
-  - MinIO Console:       http://localhost:9001
+  - OpenSearch:          http://localhost:9200
+  - Redis:               localhost:6379
+  - DynamoDB Local:      http://localhost:8001
   - RAG API Server:      http://localhost:8000
+  - React Chatbot:       http://localhost:3000
 
 Container Services:
-  - rag-etcd (etcd)      - Configuration and metadata storage
-  - rag-minio (MinIO)    - Object storage
-  - rag-milvus (Milvus)  - Vector database
-  - rag-api (RAG API)    - API server
+  - agentcore-rag-opensearch  - Vector database (OpenSearch)
+  - agentcore-rag-redis       - Response cache
+  - agentcore-rag-dynamodb    - DynamoDB Local (serverless emulation)
+  - agentcore-rag-api         - API server
+  - agentcore-rag-react       - React chatbot UI
 
 Useful Commands:
   - View service logs:   docker compose logs -f [service]
@@ -221,17 +223,17 @@ Real-time monitoring:
   docker stats
 
 Service-specific logs:
-  docker compose logs -f milvus
+  docker compose logs -f opensearch
   docker compose logs -f rag-api
-  docker compose logs -f minio
+  docker compose logs -f redis
 
 Health check:
   curl http://localhost:8000/health
-  curl http://localhost:19530/health
+  curl http://localhost:9200/_cluster/health
 
 View resource allocation:
-  docker inspect rag-milvus --format='{{json .HostConfig.Memory}}' | python3 -m json.tool
-  docker inspect rag-minio --format='{{json .HostConfig.Memory}}' | python3 -m json.tool
+  docker inspect agentcore-rag-opensearch --format='{{json .HostConfig.Memory}}' | python3 -m json.tool
+  docker inspect agentcore-rag-redis --format='{{json .HostConfig.Memory}}' | python3 -m json.tool
 
 EOF
 }

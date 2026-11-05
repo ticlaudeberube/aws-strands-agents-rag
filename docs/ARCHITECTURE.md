@@ -25,8 +25,17 @@ grounding retry are anti-hallucination defenses; see
 [docs/ANTI_HALLUCINATION.md](ANTI_HALLUCINATION.md) (Layers 3 and 4b) for the
 full design. The difference between modes is the backend wiring, not the agent logic itself.
 The graph uses a vector-store role rather than requiring one vendor's product.
-The current adapters are Milvus for local mode and OpenSearch Serverless for
-AWS mode; another provider needs a compatible adapter and configuration.
+The current adapters are Milvus or OpenSearch for local mode and OpenSearch
+Serverless for AWS mode; another provider needs a compatible adapter and
+configuration.
+
+Local mode's vector store is selected by `LOCAL_VECTOR_BACKEND`: `milvus`
+(default) runs the Milvus stack via `StrandsGraphRAGAgent`; `opensearch` runs a
+local OpenSearch container and routes answering through the same backend-agnostic
+`shared_route` pipeline the serverless Lambda uses (via `LocalOpenSearchAgent`),
+giving dev/prod parity on the OpenSearch engine. Embeddings stay Ollama (768-dim)
+in both local variants. See [docs/GETTING_STARTED.md](GETTING_STARTED.md) for the
+setup steps.
 
 Retrieval uses pure vector (k-NN) similarity with HNSW. Both adapters share the
 same recall knob, `MILVUS_SEARCH_EF` (HNSW `ef` / OpenSearch `ef_search`,

@@ -109,6 +109,42 @@ services:
       - rag-network
     restart: unless-stopped
 
+  # OpenSearch - alternative local vector store (prod parity). OPT-IN via the
+  # "opensearch" compose profile so it does NOT start with the default Milvus
+  # stack and never collides with it. Enable with:
+  #   docker compose --profile opensearch up -d opensearch
+  # Then run the app with DEPLOYMENT_MODE=local and LOCAL_VECTOR_BACKEND=opensearch.
+  # Security plugin disabled: local-only, plain HTTP, no TLS/auth.
+  opensearch:
+    container_name: rag-opensearch
+    image: opensearchproject/opensearch:2.17.1
+    profiles: ["opensearch"]
+    environment:
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+      - DISABLE_SECURITY_PLUGIN=true
+      - DISABLE_INSTALL_DEMO_CONFIG=true
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    ports:
+      - "9200:9200"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    mem_limit: 2g
+    networks:
+      - rag-network
+    restart: unless-stopped
+
   # RAG API Server
   rag-api:
     container_name: rag-api

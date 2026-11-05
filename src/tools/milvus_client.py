@@ -106,9 +106,9 @@ class MilvusVectorDB:
         if embedding_dim is None:
             embedding_dim = 768  # Default fallback if not provided
         if index_type is None:
-            index_type = settings.milvus_index_type
+            index_type = settings.vectordb_index_type
         if metric_type is None:
-            metric_type = settings.milvus_metric_type
+            metric_type = settings.vectordb_metric_type
 
         try:
             if collection_name in self.client.list_collections(db_name=self.db_name):
@@ -121,12 +121,12 @@ class MilvusVectorDB:
             }
             if index_type == "HNSW":
                 index_params["params"] = {
-                    "M": settings.milvus_hnsw_m,
-                    "efConstruction": settings.milvus_hnsw_ef_construction,
+                    "M": settings.vectordb_hnsw_m,
+                    "efConstruction": settings.vectordb_hnsw_ef_construction,
                 }
             elif index_type == "IVF_FLAT":
                 index_params["params"] = {
-                    "nlist": settings.milvus_ivf_nlist,
+                    "nlist": settings.vectordb_ivf_nlist,
                 }
 
             self.client.create_collection(
@@ -175,7 +175,7 @@ class MilvusVectorDB:
         # HNSW search-time recall knob (ef). Must be >= limit to return `limit`
         # candidates; higher ef trades latency for recall. Only meaningful for
         # HNSW indexes; Milvus ignores unknown params for other index types.
-        search_ef = max(settings.milvus_search_ef, limit)
+        search_ef = max(settings.vectordb_search_ef, limit)
         search_params = {"params": {"ef": search_ef}}
 
         results = self.client.search(

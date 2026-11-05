@@ -110,19 +110,48 @@ class OpenSearchClient:
         self.kb_index = settings.opensearch_kb_index
         self.cache_index = settings.opensearch_cache_index
         self.vector_dim = settings.bedrock_pca_target_dim or VECTOR_DIM
-        # HNSW params sourced from the shared Milvus settings so both backends
-        # stay in sync and are tunable via the same env vars (fall back to the
-        # module constants only if a setting is missing).
-        self.hnsw_m = getattr(settings, "milvus_hnsw_m", None) or HNSW_M
+        # HNSW params sourced from the shared vectordb_* settings so both
+        # backends stay in sync and are tunable via the same env vars (fall back
+        # to the module constants only if a setting is missing).
+        self.hnsw_m = getattr(settings, "vectordb_hnsw_m", None) or HNSW_M
         self.hnsw_ef_construction = (
-            getattr(settings, "milvus_hnsw_ef_construction", None) or HNSW_EF_CONSTRUCTION
+            getattr(settings, "vectordb_hnsw_ef_construction", None) or HNSW_EF_CONSTRUCTION
         )
-        self.search_ef = getattr(settings, "milvus_search_ef", None) or 64
+        self.search_ef = getattr(settings, "vectordb_search_ef", None) or 64
 
         if client is not None:
             self.client = client
         else:
             self.client = self._build_client()
+
+    @classmethod
+    def for_local(cls, settings: "Settings | None" = None) -> "OpenSearchClient":
+        """Build an OpenSearchClient for a local, plain-HTTP OpenSearch container.
+
+        Used by Local Mode when ``local_vector_backend == "opensearch"``. Builds
+        a plain-HTTP ``opensearchpy.OpenSearch`` transport (no TLS, no SigV4,
+        security plugin disabled) pointed at ``settings.opensearch_local_host`` /
+        ``opensearch_local_port`` and injects it, bypassing the cloud transport
+        in :meth:`_build_client`. The cloud path is unchanged when this
+        classmethod is not used (an injected client is simply passed through).
+        """
+        if settings is None:
+            from src.config.settings import get_settings
+
+            settings = get_settings()
+
+        opensearchpy = _import_opensearchpy()
+        host = getattr(settings, "opensearch_local_host", None) or "localhost"
+        port = int(getattr(settings, "opensearch_local_port", None) or 9200)
+        raw = opensearchpy.OpenSearch(
+            hosts=[{"host": host, "port": port}],
+            http_auth=None,
+            use_ssl=False,
+            verify_certs=False,
+            ssl_show_warn=False,
+        )
+        logger.info("Built local OpenSearch client for http://%s:%d", host, port)
+        return cls(settings=settings, client=raw)
 
     def _build_client(self) -> Any:
         """Construct an ``opensearchpy.OpenSearch`` client for the endpoint."""
@@ -194,7 +223,7 @@ class OpenSearchClient:
                 means pure vector similarity, unchanged behaviour.
 
         The HNSW search-time beam width (``ef_search``) is set from
-        ``settings.milvus_search_ef`` (shared with the local Milvus backend),
+        ``settings.vectordb_search_ef`` (shared with the local Milvus backend),
         clamped to at least ``k``; higher values trade latency for recall.
         """
         knn_clause: dict[str, Any] = {

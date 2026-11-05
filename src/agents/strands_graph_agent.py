@@ -1011,26 +1011,55 @@ def create_rag_graph(
             pool_size=settings.ollama_pool_size,
         )
 
-        vector_db = milvus_client or MilvusVectorDB(
-            host=settings.milvus_host,
-            port=settings.milvus_port,
-            db_name=settings.milvus_db_name,
-            user=settings.milvus_user,
-            password=settings.milvus_password,
-            timeout=settings.milvus_timeout,
-            pool_size=settings.milvus_pool_size,
-        )
+        # Local Mode vector store is selected by ``local_vector_backend``.
+        # ``local_kb_index`` is bound here and consumed by the ``kb_index``
+        # selection below so OpenSearch Local Mode queries its own index rather
+        # than the Milvus collection name.
+        local_kb_index: str
+        if settings.local_vector_backend == "opensearch":
+            # Offline OpenSearch Local Mode: Ollama embeddings (768-dim) against
+            # a local, plain-HTTP OpenSearch container. The SAME OpenSearchClient
+            # serves KB retrieval (VectorStore) and the Layer 4 semantic cache
+            # (SemanticCache), mirroring the serverless wiring. Imported lazily
+            # so local-Milvus mode never requires opensearch-py.
+            from src.tools.opensearch_client import OpenSearchClient  # noqa: PLC0415
 
-        # Shared-interface backends for the local hot cache (L1/L2/L3) and the
-        # persistent L4 semantic cache. Wired here so the shared routing (task
-        # 8.1) can consume them through CacheBackend / SemanticCache; the
-        # existing node logic below is unchanged, preserving current behavior.
-        cache = InMemoryCache(ttl=settings.embedding_cache_ttl)
-        semantic_cache = MilvusResponseCache(
-            vector_db=vector_db,
-            embedding_dim=settings.response_cache_embedding_dim,
-            distance_threshold=settings.response_cache_threshold,
-        )
+            os_client = opensearch_client or OpenSearchClient.for_local(settings)
+            vector_db = os_client
+            semantic_cache = os_client
+            local_kb_index = settings.opensearch_kb_index
+
+            # L2/L3 cache: InMemory by default (zero-setup), or a plain-TCP local
+            # Redis for full prod-parity when REDIS_CACHE_ENABLED is set.
+            if settings.redis_cache_enabled:
+                from src.tools.redis_cache import RedisCache  # noqa: PLC0415
+
+                cache = redis_cache or RedisCache.for_local(settings)
+            else:
+                cache = InMemoryCache(ttl=settings.embedding_cache_ttl)
+        else:
+            # Milvus Local Mode (default): unchanged from prior behavior.
+            vector_db = milvus_client or MilvusVectorDB(
+                host=settings.milvus_host,
+                port=settings.milvus_port,
+                db_name=settings.milvus_db_name,
+                user=settings.milvus_user,
+                password=settings.milvus_password,
+                timeout=settings.milvus_timeout,
+                pool_size=settings.milvus_pool_size,
+            )
+
+            # Shared-interface backends for the local hot cache (L1/L2/L3) and the
+            # persistent L4 semantic cache. Wired here so the shared routing can
+            # consume them through CacheBackend / SemanticCache; the existing
+            # node logic below is unchanged, preserving current behavior.
+            cache = InMemoryCache(ttl=settings.embedding_cache_ttl)
+            semantic_cache = MilvusResponseCache(
+                vector_db=vector_db,
+                embedding_dim=settings.response_cache_embedding_dim,
+                distance_threshold=settings.response_cache_threshold,
+            )
+            local_kb_index = "milvus_docs"
 
     # The RAG worker tools and node closures below operate against the local
     # Ollama/Milvus client surface. In local mode these are the real local
@@ -1536,7 +1565,12 @@ def create_rag_graph(
     # Milvus collection (``milvus_docs``). Local Mode continues to drive answers
     # through ``StrandsGraphRAGAgent.answer_question`` (unchanged); the shared
     # route is additionally exposed for parity and testing.
-    kb_index = settings.opensearch_kb_index if deployment_mode == "serverless" else "milvus_docs"
+    if deployment_mode == "serverless":
+        kb_index = settings.opensearch_kb_index
+    else:
+        # Local Mode: Milvus collection name, or the OpenSearch KB index when
+        # local_vector_backend == "opensearch" (bound as local_kb_index above).
+        kb_index = local_kb_index
 
     # Resolve the runtime-tunable Layer-3 thresholds ONCE at graph-build time
     # (= Lambda cold start, since the graph is a warm-context singleton). In

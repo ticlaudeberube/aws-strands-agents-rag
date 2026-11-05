@@ -90,6 +90,34 @@ The settings file is the live source of truth for runtime selection:
 
 The app does not rely on a legacy `use_agentcore` flag. The supported switch is `DEPLOYMENT_MODE`.
 
+### Local vector backend (Milvus or OpenSearch)
+
+In local mode, `LOCAL_VECTOR_BACKEND` selects the vector store:
+
+- `milvus` (default) — Ollama + Milvus, the existing local stack.
+- `opensearch` — Ollama + a local OpenSearch container, matching the serverless
+  engine for dev/prod parity. Embeddings stay Ollama (`nomic-embed-text:v1.5`,
+  768-dim); only the vector store changes.
+
+To run OpenSearch Local Mode end-to-end:
+
+```bash
+# 1. Start the local OpenSearch container (opt-in profile):
+docker compose -f docker/docker-compose.yml --profile opensearch up -d opensearch
+
+# 2. Point the app at it and ingest documents (Ollama embeddings, no AWS):
+export DEPLOYMENT_MODE=local
+export LOCAL_VECTOR_BACKEND=opensearch
+uv run python scripts/ingest_local_opensearch.py --docs ./data/docs
+
+# 3. Run the API server as usual:
+uv run python api_server.py
+```
+
+The Layer 2/3 cache defaults to in-process (`InMemoryCache`); set
+`REDIS_CACHE_ENABLED=true` (with a local Redis on `REDIS_ENDPOINT`, default
+`localhost:6379`) to use Redis instead for a fuller prod-parity backend set.
+
 ## What is actually supported
 
 - Local mode uses Ollama and the configured vector DB.

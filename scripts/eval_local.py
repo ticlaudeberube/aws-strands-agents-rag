@@ -408,7 +408,7 @@ async def run_eval(cfg: EvalConfig) -> dict[str, float]:
     # Read at search time by MilvusVectorDB.search, so setting it before the
     # agent is built applies to every retrieval in the run.
     if cfg.search_ef is not None:
-        settings.milvus_search_ef = cfg.search_ef
+        settings.vectordb_search_ef = cfg.search_ef
     items = load_questions(cfg.questions_path)
     logger.info("Loaded %d questions from %s", len(items), cfg.questions_path)
 
@@ -433,7 +433,7 @@ async def run_eval(cfg: EvalConfig) -> dict[str, float]:
                 "use_judge": cfg.use_judge,
                 "judge_model": judge_model if cfg.use_judge else "none",
                 "top_k": cfg.top_k,
-                "milvus_search_ef": settings.milvus_search_ef,
+                "vectordb_search_ef": settings.vectordb_search_ef,
                 "grounding_threshold": settings.answer_grounding_threshold,
                 "confidence_threshold": settings.answer_confidence_threshold,
                 "web_fallback_threshold": settings.web_search_fallback_threshold,
@@ -586,7 +586,7 @@ def main(argv: list[str] | None = None) -> int:
 def _run_ef_sweep(base_cfg: EvalConfig, ef_values: list[int]) -> None:
     """Run the eval once per HNSW ``ef`` value and print a comparison table.
 
-    Each value is a separate MLflow run (tagged via the ``milvus_search_ef``
+    Each value is a separate MLflow run (tagged via the ``vectordb_search_ef``
     param), so the recall-vs-latency tradeoff is comparable side-by-side in the
     UI. The per-run config is a shallow copy of ``base_cfg`` with ``search_ef``
     and a descriptive ``run_name`` set.

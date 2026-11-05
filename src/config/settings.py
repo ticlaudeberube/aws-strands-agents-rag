@@ -1,10 +1,38 @@
 """Configuration settings for the application."""
 
+import logging
 import os
 from typing import Literal
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings
+
+logger = logging.getLogger(__name__)
+
+# Deprecated MILVUS_* env vars that are still accepted as aliases for the
+# renamed VECTORDB_* settings during Phase 1 of the OpenSearch migration. A
+# one-time warning is logged when any are present so users can migrate. These
+# aliases (and this check) are removed in Phase 2.
+_DEPRECATED_MILVUS_ENV_ALIASES = (
+    "MILVUS_INDEX_TYPE",
+    "MILVUS_METRIC_TYPE",
+    "MILVUS_HNSW_M",
+    "MILVUS_HNSW_EF_CONSTRUCTION",
+    "MILVUS_IVF_NLIST",
+    "MILVUS_SEARCH_EF",
+)
+
+
+def _warn_deprecated_milvus_env() -> None:
+    """Log a one-time deprecation warning if any MILVUS_* tuning var is set."""
+    present = [name for name in _DEPRECATED_MILVUS_ENV_ALIASES if os.environ.get(name)]
+    if present:
+        logger.warning(
+            "Deprecated env var(s) %s are read as aliases for their VECTORDB_* "
+            "equivalents during the OpenSearch migration and will be removed. "
+            "Rename MILVUS_<X> -> VECTORDB_<X>.",
+            ", ".join(sorted(present)),
+        )
 
 
 class Settings(BaseSettings):
@@ -67,22 +95,41 @@ class Settings(BaseSettings):
     milvus_password: str = "Milvus"
     milvus_timeout: int = 30  # Request timeout in seconds
     milvus_pool_size: int = 10  # Connection pool size
-    milvus_index_type: str = os.getenv(
-        "MILVUS_INDEX_TYPE", "HNSW"
-    )  # Index type (HNSW, IVF_FLAT, FLAT)
-    milvus_metric_type: str = os.getenv(
-        "MILVUS_METRIC_TYPE", "COSINE"
-    )  # Similarity metric (COSINE, L2, IP)
-    milvus_hnsw_m: int = int(
-        os.getenv("MILVUS_HNSW_M", "30")
-    )  # Maximum connections for each element in HNSW
-    milvus_hnsw_ef_construction: int = int(
-        os.getenv("MILVUS_HNSW_EF_CONSTRUCTION", "200")
-    )  # Dynamic list size for HNSW construction
-    milvus_ivf_nlist: int = int(os.getenv("MILVUS_IVF_NLIST", "128"))  # IVF_FLAT nlist parameter
-    milvus_search_ef: int = int(
-        os.getenv("MILVUS_SEARCH_EF", "64")
-    )  # HNSW search-time beam width (ef). Higher = better recall, slower. >= top_k.
+    # Engine-agnostic vector tuning knobs. Renamed off the vendor-specific
+    # ``milvus_`` prefix to ``vectordb_`` (both backends read them). The old
+    # ``MILVUS_*`` env vars remain accepted as deprecated aliases during Phase 1.
+    vectordb_index_type: str = Field(
+        default="HNSW",
+        validation_alias=AliasChoices("VECTORDB_INDEX_TYPE", "MILVUS_INDEX_TYPE"),
+        description="Vector index type (HNSW, IVF_FLAT, FLAT).",
+    )
+    vectordb_metric_type: str = Field(
+        default="COSINE",
+        validation_alias=AliasChoices("VECTORDB_METRIC_TYPE", "MILVUS_METRIC_TYPE"),
+        description="Similarity metric (COSINE, L2, IP).",
+    )
+    vectordb_hnsw_m: int = Field(
+        default=30,
+        validation_alias=AliasChoices("VECTORDB_HNSW_M", "MILVUS_HNSW_M"),
+        description="HNSW max connections per element (graph connectivity).",
+    )
+    vectordb_hnsw_ef_construction: int = Field(
+        default=200,
+        validation_alias=AliasChoices(
+            "VECTORDB_HNSW_EF_CONSTRUCTION", "MILVUS_HNSW_EF_CONSTRUCTION"
+        ),
+        description="HNSW build-time beam width (ef_construction).",
+    )
+    vectordb_ivf_nlist: int = Field(
+        default=128,
+        validation_alias=AliasChoices("VECTORDB_IVF_NLIST", "MILVUS_IVF_NLIST"),
+        description="IVF_FLAT nlist parameter (number of clusters).",
+    )
+    vectordb_search_ef: int = Field(
+        default=64,
+        validation_alias=AliasChoices("VECTORDB_SEARCH_EF", "MILVUS_SEARCH_EF"),
+        description="HNSW search-time beam width (ef). Higher = better recall, slower. >= top_k.",
+    )
 
     # Deployment Mode
     # Single source of truth for selecting backends. "local" wires Ollama +
@@ -94,6 +141,28 @@ class Settings(BaseSettings):
             'Deployment mode: "local" (Ollama + vector DB + FastAPI) or '
             '"serverless" (Bedrock + OpenSearch + Lambda).'
         ),
+    )
+    # Local Mode vector store selector (only consulted when deployment_mode ==
+    # "local"; serverless always uses OpenSearch Serverless). Default "milvus"
+    # preserves current behavior; "opensearch" runs Local Mode on a local
+    # OpenSearch container (Ollama embeddings) for prod parity.
+    local_vector_backend: Literal["milvus", "opensearch"] = Field(
+        default="milvus",
+        validation_alias="LOCAL_VECTOR_BACKEND",
+        description='Local Mode vector store: "milvus" (default) or "opensearch".',
+    )
+    # Local OpenSearch connection (plain HTTP, security plugin disabled). Used
+    # only when deployment_mode == "local" and local_vector_backend ==
+    # "opensearch".
+    opensearch_local_host: str = Field(
+        default="localhost",
+        validation_alias="OPENSEARCH_LOCAL_HOST",
+        description="Host for the local OpenSearch container (plain HTTP).",
+    )
+    opensearch_local_port: int = Field(
+        default=9200,
+        validation_alias="OPENSEARCH_LOCAL_PORT",
+        description="Port for the local OpenSearch container (plain HTTP).",
     )
     # AgentCore Distributed Cache/Session Analytics (for Lambda/Bedrock)
     redis_cache_enabled: bool = Field(
@@ -356,4 +425,5 @@ class Settings(BaseSettings):
 
 def get_settings() -> Settings:
     """Get application settings."""
+    _warn_deprecated_milvus_env()
     return Settings()

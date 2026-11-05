@@ -42,7 +42,7 @@ class _FakeClient:
 def _client(search_ef: int = 64) -> tuple[OpenSearchClient, _FakeClient]:
     settings = Settings()
     settings.deployment_mode = "serverless"
-    settings.milvus_search_ef = search_ef
+    settings.vectordb_search_ef = search_ef
     fake = _FakeClient()
     return OpenSearchClient(settings=settings, client=fake), fake
 

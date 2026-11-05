@@ -181,7 +181,16 @@ Application code is Python (`uv run` tooling: ruff, mypy, pytest).
 
 - [ ] 13. Infrastructure + health
   - [ ] 13.1 Replace the Milvus stack (Milvus + etcd + MinIO) with OpenSearch in
-    `docker/docker-compose.yml`; update `docker/README.md`
+    `docker/docker-compose.yml`; update `docker/README.md`. As part of this:
+    - Wire the `rag-api` service to OpenSearch: replace the hardcoded
+      `MILVUS_HOST`/`MILVUS_PORT` env + `depends_on: milvus` with
+      `LOCAL_VECTOR_BACKEND=opensearch` + `OPENSEARCH_LOCAL_HOST/PORT` +
+      `depends_on: opensearch` (deferred from Phase 1 — the OpenSearch service
+      was added opt-in in task 7, but `rag-api` still points at Milvus).
+    - Mount `../api_server.py:/app/api_server.py` (and the top-level entrypoint)
+      into `rag-api` so edits don't require an image rebuild — a latent quirk
+      found during Phase 1 (only `src/`/`chatbots/` are mounted today, so a
+      stale baked `api_server.py` can crash the container).
     - _Requirements: 7.4_
   - [ ] 13.2 `api_server.py` `/health`: OpenSearch probe only; remove the
     Milvus `list_collections` probe

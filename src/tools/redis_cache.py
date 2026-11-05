@@ -110,6 +110,38 @@ class RedisCache:
 
         self._client: Any | None = client
 
+    @classmethod
+    def for_local(cls, settings: Settings) -> "RedisCache":
+        """Build a RedisCache for a local, non-TLS Redis container.
+
+        Used by Local Mode when ``local_vector_backend == "opensearch"`` AND
+        ``redis_cache_enabled`` is true. Builds a plain-TCP ``redis.Redis``
+        client (``ssl=False``) from ``settings.redis_endpoint`` (default
+        ``localhost:6379``) and injects it, bypassing the TLS cloud default. The
+        cloud (TLS) path in :pyattr:`client` is unchanged when this classmethod
+        is not used.
+        """
+        try:
+            import redis  # noqa: PLC0415  (lazy, optional dependency)
+        except ImportError as exc:  # pragma: no cover - env-dependent
+            raise RuntimeError(
+                "redis-py is required for RedisCache.for_local; install it with "
+                "`pip install redis`."
+            ) from exc
+
+        endpoint = getattr(settings, "redis_endpoint", None) or "localhost:6379"
+        host, port = cls._parse_endpoint(endpoint)
+        raw = redis.Redis(
+            host=host,
+            port=port,
+            ssl=False,  # local container has no TLS (prod ElastiCache does)
+            decode_responses=False,
+            socket_connect_timeout=5,
+            socket_timeout=5,
+        )
+        logger.info("Built local (non-TLS) Redis client for %s:%d", host, port)
+        return cls(settings, client=raw)
+
     # ------------------------------------------------------------------ #
     # Connection management (lazy, so imports stay optional)             #
     # ------------------------------------------------------------------ #

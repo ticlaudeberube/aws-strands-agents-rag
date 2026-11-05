@@ -200,12 +200,15 @@ class TestCacheStorageDecisions:
 class TestRejectionMessageConsistency:
     """Test suite for rejection message consistency."""
 
-    def test_out_of_scope_message_contains_milvus_reference(self):
-        """Verify out-of-scope message mentions Milvus."""
-        message = "I can only help with questions about Milvus, vector databases, and RAG systems."
+    def test_blocked_tool_message_is_vendor_neutral(self):
+        """The guardrail's blocked-tool message scopes to vector DBs/RAG, not one vendor."""
+        from src.agents.guardrail_hooks import BLOCKED_TOOL_MESSAGE
 
-        assert "milvus" in message.lower()
-        assert "vector database" in message.lower()
+        lowered = BLOCKED_TOOL_MESSAGE.lower()
+        assert "vector database" in lowered
+        assert "rag" in lowered
+        # The knowledge base is vendor-agnostic: no single product is named.
+        assert "milvus" not in lowered
 
     def test_security_risk_message_mentions_security(self):
         """Verify security risk message mentions security."""

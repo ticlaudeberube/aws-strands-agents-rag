@@ -2,7 +2,7 @@
 
 Consolidated local stack for the AWS Strands Agents RAG system. One Compose file
 (`docker-compose.yml`, project name `agentcore-rag`) brings up the whole local
-app on the **OpenSearch** vector engine. Milvus has been removed — OpenSearch is
+app on the **OpenSearch** vector engine. OpenSearch is
 the sole vector store in both local and serverless modes.
 
 ## Services

@@ -45,7 +45,7 @@ test.describe("RAG Chatbot - API Status & Health", () => {
       )
       .catch(() => {});
 
-    // The API may report a warning when its local Milvus dependency is down.
+    // The API may report a warning when its local vector DB (OpenSearch) is down.
     const connectedText = page.getByText(/API (Connected|Warning)/);
 
     // Either state means the API is reachable.

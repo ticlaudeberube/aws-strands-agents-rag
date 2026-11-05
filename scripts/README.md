@@ -1,81 +1,47 @@
-# Diagnostic Scripts
+# Scripts
 
-Helper scripts for debugging and testing the RAG system.
+Helper scripts for running, seeding, and operating the RAG system. Run them
+through `uv` from the project root, e.g. `uv run python scripts/check_setup.py`.
 
-## Web Search Diagnostics
+## Setup & diagnostics
 
-### Run the Full Diagnostic
-```bash
-python scripts/diagnose_web_search.py
-```
+| Script | Purpose |
+|--------|---------|
+| `check_setup.py` | Verify Ollama and the local OpenSearch connection; prints the KB index in use. Run before ingesting or starting the server. |
+| `ERROR_SCENARIOS.py` | Prints a recovery guide for common Ollama/OpenSearch failures. |
+| `setup.sh` / `setup.bat` | One-time local environment setup (dependencies, next-step hints). |
+| `setup-precommit.sh` | Install the pre-commit hooks. |
 
-This comprehensive tool tests:
-1. **Network connectivity** - Can reach the internet
-2. **Tavily API** - API is reachable and returns valid JSON
-3. **WebSearchClient** - Python module works correctly
-4. **RAG Agent Integration** - Agent uses web search in responses
+## Ingestion
 
-### Quick Test
-```bash
-# Test with INFO logging
-python -c "
-from src.tools.web_search import WebSearchClient
-client = WebSearchClient()
-results = client.search('Milvus vector database', max_results=2)
-print(f'Found {len(results)} results')
-for r in results:
-    print(f'  - {r[\"title\"]}: {r[\"url\"][:50]}...')
-"
-```
+| Script | Purpose |
+|--------|---------|
+| `ingest_local_opensearch.py` | Chunk + embed (Ollama) + index documents into the local OpenSearch `rag-kb` index. Supports a demo seed and an arbitrary `--docs <dir>` directory. |
 
-### Debug with Full Logs
-```bash
-# Enable DEBUG logging for detailed diagnostics
-LOG_LEVEL=DEBUG python scripts/diagnose_web_search.py
-```
+See also the standalone corpus loader
+`document_loaders/load_docs_opensearch.py` (seeds the `milvus_docs` knowledge-base
+corpus) — it is source-isolated from `src/` and has its own settings.
 
-## Output Examples
+## Serverless (local emulation)
 
-## Environment Variables
+| Script | Purpose |
+|--------|---------|
+| `run_serverless_local.py` | Run the serverless code path locally (real Bedrock + local OpenSearch/Redis/DynamoDB). Holds the shared local-backend client builders. |
+| `serverless_api_server.py` | Serve the GUI against the serverless shim with a serverless-aware `/health`. |
+| `run_lambda_handler_local.py` | Invoke the real Lambda handler end-to-end with local backends. |
 
-### Enable Debug Logging
-```bash
-export LOG_LEVEL=DEBUG
-python scripts/diagnose_web_search.py
-```
+See [docs/SERVERLESS_LOCAL.md](../docs/SERVERLESS_LOCAL.md) for the full workflow.
 
-### Change Request Timeout
-Web search client uses 10-second timeout by default. To test with different timeout:
+## Evaluation
 
-```bash
-python -c "
-from src.tools.web_search import WebSearchClient
-client = WebSearchClient(timeout=20)  # 20 seconds
-results = client.search('test', max_results=2)
-"
-```
+| Script | Purpose |
+|--------|---------|
+| `eval_local.py` | Run the tagged question set through Local Mode and log anti-hallucination signals to MLflow. Supports `--sweep-ef` for an HNSW recall sweep. See [docs/EVAL_LOCAL.md](../docs/EVAL_LOCAL.md). |
 
-## Integration with CI/CD
+## Operations
 
-To verify web search functionality in CI/CD:
-
-```bash
-#!/bin/bash
-set -e
-
-echo "Testing web search integration..."
-python scripts/diagnose_web_search.py
-
-if grep -q "WEB SOURCES FOUND" <<< "$output"; then
-    echo "✓ Web search is working"
-    exit 0
-else
-    echo "✗ Web search not working"
-    exit 1
-fi
-```
-
-## See Also
-
-- [WEB_SEARCH_INTEGRATION.md](../docs/WEB_SEARCH_INTEGRATION.md) - Full integration documentation
-- [DEVELOPMENT.md](../docs/DEVELOPMENT.md) - Development guidelines
+| Script | Purpose |
+|--------|---------|
+| `cache/clear_cache.py` (`clear_cache.sh`) | Delete all documents from the OpenSearch `rag-cache` (Layer 4 semantic cache). |
+| `safe_stop.py` (`safe_stop.sh`) | Stop the local stack / API server cleanly, releasing the port. |
+| `data/generate_responses_from_api.py` | Query the API for `config/common_questions.json` and write `data/responses.json` for cache pre-loading. |

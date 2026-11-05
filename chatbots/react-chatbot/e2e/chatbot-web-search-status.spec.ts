@@ -4,7 +4,7 @@ test.describe('RAG Chatbot - Web Search & API Status (Updated)', () => {
   test('should display a reachable API state correctly', async ({ page }) => {
     await page.goto('http://localhost:3000');
 
-    // Milvus may be down while the API itself remains reachable.
+    // The vector DB (OpenSearch) may be down while the API itself remains reachable.
     const apiStatus = page.getByText(/API (Connected|Warning)/);
     await expect(apiStatus).toBeVisible();
 
@@ -175,7 +175,7 @@ test.describe('RAG Chatbot - Web Search & API Status (Updated)', () => {
     await page.goto('http://localhost:3000');
 
     // Health check should happen automatically on mount
-    // Status may warn when Milvus is down even though the API remains available.
+    // Status may warn when the vector DB (OpenSearch) is down even though the API remains available.
     const statusIndicators = page.locator('text=API Connected, text=API Warning, text=Checking, text=Offline, text=Disconnected');
 
     // Wait for status to appear (health check should complete within 10 seconds)

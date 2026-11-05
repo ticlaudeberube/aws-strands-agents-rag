@@ -27,7 +27,7 @@ Tests are organized into **8 comprehensive suites** covering all GUI features:
 
 ### Feature Coverage by Test Suite
 
-See [CHATBOT_GUI_FEATURES.md](../../CHATBOT_GUI_FEATURES.md) for complete feature-to-test mapping:
+See [CHATBOT_GUI_FEATURES.md](../../../docs/CHATBOT_GUI_FEATURES.md) for complete feature-to-test mapping:
 
 ## Prerequisites
 
@@ -43,7 +43,7 @@ npx playwright install
 **NEW**: The `playwright.config.ts` is configured to **auto-start both services** before running tests:
 
 1. **React Chatbot** (port 3000) - `npm start`
-2. **Python API Server** (port 8001) - `python api_server.py`
+2. **Python API Server** (port 8000) - `uv run python api_server.py`
 
 **Manual Start** (optional, if auto-start fails):
 ```bash
@@ -51,9 +51,8 @@ npx playwright install
 cd chatbots/react-chatbot
 npm start
 
-# Terminal 2: Python API Server
-cd /Users/claude/Documents/workspace/demos/aws-strands-agents-rag
-python api_server.py
+# Terminal 2: Python API Server (from the project root)
+uv run python api_server.py
 ```
 
 ## Running Tests
@@ -143,7 +142,7 @@ npx playwright show-report
 Configure via `.env` or command line:
 
 ```bash
-# Custom API base URL (default: http://localhost:8001)
+# Custom API base URL (default: http://localhost:8000)
 export API_BASE_URL=http://my-api.com
 
 # Custom chatbot URL (default: http://localhost:3000)
@@ -374,7 +373,7 @@ jobs:
           npm install
           npm start &
           cd ../..
-          python api_server.py &
+          uv run python api_server.py &
           sleep 3
 
       # Run tests
@@ -391,9 +390,9 @@ jobs:
 ## Common Issues and Fixes
 
 ### Issue: Tests timing out waiting for API
-**Solution**: Ensure API server is running on port 8001
+**Solution**: Ensure API server is running on port 8000
 ```bash
-python api_server.py
+uv run python api_server.py
 ```
 
 ### Issue: Selectors not finding elements
@@ -432,4 +431,4 @@ TEST_TIMEOUT=30000 npx playwright test e2e/chatbot-performance.spec.ts
 
 **Total Test Coverage: 112+ test cases**
 
-For detailed feature-to-test mapping, see [CHATBOT_GUI_FEATURES.md](../../CHATBOT_GUI_FEATURES.md)
+For detailed feature-to-test mapping, see [CHATBOT_GUI_FEATURES.md](../../../docs/CHATBOT_GUI_FEATURES.md)

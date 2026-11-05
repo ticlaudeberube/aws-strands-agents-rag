@@ -247,162 +247,6 @@ def _is_security_attack(
     return False
 
 
-def _is_competitor_database_query(question: str) -> bool:
-    """Check if question is specifically about competitor vector databases not covered in our KB.
-
-    These queries require web search to provide accurate information.
-    When web search is unavailable, we should return a proper "not available" message
-    instead of hallucinating information from the knowledge base.
-    """
-    question_lower = question.lower()
-
-    # Competitor databases with common typos/variations
-    # Simple competitor detection - just core names (KISS principle)
-    competitor_patterns = {
-        "pinecone": ["pinecone"],
-        "weaviate": ["weaviate"],
-        "qdrant": ["qdrant"],
-        "chroma": ["chroma", "chromadb"],
-        "voyageai": ["voyageai"],
-        "elasticsearch": ["elasticsearch"],
-        "opensearch": ["opensearch"],
-        "redis": ["redis"],
-        "pgvector": ["pgvector"],
-        "supabase": ["supabase"],
-        "neon": ["neon"],
-    }
-
-    # Check for direct competitor mentions in questions asking for information
-    info_requesting_patterns = [
-        "what is",
-        "tell me about",
-        "tell me more about",
-        "explain",
-        "describe",
-        "how does",
-        "features of",
-        "benefits of",
-        "capabilities of",
-        "pricing",
-        "documentation",
-        "getting started with",
-        "about",
-        # Additional patterns for more comprehensive detection
-        "features",
-        "capabilities",
-        "advantages",
-        "benefits",
-        "pros",
-        "cons",
-        "performance",
-        "scalability",
-        "security",
-        "api",
-        "sdk",
-        "tutorial",
-        "guide",
-        "setup",
-        "install",
-        "configure",
-        "use",
-        "work with",
-    ]
-
-    has_info_request = any(pattern in question_lower for pattern in info_requesting_patterns)
-
-    # Check for any competitor pattern matches
-    detected_competitor = None
-    for competitor, variations in competitor_patterns.items():
-        for variation in variations:
-            if variation in question_lower:
-                detected_competitor = competitor
-                break
-        if detected_competitor:
-            break
-
-    # Enhanced logic: Detect standalone competitor queries OR competitor + tech terms
-    is_standalone_competitor_query = (
-        detected_competitor
-        and has_info_request
-        and "milvus" not in question_lower
-        and "compare" not in question_lower
-        and "vs" not in question_lower
-    )
-
-    # Additional check: Competitor + database/vector/search terms (even without info request patterns)
-    tech_terms = [
-        "database",
-        "vector",
-        "search",
-        "index",
-        "embedding",
-        "similarity",
-        "query",
-        "storage",
-    ]
-    is_competitor_tech_query = (
-        detected_competitor
-        and any(tech_term in question_lower for tech_term in tech_terms)
-        and "milvus" not in question_lower
-        and "compare" not in question_lower
-        and "vs" not in question_lower
-    )
-
-    if is_standalone_competitor_query or is_competitor_tech_query:
-        query_type = "info-request" if is_standalone_competitor_query else "tech-specific"
-        logger.info(
-            f"[COMPETITOR_DETECTION] Detected competitor database query ({query_type}): {detected_competitor} (from: {question[:60]})"
-        )
-        return True
-
-    return False
-
-
-def _create_web_search_unavailable_message(message_type: str = "standard") -> dict[str, str]:
-    """Create standardized web search unavailable messages.
-
-    Args:
-        message_type: Type of message - 'standard'/'competitor' (same message), 'kb_fallback', or 'stream_note'
-
-    Returns:
-        Dictionary with 'text' and 'metadata' keys for system message
-    """
-    # DRY: Use the same message for all cases to maintain consistency
-    standard_message = "Web search features are currently unavailable due to API quota or authentication issues. Please try again later."
-
-    messages = {
-        "standard": standard_message,
-        "competitor": standard_message,  # Same message for consistency
-        "kb_fallback": "Web search features are currently unavailable due to API quota or authentication issues. The following response is based only on our knowledge base.",
-        "stream_note": "**Note:** Web search features are currently unavailable due to API quota or authentication issues. This response is based only on the knowledge base.",
-    }
-
-    # Use consistent metadata type for standard and competitor cases
-    metadata_types = {
-        "standard": "web_search_unavailable",
-        "competitor": "web_search_unavailable",  # Same type for consistency
-        "kb_fallback": "web_search_unavailable",
-        "stream_note": "web_search_unavailable",
-    }
-
-    return {
-        "text": messages[message_type],
-        "metadata": f'{{"source": "system", "type": "{metadata_types[message_type]}"}}',
-        "source_type": "system_message",
-        "url": "",
-    }
-
-
-def _create_web_search_disabled_message() -> dict[str, str]:
-    """Create a system message for web search disabled by configuration."""
-    return {
-        "text": "Web search is disabled. Enable it in server settings to use web-only search.",
-        "metadata": '{"source": "system", "type": "web_search_disabled"}',
-        "source_type": "system_message",
-        "url": "",
-    }
-
-
 def _is_question_in_scope(question: str, ollama_client: OllamaClient, settings: Settings) -> bool:
     """Check if question is about databases, search, or information retrieval.
 
@@ -412,10 +256,12 @@ def _is_question_in_scope(question: str, ollama_client: OllamaClient, settings: 
     question_lower = question.lower()
 
     # Fast keyword-based pre-filter
-    # Includes all major vector database and information retrieval products
+    # Includes all major vector database and information retrieval products.
+    # The knowledge base is vector-database-agnostic: no single product is
+    # privileged, so every vendor keyword carries the same weight. Add vendor
+    # keywords here as new documentation corpora are ingested.
     in_scope_keywords = {
         # Core concepts
-        "milvus": 10,
         "vector database": 10,
         "vector db": 10,
         "vector search": 9,
@@ -437,7 +283,8 @@ def _is_question_in_scope(question: str, ollama_client: OllamaClient, settings: 
         "knn": 7,
         "nearest neighbor": 7,
         "comparison": 4,
-        # Vector database products
+        # Vector database products (no vendor is privileged over another)
+        "milvus": 9,
         "pinecone": 9,
         "weaviate": 9,
         "qdrant": 9,

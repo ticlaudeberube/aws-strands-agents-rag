@@ -153,7 +153,7 @@ export async function messageContains(
     // Use waitForFunction for more efficient checking
     const found = await page
       .waitForFunction(
-        (searchText, isRegex, pattern) => {
+        ({ searchText, isRegex, pattern }) => {
           const messages = document.querySelectorAll('[class*="message"]');
           for (const message of messages) {
             const content = message.textContent || "";
@@ -170,9 +170,11 @@ export async function messageContains(
           }
           return false;
         },
-        typeof text === "string" ? text : "",
-        typeof text !== "string",
-        typeof text !== "string" ? text.source : "",
+        {
+          searchText: typeof text === "string" ? text : "",
+          isRegex: typeof text !== "string",
+          pattern: typeof text !== "string" ? text.source : "",
+        },
         { timeout: 5000 },
       )
       .catch(() => false);

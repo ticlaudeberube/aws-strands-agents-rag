@@ -13,7 +13,16 @@ from pydantic import ValidationError
 from src.config.settings import Settings
 
 
-def test_default_is_milvus() -> None:
+def test_default_is_opensearch(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Phase 2: OpenSearch is the default local vector backend. Clear any ambient
+    # env override so we assert the code default, not the shell/.env value.
+    monkeypatch.delenv("LOCAL_VECTOR_BACKEND", raising=False)
+    assert Settings().local_vector_backend == "opensearch"
+
+
+def test_milvus_value_still_accepted(monkeypatch: pytest.MonkeyPatch) -> None:
+    # milvus remains selectable until it is removed later in Phase 2.
+    monkeypatch.setenv("LOCAL_VECTOR_BACKEND", "milvus")
     assert Settings().local_vector_backend == "milvus"
 
 

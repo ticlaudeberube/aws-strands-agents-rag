@@ -147,9 +147,9 @@ class Settings(BaseSettings):
     # preserves current behavior; "opensearch" runs Local Mode on a local
     # OpenSearch container (Ollama embeddings) for prod parity.
     local_vector_backend: Literal["milvus", "opensearch"] = Field(
-        default="milvus",
+        default="opensearch",
         validation_alias="LOCAL_VECTOR_BACKEND",
-        description='Local Mode vector store: "milvus" (default) or "opensearch".',
+        description='Local Mode vector store: "opensearch" (default) or "milvus".',
     )
     # Local OpenSearch connection (plain HTTP, security plugin disabled). Used
     # only when deployment_mode == "local" and local_vector_backend ==

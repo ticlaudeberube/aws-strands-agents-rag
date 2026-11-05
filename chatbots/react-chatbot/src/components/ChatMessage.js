@@ -104,9 +104,9 @@ function ChatMessage({ message }) {
 
               // Render HTML links safely if text contains HTML
               if (displayText && displayText.includes('<a')) {
-                return <span dangerouslySetInnerHTML={{ __html: displayText }} />;
+                return <div dangerouslySetInnerHTML={{ __html: displayText.replace('```html', '').replace('```', '') }} />;
               } else {
-                return displayText;
+                return <div class="unformatted-text">{displayText}</div>;
               }
             })()}
             {message.isStreaming && (

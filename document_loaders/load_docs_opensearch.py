@@ -1,15 +1,17 @@
-# Load all markdown files and embed them into Milvus
+# Load all markdown files and embed them into OpenSearch
+import argparse
 import json
 import subprocess
 import sys
 from glob import glob
-from tqdm import tqdm
 from pathlib import Path
+
+from tqdm import tqdm
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from document_loaders.core.tools import MilvusVectorDB, OllamaClient
+from document_loaders.core.tools import OllamaClient, OpenSearchVectorDB
 from document_loaders.local_settings import get_loader_settings
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -22,29 +24,31 @@ if not env_file_path.exists():
     print("   Using default configuration values")
 
 settings = get_loader_settings()
-collection_name = settings.ollama_collection_name
-db_name = settings.loader_milvus_db_name
+index_name = settings.opensearch_kb_index
 
 print("📋 Configuration loaded:")
-print(f"   Collection name: {collection_name}")
-print(f"   Database name: {db_name}")
-print(f"   Milvus: {settings.milvus_host}:{settings.milvus_port}")
+print(f"   KB index: {index_name}")
+print(f"   OpenSearch: {settings.opensearch_local_host}:{settings.opensearch_local_port}")
 print(f"   Ollama: {settings.ollama_host}")
 print(f"   Embedding model: {settings.ollama_embed_model}")
 print()
 
-# Initialize clients - will be created in main function
-vector_db = None
-ollama_client = None
+# Initialize clients - will be created in process()
+vector_db: OpenSearchVectorDB | None = None
+ollama_client: OllamaClient | None = None
 
 
 def ensure_milvus_docs():
-    """Check if milvus_docs exist, download if needed"""
+    """Check if the KB corpus exists, download if needed.
+
+    The corpus directory is named ``milvus_docs`` for historical reasons; it is
+    the KB content and is unrelated to the (now removed) Milvus backend.
+    """
     docs_path = SCRIPT_DIR / "milvus_docs"
 
     # Check if directory is empty or doesn't exist
     if not docs_path.exists() or not any(docs_path.glob("**/*.md")):
-        print("Milvus documentation not found. Downloading...")
+        print("KB documentation not found. Downloading...")
         try:
             subprocess.run(
                 [sys.executable, str(SCRIPT_DIR / "download_milvus_docs.py")], check=True
@@ -92,63 +96,34 @@ def verify_ollama_setup():
     print("✓ Ollama setup verified!\n")
 
 
-def check_collection_and_confirm():
-    """Check if collection exists and get user confirmation"""
-    try:
-        if vector_db is None:
-            print("❌ Milvus client not initialized")
-            return False
-
-        collections = vector_db.client.list_collections(db_name=db_name)
-        if collection_name in collections:
-            print(f"Collection '{collection_name}' already exists.")
-            choice = (
-                input("Do you want to (d)rop and recreate, or (a)bort? [d/a]: ").lower().strip()
-            )
-
-            if choice == "a":
-                print("Process aborted by user.")
-                return False
-            elif choice == "d":
-                print(f"Dropping collection '{collection_name}'...")
-                vector_db.delete_collection(collection_name)
-                return True
-            else:
-                print("Invalid choice. Aborting.")
-                return False
-    except Exception as e:
-        print(f"⚠️  Warning: Could not check collection: {e}")
-        print("   Proceeding to create new collection...")
-
-    return True
-
-
-def create_collection(embedding_dim=None):
-    """Create a collection for storing embeddings"""
+def ensure_index(embedding_dim=None, recreate=False):
+    """Ensure the OpenSearch KB index exists (optionally drop + recreate)."""
     if embedding_dim is None:
         embedding_dim = settings.embedding_dim
 
     try:
-        vector_db.create_collection(
-            collection_name=collection_name,
-            embedding_dim=embedding_dim,
-        )
-        print(f"Collection '{collection_name}' created successfully.")
+        if recreate and vector_db.delete_index(index_name):
+            print(f"Dropped existing index '{index_name}' (--recreate)")
+
+        created = vector_db.ensure_index(index_name, embedding_dim=embedding_dim)
+        if created:
+            print(f"Index '{index_name}' created successfully.")
+        else:
+            print(f"Index '{index_name}' already exists; indexing into it.")
     except Exception as e:
-        print(f"Error creating collection: {e}")
+        print(f"Error ensuring index: {e}")
         raise
 
 
-def process(insertCollection=True):
-    """Process and load Milvus documentation into vector database"""
+def process(insert_index=True, recreate=False):
+    """Process and load KB documentation into OpenSearch."""
     global vector_db, ollama_client
 
     print(f"\n{'=' * 60}")
-    print("RAG Data Loader - Milvus Documentation")
+    print("RAG Data Loader - Knowledge Base Documentation")
     print(f"{'=' * 60}")
-    print(f"\n🗄️  Using Milvus database: '{db_name}'")
-    print(f"📦 Target collection: '{collection_name}'")
-    print("   (from env variable: OLLAMA_COLLECTION_NAME in .env)")
+    print(f"\n📦 Target index: '{index_name}'")
+    print("   (from env variable: OPENSEARCH_KB_INDEX in .env)")
     print()
 
     # Initialize Ollama client
@@ -159,38 +134,34 @@ def process(insertCollection=True):
         print(f"❌ Failed to initialize Ollama client: {e}")
         sys.exit(1)
 
-    # Initialize Milvus client
-    print("📋 Initializing Milvus client...")
+    # Initialize OpenSearch client
+    print("📋 Initializing OpenSearch client...")
     try:
-        vector_db = MilvusVectorDB(
-            host=settings.milvus_host,
-            port=settings.milvus_port,
-            db_name=db_name,
+        vector_db = OpenSearchVectorDB(
+            host=settings.opensearch_local_host,
+            port=settings.opensearch_local_port,
         )
     except RuntimeError as e:
-        print("\n❌ Milvus Connection Failed!")
+        print("\n❌ OpenSearch Connection Failed!")
         print(f"   Error: {e}")
         print("\n   To fix this:")
-        print("   1. Check if Milvus is running:")
-        print("      cd docker && docker-compose ps")
-        print("   2. If not running, start it:")
-        print("      cd docker && docker-compose up -d")
-        print("   3. Wait 30 seconds for Milvus to be ready")
-        print("   4. Try again: python document_loaders/load_milvus_docs_ollama.py")
+        print("   1. Start the local OpenSearch container:")
+        print(
+            "      docker compose -f docker/docker-compose.yml "
+            "--profile opensearch up -d opensearch"
+        )
+        print("   2. Wait a few seconds for OpenSearch to be ready")
+        print("   3. Try again: python document_loaders/load_docs_opensearch.py")
         sys.exit(1)
     except Exception as e:
-        print(f"\n❌ Unexpected error connecting to Milvus: {e}")
+        print(f"\n❌ Unexpected error connecting to OpenSearch: {e}")
         sys.exit(1)
 
-    # Ensure milvus_docs are downloaded
+    # Ensure the KB corpus is downloaded
     ensure_milvus_docs()
 
     # Verify Ollama setup before processing
     verify_ollama_setup()
-
-    # Check collection and get user confirmation
-    if not check_collection_and_confirm():
-        return
 
     text_lines = []
     text_metadata = []  # Track filename for each chunk
@@ -310,7 +281,7 @@ def process(insertCollection=True):
 
     print(f"Created {len(embeddings_list)} embeddings")
 
-    # Save to JSON file
+    # Save to JSON file (same shape: list of {id, vector, text, metadata})
     data_dir = PROJECT_ROOT / "data"
     data_dir.mkdir(exist_ok=True)
     data_to_save = [
@@ -322,26 +293,31 @@ def process(insertCollection=True):
         json.dump(data_to_save, f, indent=2, ensure_ascii=False)
     print(f"Saved {len(data_to_save)} embeddings to {data_dir / 'embeddings.json'}")
 
-    if insertCollection:
+    if insert_index:
         embedding_dim = len(embeddings_list[0])
-        create_collection(embedding_dim)
+        ensure_index(embedding_dim, recreate=recreate)
 
-        # Insert data using vector database
-        print(f"Inserting {len(embeddings_list)} embeddings into Milvus...")
+        # Index data into OpenSearch
+        print(f"Indexing {len(embeddings_list)} embeddings into OpenSearch...")
         try:
-            vector_db.insert_embeddings(
-                collection_name=collection_name,
+            indexed = vector_db.index_documents(
+                index_name=index_name,
                 embeddings=embeddings_list,
                 texts=texts_list,
                 metadata=metadata_list,
             )
-            print(
-                f"✅ Successfully inserted {len(embeddings_list)} embeddings into collection '{collection_name}'"
-            )
+            print(f"✅ Successfully indexed {indexed} embeddings into index '{index_name}'")
         except Exception as e:
-            print(f"❌ Error inserting embeddings: {e}")
+            print(f"❌ Error indexing embeddings: {e}")
             raise
 
 
 if __name__ == "__main__":
-    process()
+    parser = argparse.ArgumentParser(description="Load KB docs into local OpenSearch.")
+    parser.add_argument(
+        "--recreate",
+        action="store_true",
+        help="Delete and recreate the OpenSearch index before indexing.",
+    )
+    args = parser.parse_args()
+    process(recreate=args.recreate)

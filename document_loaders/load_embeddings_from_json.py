@@ -1,52 +1,43 @@
+import argparse
 import json
 import sys
 from pathlib import Path
+
 from tqdm import tqdm  # type: ignore[import-untyped]
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from document_loaders.core.tools import MilvusVectorDB
+from document_loaders.core.tools import OpenSearchVectorDB
 from document_loaders.local_settings import get_loader_settings
 
 settings = get_loader_settings()
-collection_name = settings.ollama_collection_name
-db_name = settings.loader_milvus_db_name
+index_name = settings.opensearch_kb_index
 
-vector_db = MilvusVectorDB(
-    host=settings.milvus_host,
-    port=settings.milvus_port,
-    db_name=db_name,
+vector_db = OpenSearchVectorDB(
+    host=settings.opensearch_local_host,
+    port=settings.opensearch_local_port,
 )
 
 
-def sync_embeddings():
-    """Sync embeddings from JSON file into Milvus collection"""
+def sync_embeddings(recreate=False):
+    """Sync embeddings from JSON file into the OpenSearch KB index."""
     try:
         with open("./data/embeddings.json", encoding="utf-8") as f:
             data = json.load(f)
     except FileNotFoundError:
         print("❌ Error: ./data/embeddings.json not found")
-        print("   Please run: python document_loaders/load_milvus_docs_ollama.py")
+        print("   Please run: python document_loaders/load_docs_opensearch.py")
         return
 
     if not data:
         print("❌ No data to sync")
         return
 
-    # Check if collection exists
-    existing_collections = vector_db.list_collections()
-
-    if collection_name in existing_collections:
-        print(f"Collection '{collection_name}' already exists.")
-        choice = input("Do you want to (o)verwrite or (a)bort? [o/a]: ").lower().strip()
-
-        if choice == "a":
-            print("Sync aborted by user.")
-            return
-        elif choice == "o":
-            print(f"Dropping collection '{collection_name}'...")
-            vector_db.delete_collection(collection_name)
+    # Drop + recreate the index when requested, otherwise index into the
+    # existing one.
+    if recreate and vector_db.delete_index(index_name):
+        print(f"Dropped existing index '{index_name}' (--recreate)")
 
     # Extract embeddings, texts, and metadata from JSON
     embeddings = [item["vector"] for item in data]
@@ -54,37 +45,39 @@ def sync_embeddings():
     metadata = [item.get("metadata", {}) for item in data]
 
     # Determine embedding dimension
-    embedding_dim = len(embeddings[0]) if embeddings else 384
+    embedding_dim = len(embeddings[0]) if embeddings else settings.embedding_dim
 
-    # Create collection
-    print(f"Creating collection '{collection_name}' with dimension {embedding_dim}...")
-    vector_db.create_collection(
-        collection_name=collection_name,
-        embedding_dim=embedding_dim,
-    )
+    # Ensure index exists
+    print(f"Ensuring index '{index_name}' with dimension {embedding_dim}...")
+    vector_db.ensure_index(index_name, embedding_dim=embedding_dim)
 
-    # Insert embeddings
-    print(f"Inserting {len(embeddings)} embeddings...")
+    # Index embeddings
+    print(f"Indexing {len(embeddings)} embeddings...")
     try:
         with tqdm(total=len(embeddings), desc="Syncing embeddings", ncols=80) as pbar:
-            vector_db.insert_embeddings(
-                collection_name=collection_name,
+            indexed = vector_db.index_documents(
+                index_name=index_name,
                 embeddings=embeddings,
                 texts=texts,
                 metadata=metadata,
             )
             pbar.update(len(embeddings))
-        print(
-            f"✅ Successfully synced {len(embeddings)} embeddings into collection '{collection_name}'"
-        )
+        print(f"✅ Successfully synced {indexed} embeddings into index '{index_name}'")
     except Exception as e:
-        print(f"❌ Error inserting embeddings: {e}")
+        print(f"❌ Error indexing embeddings: {e}")
         raise
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Sync data/embeddings.json into OpenSearch.")
+    parser.add_argument(
+        "--recreate",
+        action="store_true",
+        help="Delete and recreate the OpenSearch index before indexing.",
+    )
+    args = parser.parse_args()
     try:
-        sync_embeddings()
+        sync_embeddings(recreate=args.recreate)
     except Exception as e:
         print(f"❌ Sync failed: {e}")
         sys.exit(1)

@@ -1,25 +1,36 @@
 """Tools used by document loader scripts.
 
-Canonical import path for loader-facing Milvus/Ollama clients:
+Canonical import path for loader-facing OpenSearch/Ollama clients:
 `document_loaders.core.tools`.
+
+This package is a standalone ingestion utility. It is intentionally isolated
+from the runtime application in ``src/`` (no imports in either direction). The
+OpenSearch index body here mirrors the shape of ``src/tools/opensearch_client.py``
+so documents indexed by the loader are read correctly by the runtime
+``OpenSearchClient.knn_search`` (fields ``vector`` / ``text`` / ``metadata``).
 """
 
 from __future__ import annotations
 
-import json
 import logging
 import os
-import random
-import time
+import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
 import requests
-from pymilvus import MilvusClient  # type: ignore[import-untyped]
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 logger = logging.getLogger(__name__)
+
+# HNSW / vector defaults. Mirror src/tools/opensearch_client.py so the loader and
+# the runtime wrapper stay in sync (cosine HNSW, m=30, ef_construction=200).
+HNSW_M = 30
+HNSW_EF_CONSTRUCTION = 200
+VECTOR_DIM = 768
+SPACE_TYPE = "cosinesimil"  # OpenSearch cosine similarity space
+ENGINE = "nmslib"
 
 
 def _get_env_int(name: str, default: int) -> int:
@@ -32,170 +43,159 @@ def _get_env_int(name: str, default: int) -> int:
         return default
 
 
-class MilvusVectorDB:
-    """Minimal Milvus wrapper for document loader workflows."""
+def _import_opensearchpy() -> Any:
+    """Lazily import ``opensearch-py`` with a clear error if it is missing."""
+    try:
+        import opensearchpy  # type: ignore[import-untyped]
+    except ImportError as exc:  # pragma: no cover - exercised only without the dep
+        raise ImportError(
+            "opensearch-py is required for the document loader (OpenSearchVectorDB). "
+            "Install it with `pip install opensearch-py`."
+        ) from exc
+    return opensearchpy
+
+
+class OpenSearchVectorDB:
+    """Minimal OpenSearch wrapper for document loader workflows.
+
+    Connects to a local, plain-HTTP OpenSearch container (no TLS, no auth,
+    security plugin disabled) and indexes document chunks as
+    ``{vector, text, metadata}`` so the runtime ``OpenSearchClient`` can read
+    them back via k-NN search.
+    """
 
     def __init__(
         self,
         host: str | None = None,
         port: int | None = None,
-        db_name: str | None = None,
-        user: str | None = None,
-        password: str | None = None,
-        timeout: int | None = None,
-        pool_size: int | None = None,
     ):
-        self.host = host or os.getenv("MILVUS_HOST", "localhost")
-        self.port = port or _get_env_int("MILVUS_PORT", 19530)
-        self.db_name = db_name or os.getenv("MILVUS_DB_NAME", "default")
-        self.timeout = timeout or _get_env_int("MILVUS_TIMEOUT", 30)
-        self.pool_size = pool_size or _get_env_int("MILVUS_POOL_SIZE", 10)
+        self.host = host or os.getenv("OPENSEARCH_LOCAL_HOST", "localhost")
+        self.port = port or _get_env_int("OPENSEARCH_LOCAL_PORT", 9200)
 
-        default_user = os.getenv("MILVUS_USER", "root")
-        default_password = os.getenv("MILVUS_PASSWORD", "Milvus")
-        resolved_user = user or default_user
-        resolved_password = password or default_password
-
-        uri = f"http://{self.host}:{self.port}"
-
+        opensearchpy = _import_opensearchpy()
         try:
-            self.client = MilvusClient(
-                uri=uri,
-                user=resolved_user,
-                password=resolved_password,
-                pool_size=self.pool_size,
+            self.client = opensearchpy.OpenSearch(
+                hosts=[{"host": self.host, "port": self.port}],
+                http_auth=None,
+                use_ssl=False,
+                verify_certs=False,
+                ssl_show_warn=False,
             )
-            logger.info("Connected to Milvus at %s", uri)
-        except Exception as auth_error:
-            logger.warning(
-                "Milvus auth connection failed, retrying without credentials: %s", auth_error
-            )
-            try:
-                self.client = MilvusClient(uri=uri, pool_size=self.pool_size)
-                logger.info("Connected to Milvus at %s without auth", uri)
-            except Exception as connection_error:
-                raise RuntimeError(
-                    f"Milvus connection failed at {self.host}:{self.port}. "
-                    "Make sure Milvus is running."
-                ) from connection_error
+            logger.info("Connected to OpenSearch at http://%s:%d", self.host, self.port)
+        except Exception as connection_error:
+            raise RuntimeError(
+                f"OpenSearch connection failed at {self.host}:{self.port}. "
+                "Make sure the local OpenSearch container is running."
+            ) from connection_error
 
-        self._ensure_database()
+    def _index_body(self, embedding_dim: int) -> dict[str, Any]:
+        """Build a 768-dim HNSW cosine k-NN index body.
 
-    def _ensure_database(self) -> None:
-        try:
-            databases = self.client.list_databases()
-            if self.db_name not in databases:
-                self.client.create_database(db_name=self.db_name)
-            self.client.using_database(self.db_name)
-        except Exception as error:
-            logger.warning("Could not verify/switch Milvus database '%s': %s", self.db_name, error)
-
-    def create_collection(
-        self,
-        collection_name: str,
-        embedding_dim: int | None = None,
-        index_type: str | None = None,
-        metric_type: str | None = None,
-    ) -> bool:
-        dimension = embedding_dim or _get_env_int("EMBEDDING_DIM", 768)
-        resolved_index_type = index_type or os.getenv("MILVUS_INDEX_TYPE", "HNSW")
-        resolved_metric_type = metric_type or os.getenv("MILVUS_METRIC_TYPE", "COSINE")
-
-        if collection_name in self.client.list_collections(db_name=self.db_name):
-            logger.info("Collection %s already exists", collection_name)
-            return False
-
-        index_params: dict[str, Any] = {
-            "metric_type": resolved_metric_type,
-            "index_type": resolved_index_type,
+        Mirrors ``src/tools/opensearch_client.py`` ``_knn_index_body`` so the
+        runtime wrapper reads indexed documents correctly.
+        """
+        return {
+            "settings": {"index": {"knn": True}},
+            "mappings": {
+                "properties": {
+                    "vector": {
+                        "type": "knn_vector",
+                        "dimension": embedding_dim,
+                        "method": {
+                            "name": "hnsw",
+                            "space_type": SPACE_TYPE,
+                            "engine": ENGINE,
+                            "parameters": {
+                                "m": _get_env_int("VECTORDB_HNSW_M", HNSW_M),
+                                "ef_construction": _get_env_int(
+                                    "VECTORDB_HNSW_EF_CONSTRUCTION", HNSW_EF_CONSTRUCTION
+                                ),
+                            },
+                        },
+                    },
+                    "text": {"type": "text"},
+                    "metadata": {"type": "object", "enabled": True},
+                }
+            },
         }
 
-        if resolved_index_type == "HNSW":
-            index_params["params"] = {
-                # Fallback defaults aligned with src/config/settings.py so data
-                # indexed by the loader uses the same HNSW connectivity the
-                # runtime wrapper assumes (M=30, efConstruction=200).
-                "M": _get_env_int("MILVUS_HNSW_M", 30),
-                "efConstruction": _get_env_int("MILVUS_HNSW_EF_CONSTRUCTION", 200),
-            }
-        elif resolved_index_type == "IVF_FLAT":
-            index_params["params"] = {
-                # Aligned with src default (nlist=128).
-                "nlist": _get_env_int("MILVUS_IVF_NLIST", 128),
-            }
+    def ensure_index(self, index_name: str, embedding_dim: int = VECTOR_DIM) -> bool:
+        """Create the k-NN index if it does not already exist.
 
-        self.client.create_collection(
-            collection_name=collection_name,
-            dimension=dimension,
-            metric_type=resolved_metric_type,
-            primary_field_name="id",
-            vector_field_name="vector",
-            id_type="int",
-            db_name=self.db_name,
-            index_params=index_params,
-        )
-        logger.info("Created collection %s", collection_name)
+        Returns ``True`` if the index was created, ``False`` if it already
+        existed.
+        """
+        if self.client.indices.exists(index=index_name):
+            logger.info("Index %s already exists", index_name)
+            return False
+
+        self.client.indices.create(index=index_name, body=self._index_body(embedding_dim))
+        logger.info("Created OpenSearch index %s (dim=%d)", index_name, embedding_dim)
         return True
 
-    def insert_embeddings(
+    def index_documents(
         self,
-        collection_name: str,
+        index_name: str,
         embeddings: list[list[float]],
         texts: list[str],
         metadata: list[dict[str, Any]] | None = None,
-    ) -> list[int]:
+    ) -> int:
+        """Bulk-index document chunks as ``{vector, text, metadata}``.
+
+        Each document gets a generated id. A single refresh is issued at the end
+        so the documents are immediately searchable. Returns the number of
+        documents indexed.
+        """
         if metadata is None:
             metadata = [{"source": "unknown"} for _ in texts]
 
-        data = []
-        base_id = int(time.time() * 1000) % (2**31 - 1)
+        opensearchpy = _import_opensearchpy()
 
-        for idx, (embedding, text, item_metadata) in enumerate(zip(embeddings, texts, metadata)):
-            document_name = item_metadata.get("document_name") or item_metadata.get("filename", "")
-            source = item_metadata.get("source", "unknown")
-            metadata_json = json.dumps(item_metadata)
-
-            unique_id = base_id + idx + random.randint(1, 999)
-            unique_id = abs(unique_id) % (2**31 - 1)
-            if unique_id == 0:
-                unique_id = 1
-
-            data.append(
+        actions = []
+        for embedding, text, item_metadata in zip(embeddings, texts, metadata):
+            actions.append(
                 {
-                    "id": unique_id,
-                    "vector": embedding,
-                    "text": text,
-                    "document_name": document_name,
-                    "source": source,
-                    "metadata": metadata_json,
+                    "_index": index_name,
+                    "_id": uuid.uuid4().hex,
+                    "_source": {
+                        "vector": embedding,
+                        "text": text,
+                        "metadata": item_metadata or {},
+                    },
                 }
             )
 
-        logger.info(
-            f"[LOADER_INSERT] Inserting {len(data)} documents into {collection_name} (db: {self.db_name})"
+        if not actions:
+            return 0
+
+        logger.info("[LOADER_INDEX] Indexing %d documents into %s", len(actions), index_name)
+        success, errors = opensearchpy.helpers.bulk(
+            self.client, actions, refresh=True, stats_only=False
         )
-        result = self.client.insert(
-            collection_name=collection_name, data=data, db_name=self.db_name
-        )
-        logger.info(f"[LOADER_INSERT] Insert result: {result}")
+        if errors:
+            logger.warning("[LOADER_INDEX] %d document(s) failed to index", len(errors))
+        logger.info("[LOADER_INDEX] Indexed %d documents into %s", success, index_name)
+        return int(success)
 
-        try:
-            flush_result = self.client.flush(collection_name=collection_name, db_name=self.db_name)
-            logger.info(f"[LOADER_INSERT] Flush result: {flush_result}")
-        except Exception as flush_error:
-            logger.warning("Could not flush collection %s: %s", collection_name, flush_error)
-
-        insert_count = result.get("insert_count", [])
-        if isinstance(insert_count, list):
-            return insert_count
-        return []
-
-    def delete_collection(self, collection_name: str) -> bool:
-        self.client.drop_collection(collection_name=collection_name, db_name=self.db_name)
+    def delete_index(self, index_name: str) -> bool:
+        """Delete an index if it exists. Returns ``True`` when a delete ran."""
+        if not self.client.indices.exists(index=index_name):
+            return False
+        self.client.indices.delete(index=index_name)
+        logger.info("Deleted OpenSearch index %s", index_name)
         return True
 
-    def list_collections(self) -> list[str]:
-        return self.client.list_collections(db_name=self.db_name)  # type: ignore[no-any-return]
+    def list_indexes(self) -> list[str]:
+        """List all non-system index names."""
+        indices = self.client.indices.get(index="*")
+        return [name for name in indices if not name.startswith(".")]
+
+    def count(self, index_name: str) -> int:
+        """Return the number of documents in an index (0 if it does not exist)."""
+        if not self.client.indices.exists(index=index_name):
+            return 0
+        result = self.client.count(index=index_name)
+        return int(result.get("count", 0))
 
 
 class OllamaClient:
@@ -311,4 +311,4 @@ class OllamaClient:
         self.session.close()
 
 
-__all__ = ["MilvusVectorDB", "OllamaClient"]
+__all__ = ["OpenSearchVectorDB", "OllamaClient"]

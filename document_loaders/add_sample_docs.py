@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Simple script to add sample documents to Milvus."""
+"""Simple script to add sample documents to OpenSearch."""
 
 import sys
 from pathlib import Path
@@ -8,8 +8,8 @@ from pathlib import Path
 # python document_loaders/add_sample_docs.py
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from document_loaders.core.tools import OllamaClient, OpenSearchVectorDB
 from document_loaders.local_settings import get_loader_settings
-from document_loaders.core.tools import MilvusVectorDB, OllamaClient
 
 # Sample documents about Milvus
 SAMPLE_DOCS = [
@@ -37,14 +37,10 @@ SAMPLE_DOCS = [
 def main():
     print("Initializing standalone loader clients...")
     settings = get_loader_settings()
-    vector_db = MilvusVectorDB(
-        host=settings.milvus_host,
-        port=settings.milvus_port,
-        db_name=settings.milvus_db_name,
-        user=settings.milvus_user,
-        password=settings.milvus_password,
-        timeout=settings.milvus_timeout,
-        pool_size=settings.milvus_pool_size,
+    index_name = settings.opensearch_kb_index
+    vector_db = OpenSearchVectorDB(
+        host=settings.opensearch_local_host,
+        port=settings.opensearch_local_port,
     )
     ollama_client = OllamaClient(
         host=settings.ollama_host,
@@ -52,24 +48,23 @@ def main():
         pool_size=settings.ollama_pool_size,
     )
 
-    # Drop existing collection to ensure clean state
-    print(f"Checking for existing collection '{settings.ollama_collection_name}'...")
+    # Drop existing index to ensure clean state
+    print(f"Checking for existing index '{index_name}'...")
     try:
-        vector_db.delete_collection(settings.ollama_collection_name)
-        print("✓ Dropped existing collection")
+        if vector_db.delete_index(index_name):
+            print("✓ Dropped existing index")
+        else:
+            print("  (Index didn't exist or already clean)")
     except Exception as e:
-        print(f"  (Collection didn't exist or already clean: {type(e).__name__})")
+        print(f"  (Could not drop index: {type(e).__name__})")
 
-    # Create new collection with document embedding dimensions
-    print(f"Creating collection '{settings.ollama_collection_name}'...")
+    # Create new index with document embedding dimensions
+    print(f"Creating index '{index_name}'...")
     try:
-        vector_db.create_collection(
-            collection_name=settings.ollama_collection_name,
-            embedding_dim=settings.embedding_dim,
-        )
-        print(f"✓ Created collection '{settings.ollama_collection_name}'")
+        vector_db.ensure_index(index_name, embedding_dim=settings.embedding_dim)
+        print(f"✓ Created index '{index_name}'")
     except Exception as e:
-        print(f"✗ Error creating collection: {e}")
+        print(f"✗ Error creating index: {e}")
         raise
 
     print(f"Adding {len(SAMPLE_DOCS)} sample documents...")
@@ -87,17 +82,15 @@ def main():
 
         metadata = [{"source": "sample"} for _ in SAMPLE_DOCS]
 
-        vector_db.insert_embeddings(
-            collection_name=settings.ollama_collection_name,
+        vector_db.index_documents(
+            index_name=index_name,
             embeddings=valid_embeddings,
             texts=SAMPLE_DOCS,
             metadata=metadata,
         )
 
         print("✓ Documents added successfully!")
-        print(
-            f"✓ Collection '{settings.ollama_collection_name}' now has {len(SAMPLE_DOCS)} documents"
-        )
+        print(f"✓ Index '{index_name}' now has {len(SAMPLE_DOCS)} documents")
     except Exception as e:
         print(f"✗ Error adding documents: {e}")
         raise

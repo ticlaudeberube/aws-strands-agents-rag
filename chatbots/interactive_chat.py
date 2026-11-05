@@ -32,7 +32,7 @@ def print_header():
     print("  /quit or /exit  - Exit the chatbot")
     print("  /help           - Show this help message")
     print("  /collections    - List available collections")
-    print("\nOtherwise, ask a question about the Milvus documentation.")
+    print("\nOtherwise, ask a question about the vectorDB documentation.")
     print("-" * 60 + "\n")
 
 

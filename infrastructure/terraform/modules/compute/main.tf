@@ -85,9 +85,14 @@ locals {
     BEDROCK_EMBEDDING_MODEL_ID = var.bedrock_embedding_model_id
     BEDROCK_MODEL_OVERRIDE     = var.bedrock_model_override
 
-    # Secrets Manager secret names (Req 10.1, 11.5)
-    TAVILY_SECRET_NAME = local.tavily_secret_name
-    REDIS_SECRET_NAME  = local.redis_secret_name
+    # Secrets Manager secret identifiers (Req 10.1, 11.5). The names MUST match
+    # the pydantic validation_alias values the app reads at cold start:
+    # settings.secrets_tavily_api_key / settings.secrets_redis_credentials
+    # (src/config/settings.py). Using TAVILY_SECRET_NAME/REDIS_SECRET_NAME here
+    # would be silently ignored, leaving serverless web-search/Redis without
+    # their secrets.
+    SECRETS_TAVILY_API_KEY    = local.tavily_secret_name
+    SECRETS_REDIS_CREDENTIALS = local.redis_secret_name
   }
 }
 

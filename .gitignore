@@ -133,7 +133,7 @@ dmypy.json
 .DS_Store
 Thumbs.db
 
-# Milvus volumes
+# volumes
 volumes/
 docker_volumes/
 

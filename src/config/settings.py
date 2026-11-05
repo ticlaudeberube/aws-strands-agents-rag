@@ -180,9 +180,12 @@ class Settings(BaseSettings):
     # All serverless fields have safe defaults so that importing/instantiating
     # Settings in local mode never requires any AWS configuration.
 
-    # Bedrock (LLM inference + embeddings)
+    # Bedrock (LLM inference + embeddings). Default aligns with the Terraform
+    # default (infrastructure/terraform/variables.tf) and .env.serverless-local:
+    # Amazon Nova Lite needs no one-time Anthropic use-case form and works today
+    # via the Converse API, so it is the safe out-of-the-box serverless default.
     bedrock_inference_model_id: str = Field(
-        default="anthropic.claude-3-haiku-20240307-v1:0",
+        default="amazon.nova-lite-v1:0",
         validation_alias="BEDROCK_INFERENCE_MODEL_ID",
         description="Default Bedrock model ID used for answer generation.",
     )

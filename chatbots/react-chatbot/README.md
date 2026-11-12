@@ -135,9 +135,10 @@ the behavior. The resolution logic lives in `src/config/api.js`.
 | `REACT_APP_API_HOST` | Local | API host for local dev (default `localhost`) |
 | `REACT_APP_API_PORT` | Local | API port for local dev (default `8000`) |
 | `REACT_APP_API_URL` | Serverless | Full HTTPS API Gateway base URL. When set, used **verbatim** and the localhost host/port fallback is ignored (Requirement 8.4) |
-| `REACT_APP_AUTH_ENABLED` | Serverless | Set `true` to force Cognito auth on. Auth is also auto-enabled when a user pool id is present |
+| `REACT_APP_AUTH_ENABLED` | Serverless | Set `true` to explicitly enable Cognito auth |
 | `REACT_APP_USER_POOL_ID` | Serverless | Cognito User Pool id |
 | `REACT_APP_USER_POOL_CLIENT_ID` | Serverless | Cognito User Pool app client id |
+| `REACT_APP_COGNITO_DOMAIN` | Serverless | Cognito managed-login domain output by Terraform |
 | `REACT_APP_AWS_REGION` | Serverless | AWS region of the user pool |
 
 ### Local mode (default)
@@ -151,18 +152,20 @@ exactly as before.
 Set `REACT_APP_API_URL` and the Cognito variables (or `REACT_APP_AUTH_ENABLED=true`).
 In this mode:
 
-- Sign-in uses **AWS Amplify Auth** against the Cognito user pool.
-- The JWT access token is held **in memory only** (never `localStorage` /
-  `sessionStorage`) to prevent XSS token theft (Requirement 7.4). See
-  `src/auth/tokenStore.js`.
+- Sign-in and sign-up use the Cognito managed-login page through **AWS Amplify
+  Auth**, with the authorization code flow and PKCE. The app origin must be
+  registered as both a Cognito callback and sign-out URL by Terraform.
+- Amplify's Cognito tokens and the app's access-token cache are held **in memory
+  only** (not `localStorage`, `sessionStorage`, or cookies). A page reload
+  requires signing in again. See `src/auth/tokenStore.js`.
 - Requests to `/chat` carry `Authorization: Bearer <token>` via
   `src/auth/authFetch.js`.
 - On an expired/invalid token (HTTP 401) the app silently refreshes using the
-  Cognito refresh token and retries once; if the refresh token is also invalid
-  or absent, the user is redirected to the Cognito sign-in page (Requirement 7.5).
+  in-memory Cognito refresh token and retries once; if the refresh token is
+  invalid or absent, the user is sent back to sign-in (Requirement 7.5).
 
 Auth code is isolated under `src/auth/` and the `aws-amplify` SDK is loaded
-dynamically, so it is tree-shakeable and does not run in local mode.
+dynamically, so it is tree-shakeable and does not run in the default local mode.
 
 > **Note:** serverless builds must not contain hardcoded `localhost` references
 > (Property 24). The only `localhost` default lives in the local-dev branch of

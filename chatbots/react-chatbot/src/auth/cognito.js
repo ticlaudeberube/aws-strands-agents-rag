@@ -11,25 +11,66 @@
 import { authConfig, isAuthEnabled } from '../config/api';
 import { setAccessToken, clearAccessToken } from './tokenStore';
 
-let configured = false;
+let configurationPromise;
 
-/**
- * Configure Amplify Auth from the build-time Cognito env vars.
- * Idempotent and a no-op when auth is disabled.
- */
-export async function configureAuth() {
-  if (!isAuthEnabled() || configured) return;
+export function createAuthConfiguration(redirectUrl = window.location.origin) {
+  const missing = [
+    ['user pool id', authConfig.userPoolId],
+    ['user pool client id', authConfig.userPoolClientId],
+    ['Cognito domain', authConfig.cognitoDomain],
+  ]
+    .filter(([, value]) => !value)
+    .map(([name]) => name);
 
-  const { Amplify } = await import('aws-amplify');
-  Amplify.configure({
+  if (missing.length) {
+    throw new Error(`Missing Cognito configuration: ${missing.join(', ')}`);
+  }
+
+  return {
     Auth: {
       Cognito: {
         userPoolId: authConfig.userPoolId,
         userPoolClientId: authConfig.userPoolClientId,
+        loginWith: {
+          oauth: {
+            domain: authConfig.cognitoDomain
+              .replace(/^https?:\/\//, '')
+              .replace(/\/+$/, ''),
+            scopes: ['openid', 'email'],
+            redirectSignIn: [redirectUrl],
+            redirectSignOut: [redirectUrl],
+            responseType: 'code',
+          },
+        },
       },
     },
-  });
-  configured = true;
+  };
+}
+
+/**
+ * Configure Amplify Auth from build-time Cognito settings. Tokens stay in
+ * memory; the short-lived OAuth transaction state is managed by Amplify.
+ */
+export async function configureAuth() {
+  if (!isAuthEnabled()) return;
+
+  if (!configurationPromise) {
+    configurationPromise = (async () => {
+      const [{ Amplify }, { cognitoUserPoolsTokenProvider }, { sharedInMemoryStorage }] =
+        await Promise.all([
+          import('aws-amplify'),
+          import('aws-amplify/auth/cognito'),
+          import('aws-amplify/utils'),
+        ]);
+      Amplify.configure(createAuthConfiguration());
+      cognitoUserPoolsTokenProvider.setKeyValueStorage(sharedInMemoryStorage);
+    })().catch((error) => {
+      configurationPromise = undefined;
+      throw error;
+    });
+  }
+
+  await configurationPromise;
 }
 
 /**
@@ -46,9 +87,9 @@ export async function configureAuth() {
  */
 export async function refreshAccessToken(opts = {}) {
   if (!isAuthEnabled()) return null;
-  await configureAuth();
 
   try {
+    await configureAuth();
     const { fetchAuthSession } = await import('aws-amplify/auth');
     const session = await fetchAuthSession({ forceRefresh: Boolean(opts.forceRefresh) });
     const token = session?.tokens?.accessToken?.toString();
@@ -77,33 +118,23 @@ export async function ensureSignedIn() {
 
 /**
  * Redirect the user to the Cognito Hosted UI sign-in page (Requirement 7.5).
- * Falls back to a hard reload if Amplify's redirect is unavailable so the user
- * is never left on a dead, unauthenticated screen.
  */
 export async function redirectToSignIn() {
   if (!isAuthEnabled()) return;
   clearAccessToken();
-  try {
-    await configureAuth();
-    const { signInWithRedirect } = await import('aws-amplify/auth');
-    await signInWithRedirect();
-  } catch (err) {
-    console.warn('[auth] Hosted UI redirect failed, reloading:', err?.message || err);
-    if (typeof window !== 'undefined') {
-      window.location.reload();
-    }
-  }
+  await configureAuth();
+  const { signInWithRedirect } = await import('aws-amplify/auth');
+  await signInWithRedirect();
 }
 
 /** Sign the user out and clear the in-memory token. */
 export async function signOut() {
-  clearAccessToken();
-  if (!isAuthEnabled()) return;
   try {
+    if (!isAuthEnabled()) return;
     await configureAuth();
     const { signOut: amplifySignOut } = await import('aws-amplify/auth');
     await amplifySignOut();
-  } catch (err) {
-    console.warn('[auth] Sign-out failed:', err?.message || err);
+  } finally {
+    clearAccessToken();
   }
 }

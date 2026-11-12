@@ -5,7 +5,7 @@ import ChatInput from './components/ChatInput';
 import CachedResponsesList from './components/CachedResponsesList';
 import { API_BASE_URL, isAuthEnabled, isServerlessMode } from './config/api';
 import { authFetch } from './auth/authFetch';
-import { ensureSignedIn } from './auth/cognito';
+import { ensureSignedIn, redirectToSignIn, signOut as cognitoSignOut } from './auth/cognito';
 import { serverlessChat } from './config/serverlessChat';
 
 // Stable per-browser-session id so serverless multi-turn history (DynamoDB)
@@ -61,6 +61,8 @@ function App() {
   const [cachedResponses, setCachedResponses] = useState([]);
   const [cacheDrawerOpen, setCacheDrawerOpen] = useState(false);
   const messagesEndRef = useRef(null);
+  const [authStatus, setAuthStatus] = useState(isAuthEnabled() ? 'checking' : 'disabled');
+  const [authError, setAuthError] = useState('');
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -69,18 +71,34 @@ function App() {
 
   // Check API status on mount
   useEffect(() => {
+    let cancelled = false;
     const init = async () => {
       // Serverless mode: establish a Cognito session (silent refresh) before
       // hitting the API. No-op in local mode where auth is disabled.
       if (isAuthEnabled()) {
-        await ensureSignedIn();
+        try {
+          const token = await ensureSignedIn();
+          if (!cancelled) setAuthStatus(token ? 'signedIn' : 'signedOut');
+        } catch (error) {
+          console.error('[auth] Unable to initialize Cognito auth:', error);
+          if (!cancelled) {
+            setAuthStatus('error');
+            setAuthError(error.message || 'Unable to initialize sign-in.');
+          }
+        }
       }
-      checkApiStatus();
-      if (!isServerlessMode()) {
-        loadCachedResponses();
+      if (!cancelled) {
+        checkApiStatus();
+        if (!isServerlessMode()) {
+          loadCachedResponses();
+        }
       }
     };
     init();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const checkApiStatus = async () => {
@@ -144,6 +162,7 @@ function App() {
 
   const handleSendMessage = async (text, forceWebSearch = false) => {
     if (!text.trim() || isLoading) return;
+    if (isAuthEnabled() && authStatus !== 'signedIn') return;
 
     // Add user message with timestamp (AgentCore compatibility)
     const userMessage = createMessage(text, 'user');
@@ -594,6 +613,31 @@ function App() {
     setCacheDrawerOpen(!cacheDrawerOpen);
   };
 
+  const handleSignIn = async () => {
+    setAuthError('');
+    setAuthStatus('signingIn');
+    try {
+      await redirectToSignIn();
+    } catch (error) {
+      console.error('[auth] Cognito sign-in failed:', error);
+      setAuthStatus('error');
+      setAuthError(error.message || 'Unable to start Cognito sign-in.');
+    }
+  };
+
+  const handleSignOut = async () => {
+    setAuthError('');
+    setAuthStatus('signingOut');
+    try {
+      await cognitoSignOut();
+      setAuthStatus('signedOut');
+    } catch (error) {
+      console.error('[auth] Cognito sign-out failed:', error);
+      setAuthStatus('signedOut');
+      setAuthError(error.message || 'Unable to complete sign-out.');
+    }
+  };
+
   return (
     <div className="app">
       <div className="app-layout">
@@ -612,6 +656,19 @@ function App() {
                   {apiStatus === 'checking' && 'Checking...'}
                   {apiStatus === 'error' && 'API Offline'}
                 </div>
+                {isAuthEnabled() && (
+                  <button
+                    className="auth-button"
+                    onClick={authStatus === 'signedIn' ? handleSignOut : handleSignIn}
+                    disabled={['checking', 'signingIn', 'signingOut'].includes(authStatus)}
+                  >
+                    {authStatus === 'signedIn' && 'Sign out'}
+                    {authStatus === 'checking' && 'Checking sign-in...'}
+                    {authStatus === 'signingIn' && 'Redirecting...'}
+                    {authStatus === 'signingOut' && 'Signing out...'}
+                    {['signedOut', 'error'].includes(authStatus) && 'Sign in'}
+                  </button>
+                )}
                 <button
                   className={`cache-toggle-btn ${bypassCache ? 'active' : ''}`}
                   onClick={() => setBypassCache(!bypassCache)}
@@ -626,6 +683,20 @@ function App() {
             {apiWarning && (
               <div className="api-warning" role="status">
                 {apiWarning}
+              </div>
+            )}
+
+            {isAuthEnabled() && authStatus !== 'signedIn' && (
+              <div className="auth-prompt" role="status">
+                {authStatus === 'checking' && 'Checking your Cognito session...'}
+                {authStatus === 'signingIn' && 'Redirecting to secure sign-in...'}
+                {authStatus === 'signingOut' && 'Signing out...'}
+                {['signedOut', 'error'].includes(authStatus) && (
+                  <>
+                    <span>Sign in with Cognito to use chat.</span>
+                    {authError && <span className="auth-error">{authError}</span>}
+                  </>
+                )}
               </div>
             )}
 
@@ -661,12 +732,18 @@ function App() {
               </div>
               <ChatInput
                 onSendMessage={handleSendMessage}
-                disabled={isLoading || apiStatus === 'error'}
+                disabled={
+                  isLoading ||
+                  apiStatus === 'error' ||
+                  (isAuthEnabled() && authStatus !== 'signedIn')
+                }
                 webSearchEnabled={webSearchEnabled}
                 placeholder={
                   apiStatus === 'error'
                     ? 'API not available - start the API server'
-                    : 'Ask about vector databases...'
+                    : isAuthEnabled() && authStatus !== 'signedIn'
+                      ? 'Sign in to ask a question'
+                      : 'Ask about vector databases...'
                 }
               />
 

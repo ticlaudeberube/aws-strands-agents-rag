@@ -15,6 +15,7 @@ describe('config/api', () => {
     delete process.env.REACT_APP_AUTH_ENABLED;
     delete process.env.REACT_APP_USER_POOL_ID;
     delete process.env.REACT_APP_USER_POOL_CLIENT_ID;
+    delete process.env.REACT_APP_COGNITO_DOMAIN;
     delete process.env.REACT_APP_AWS_REGION;
   });
 
@@ -68,17 +69,38 @@ describe('config/api', () => {
     expect(isAuthEnabled()).toBe(false);
   });
 
+  test('pool settings alone do not enable Cognito in local mode', () => {
+    process.env.REACT_APP_USER_POOL_ID = 'us-east-1_abc123';
+    process.env.REACT_APP_USER_POOL_CLIENT_ID = 'client123';
+    process.env.REACT_APP_COGNITO_DOMAIN = 'login.example.auth.us-east-1.amazoncognito.com';
+    const { isAuthEnabled } = require('./api');
+    expect(isAuthEnabled()).toBe(false);
+  });
+
   test('auth is enabled via explicit REACT_APP_AUTH_ENABLED=true', () => {
+    process.env.REACT_APP_API_URL = 'https://api.example.com';
     process.env.REACT_APP_AUTH_ENABLED = 'true';
     const { isAuthEnabled } = require('./api');
     expect(isAuthEnabled()).toBe(true);
   });
 
   test('auth is inferred from presence of user pool id + client id', () => {
+    process.env.REACT_APP_API_URL = 'https://api.example.com';
     process.env.REACT_APP_USER_POOL_ID = 'us-east-1_abc123';
     process.env.REACT_APP_USER_POOL_CLIENT_ID = 'client123';
-    const { isAuthEnabled } = require('./api');
+    process.env.REACT_APP_COGNITO_DOMAIN = 'login.example.auth.us-east-1.amazoncognito.com';
+    const { authConfig, isAuthEnabled } = require('./api');
     expect(isAuthEnabled()).toBe(true);
+    expect(authConfig.cognitoDomain).toBe('login.example.auth.us-east-1.amazoncognito.com');
+  });
+
+  test('explicit auth flag does not enable Cognito in local mode', () => {
+    process.env.REACT_APP_AUTH_ENABLED = 'true';
+    process.env.REACT_APP_USER_POOL_ID = 'us-east-1_abc123';
+    process.env.REACT_APP_USER_POOL_CLIENT_ID = 'client123';
+    process.env.REACT_APP_COGNITO_DOMAIN = 'login.example.auth.us-east-1.amazoncognito.com';
+    const { isAuthEnabled } = require('./api');
+    expect(isAuthEnabled()).toBe(false);
   });
 
   test('a lone user pool id (no client id) does not enable auth', () => {

@@ -294,8 +294,9 @@ Both modes are validated by a final integration/smoke task.
     - _Requirements: 8.1, 8.2, 8.3, 8.5_
 
   - [x] 17.2 Add Cognito auth and API URL injection to the React frontend
-    - In `chatbots/react-chatbot/`: add Amplify Auth / Cognito Hosted UI sign-in, hold JWT in memory (not localStorage), auto-refresh via refresh token and redirect to sign-in when invalid
+    - In `chatbots/react-chatbot/`: add sign-in/sign-out controls that redirect to Cognito Hosted UI (no app-owned username/password form), hold tokens in memory, handle OAuth callback, auto-refresh via refresh token, and redirect to hosted login when invalid
     - Read API base URL from build-time `REACT_APP_API_URL`; remove hardcoded localhost from serverless builds; keep local-mode `REACT_APP_API_HOST`/`REACT_APP_API_PORT` behavior for dev
+    - Keep local mode unauthenticated, without Cognito sign-in or JWT handling
     - _Requirements: 7.4, 7.5, 8.4_
 
   - [ ]* 17.3 Write property tests for CloudFront headers, SPA routing, and build cleanliness

@@ -137,8 +137,7 @@ module "api" {
   chat_function_arn        = module.compute.chat_function_arn
   chat_function_invoke_arn = module.compute.chat_function_invoke_arn
 
-  # CORS origin (Req 6.5). Set to the exact https CloudFront origin supplied by
-  # the frontend module (task 17).
+  # CORS origin (Req 6.5) and the Cognito OAuth callback/sign-out URL.
   cors_allow_origin = "https://${module.frontend.cloudfront_domain}"
 
   tags = local.common_tags

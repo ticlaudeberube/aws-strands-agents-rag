@@ -18,7 +18,7 @@
 # defense-in-depth.
 
 # ---------------------------------------------------------------------------
-# Cognito user pool (Req 7.1) + client (Req 7.2)
+# Cognito user pool, managed-login domain, and public app client (Req 7.1/7.2)
 # ---------------------------------------------------------------------------
 
 resource "aws_cognito_user_pool" "this" {
@@ -41,6 +41,13 @@ resource "aws_cognito_user_pool" "this" {
   tags = var.tags
 }
 
+data "aws_caller_identity" "current" {}
+
+resource "aws_cognito_user_pool_domain" "this" {
+  user_pool_id = aws_cognito_user_pool.this.id
+  domain       = "${var.name_prefix}-${var.aws_region}-${data.aws_caller_identity.current.account_id}"
+}
+
 resource "aws_cognito_user_pool_client" "this" {
   name         = "${var.name_prefix}-client"
   user_pool_id = aws_cognito_user_pool.this.id
@@ -48,6 +55,15 @@ resource "aws_cognito_user_pool_client" "this" {
   # Public SPA client — no client secret held in the browser (Req 7.4/7.5
   # keep the JWT in memory, not a server secret).
   generate_secret = false
+
+  # Cognito managed login uses authorization code + PKCE for the public SPA.
+  # The frontend origin is also the OAuth callback and sign-out destination.
+  callback_urls                        = [var.cors_allow_origin]
+  logout_urls                          = [var.cors_allow_origin]
+  allowed_oauth_flows_user_pool_client = true
+  allowed_oauth_flows                  = ["code"]
+  allowed_oauth_scopes                 = ["openid", "email"]
+  supported_identity_providers         = ["COGNITO"]
 
   # Req 7.2: issue access tokens that expire after 1 hour.
   access_token_validity  = 1

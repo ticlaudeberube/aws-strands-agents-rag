@@ -126,6 +126,29 @@ expected redaction and preservation of non-sensitive technical content.
 validated conservative limit), cover long and unusual text, and demonstrate
 that chunks remain within the model's limit.
 
+## 8. Complete Cognito sign-in for the browser client
+
+**Status:** Implemented in Terraform and the React client; live AWS sign-in
+validation remains pending a non-production deployment.
+
+The implementation and deployment instructions are in place. Remaining work
+requires a non-production AWS deployment:
+
+- [ ] Review and apply the Terraform plan; confirm the Cognito domain, public
+  app-client OAuth settings, and deployed frontend callback/sign-out URL.
+- [ ] Build and deploy the React frontend, then verify hosted sign-in/sign-up
+  completes the OAuth callback and the UI reflects signed-in state.
+- [ ] Verify `POST /chat` succeeds with a valid access token and API Gateway
+  rejects missing, invalid, and expired JWTs before invoking Lambda.
+- [ ] Verify token refresh/re-authentication and sign-out behavior against the
+  deployed user pool and app client.
+
+**Acceptance:** An unauthenticated browser can sign in through Cognito and
+complete the hosted-login OAuth callback; the client sends a valid access token
+to `POST /chat`; missing or invalid tokens are rejected by API Gateway; expired
+sessions refresh or return the user to sign-in; sign-out clears the session;
+local development remains unauthenticated and has no Cognito sign-in controls.
+
 ## Operational notes
 
 - Bedrock Guardrails protect configured runtime paths; they do not automatically

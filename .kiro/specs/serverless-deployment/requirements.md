@@ -130,14 +130,14 @@ This feature covers the serverless AWS deployment of the existing Strands Agents
 
 ### Requirement 7: User Authentication via Cognito
 
-**User Story:** As a security engineer, I want user authentication managed by Amazon Cognito, so that only authenticated users can access the chat API and frontend.
+**User Story:** As a security engineer, I want chat API requests authenticated by Amazon Cognito, so that only signed-in users can access chat functionality.
 
 #### Acceptance Criteria
 
 1. THE Cognito_User_Pool SHALL support user sign-up with email and password, enforcing a minimum password length of 12 characters, at least one uppercase letter, one number, and one special character.
 2. WHEN a user signs in successfully, THE Cognito_User_Pool SHALL issue a JWT access token with a 1-hour expiry.
 3. THE API_Gateway SHALL validate Cognito JWT tokens on every `/chat` request and reject expired or malformed tokens with HTTP 401.
-4. THE React_Frontend SHALL use the Cognito Hosted UI or Amplify Auth for the sign-in flow and store the JWT token in memory (not localStorage) to prevent XSS token theft.
+4. THE React_Frontend SHALL provide sign-in/sign-out controls that redirect to Cognito managed login using Amplify Auth; it SHALL NOT implement an application-owned username/password form. The frontend SHALL keep Cognito tokens in memory rather than persistent browser storage.
 5. IF a Cognito JWT token is expired or malformed, THEN THE React_Frontend SHALL automatically attempt to refresh the session using the Cognito refresh token. IF the refresh token is also invalid or absent, THEN THE React_Frontend SHALL redirect the user to the sign-in page.
 
 ---

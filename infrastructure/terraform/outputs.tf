@@ -105,6 +105,11 @@ output "user_pool_client_id" {
   value       = module.api.user_pool_client_id
 }
 
+output "cognito_domain" {
+  description = "Cognito managed-login domain used by the React SPA."
+  value       = module.api.cognito_domain
+}
+
 # ---------------------------------------------------------------------------
 # Frontend tier (task 17.1)
 # ---------------------------------------------------------------------------

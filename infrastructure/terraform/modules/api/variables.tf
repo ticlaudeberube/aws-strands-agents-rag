@@ -40,9 +40,13 @@ variable "chat_function_invoke_arn" {
 # ---------------------------------------------------------------------------
 
 variable "cors_allow_origin" {
-  description = "The CloudFront origin allowed by CORS on the HTTP API. Defaults to '*' until the frontend module (task 17) supplies the CloudFront domain, at which point the root passes the exact https origin."
+  description = "The HTTPS frontend origin allowed by API CORS and registered as the Cognito OAuth callback and sign-out URL."
   type        = string
-  default     = "*"
+
+  validation {
+    condition     = can(regex("^https://[^/]+$", var.cors_allow_origin))
+    error_message = "cors_allow_origin must be an HTTPS origin without a path or trailing slash."
+  }
 }
 
 # ---------------------------------------------------------------------------

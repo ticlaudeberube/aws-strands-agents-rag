@@ -51,16 +51,20 @@ class _FakeBedrockRuntime:
 
 
 def _guardrail_settings() -> Settings:
-    return Settings(
-        DEPLOYMENT_MODE="serverless",
-        BEDROCK_GUARDRAIL_ID="guardrail-id",
-        BEDROCK_GUARDRAIL_VERSION="1",
+    return Settings.model_validate(
+        {
+            "DEPLOYMENT_MODE": "serverless",
+            "BEDROCK_GUARDRAIL_ID": "guardrail-id",
+            "BEDROCK_GUARDRAIL_VERSION": "1",
+        }
     )
 
 
 def test_guardrail_settings_must_be_configured_as_a_pair() -> None:
     with pytest.raises(ValueError, match="must be set together"):
-        Settings(DEPLOYMENT_MODE="serverless", BEDROCK_GUARDRAIL_ID="guardrail-id")
+        Settings.model_validate(
+            {"DEPLOYMENT_MODE": "serverless", "BEDROCK_GUARDRAIL_ID": "guardrail-id"}
+        )
 
 
 def test_converse_guardrail_config_is_enabled_with_trace_disabled() -> None:
@@ -79,7 +83,7 @@ def test_converse_guardrail_config_is_enabled_with_trace_disabled() -> None:
 
 
 def test_guardrails_are_not_added_in_local_mode() -> None:
-    settings = Settings(DEPLOYMENT_MODE="local")
+    settings = Settings.model_validate({"DEPLOYMENT_MODE": "local"})
     runtime = _FakeBedrockRuntime()
     client = BedrockClient(settings=settings, client=runtime)
 
@@ -366,4 +370,5 @@ def test_apply_guardrail_failure_does_not_silently_return_answer() -> None:
 
 
 def test_guardrail_config_is_empty_when_disabled() -> None:
-    assert get_bedrock_guardrail_config(Settings(DEPLOYMENT_MODE="local")) == {}
+    settings = Settings.model_validate({"DEPLOYMENT_MODE": "local"})
+    assert get_bedrock_guardrail_config(settings) == {}

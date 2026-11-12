@@ -206,4 +206,5 @@ def test_hybrid_search_is_disabled_for_semantic_cache_index() -> None:
     client, fake = _client(hybrid=True)
     client.knn_search("rag-cache", [0.0] * 8, k=5, query_text="HNSW")
     assert len(fake.search_bodies) == 1
+    assert fake.last_body is not None
     assert "knn" in fake.last_body["query"]

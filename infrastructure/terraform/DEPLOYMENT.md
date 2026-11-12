@@ -228,13 +228,20 @@ Per-environment variables live in `environments/{dev,staging,prod}.tfvars`
   REACT_APP_API_URL="https://<api_endpoint>" \
   REACT_APP_USER_POOL_ID="<user_pool_id>" \
   REACT_APP_USER_POOL_CLIENT_ID="<user_pool_client_id>" \
+  REACT_APP_COGNITO_DOMAIN="<cognito_domain>" \
   REACT_APP_AWS_REGION="us-east-1" \
+  REACT_APP_AUTH_ENABLED="true" \
     npm run build
   aws s3 sync build/ "s3://<documents_bucket_id>/frontend/"
   # then invalidate CloudFront if needed
   ```
-  (`api_endpoint`, `user_pool_id`, `user_pool_client_id`, `cloudfront_domain`,
-  and `documents_bucket_id` are Terraform **outputs**.)
+  (`api_endpoint`, `user_pool_id`, `user_pool_client_id`, `cognito_domain`,
+  `cloudfront_domain`, and `documents_bucket_id` are Terraform **outputs**.
+  Terraform registers the CloudFront origin as the Cognito app client's exact
+  OAuth callback and sign-out URL.)
+- The React app does not render a username/password form. Its **Sign in**
+  button redirects to Cognito managed login; Cognito returns the browser to the
+  registered callback after sign-in or sign-up.
 - Upload source documents to `s3://<documents_bucket_id>/documents/` to trigger
   the indexing Lambda, which creates the OpenSearch `rag-kb` / `rag-cache`
   indexes on first use.

@@ -1,12 +1,8 @@
 // In-memory JWT token store (Requirement 7.4).
 //
-// The Cognito JWT access token is held ONLY in module-scoped JavaScript memory
-// here. It is deliberately NEVER written to localStorage or sessionStorage so a
-// successful XSS payload cannot read a persisted token out of web storage.
-//
-// Because the value lives in a plain module variable it is cleared on page
-// reload — which is acceptable: Amplify can silently re-derive a fresh access
-// token from the Cognito refresh token (see auth/cognito.js).
+// The app's Cognito JWT access token is held only in module-scoped memory here.
+// Amplify's token provider also uses in-memory storage, so a reload clears the
+// refresh token and requires the user to sign in again.
 
 /** @type {string | null} */
 let accessToken = null;

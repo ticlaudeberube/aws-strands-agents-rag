@@ -588,8 +588,8 @@ Steps per document:
 
 The same `chatbots/react-chatbot/` source serves both modes; only how it is hosted and configured differs.
 
-- **Local Mode**: served by the FastAPI static mount or the React dev server on `http://localhost:3000`; reads `REACT_APP_API_HOST` / `REACT_APP_API_PORT` (defaults to `localhost:8000`); no authentication.
-- **Serverless Mode**: build artifacts (`build/`) deployed to `S3_Document_Bucket/frontend/` via `aws s3 sync` and served through CloudFront; reads `REACT_APP_API_URL` (full HTTPS API Gateway URL); Amplify Auth added for Cognito sign-in with JWT held in memory.
+- **Local Mode**: served by the FastAPI static mount or the React dev server on `http://localhost:3000`; reads `REACT_APP_API_HOST` / `REACT_APP_API_PORT` (defaults to `localhost:8000`); no Cognito sign-in or API authentication.
+- **Serverless Mode**: build artifacts (`build/`) deployed to `S3_Document_Bucket/frontend/` via `aws s3 sync` and served through CloudFront; reads `REACT_APP_API_URL` (full HTTPS API Gateway URL); Amplify Auth redirects users to Cognito managed login (no app-owned username/password form) and keeps tokens in memory.
 
 ### 8. Terraform Configuration (`infrastructure/terraform/`) — Serverless Mode only
 

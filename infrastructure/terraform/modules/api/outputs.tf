@@ -25,6 +25,11 @@ output "user_pool_endpoint" {
   value       = aws_cognito_user_pool.this.endpoint
 }
 
+output "cognito_domain" {
+  description = "Amazon Cognito managed-login domain for the React SPA."
+  value       = "${aws_cognito_user_pool_domain.this.domain}.auth.${var.aws_region}.amazoncognito.com"
+}
+
 output "web_acl_arn" {
   description = "ARN of the WAFv2 web ACL associated with the API stage."
   value       = aws_wafv2_web_acl.this.arn

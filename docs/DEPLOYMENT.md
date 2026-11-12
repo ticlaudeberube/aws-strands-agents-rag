@@ -194,6 +194,7 @@ Useful outputs after apply:
 - `api_endpoint` — API Gateway base URL (POST /chat, GET /health)
 - `cloudfront_domain` — the SPA URL
 - `user_pool_id`, `user_pool_client_id` — Cognito, for the React build
+- `cognito_domain` — Cognito managed-login domain for the React build
 - `documents_bucket_id` — S3 bucket for KB documents + frontend assets
 - `opensearch_collection_endpoint` — for app config / index creation
 
@@ -239,6 +240,7 @@ cd chatbots/react-chatbot
 REACT_APP_API_URL="https://<api_endpoint>" \
 REACT_APP_USER_POOL_ID="<user_pool_id>" \
 REACT_APP_USER_POOL_CLIENT_ID="<user_pool_client_id>" \
+REACT_APP_COGNITO_DOMAIN="<cognito_domain>" \
 REACT_APP_AWS_REGION="us-east-1" \
 REACT_APP_AUTH_ENABLED="true" \
 npm run build
@@ -247,9 +249,15 @@ aws s3 sync build/ s3://<documents_bucket_id>/frontend/ --delete
 aws cloudfront create-invalidation --distribution-id <cloudfront_distribution_id> --paths '/*'
 ```
 
-### 6e. Create a user
-Sign-up/sign-in flows through the Cognito user pool. Create a test user via the
-Cognito console or `aws cognito-idp admin-create-user`.
+### 6e. Sign in
+The app does not provide its own username/password form. Selecting **Sign in**
+redirects the browser to the Cognito managed-login page, which supports
+Cognito-hosted sign-up and sign-in. Terraform registers the CloudFront origin as
+the app client's OAuth callback and sign-out URL. The public app client uses
+the authorization code flow with PKCE and has no client secret. After
+authentication, Cognito redirects back to that same CloudFront origin; do not
+change the frontend hostname without updating the app client's callback and
+sign-out URLs.
 
 ---
 

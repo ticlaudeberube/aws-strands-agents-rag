@@ -3,7 +3,7 @@
 The current codebase supports two deployment modes with the same core Strands workflow:
 
 - Local mode: FastAPI + Ollama + vector DB
-- Serverless AWS mode: Lambda + AgentCore + Bedrock + OpenSearch Serverless
+- Serverless AWS mode: API Gateway + VPC-attached Lambda + Bedrock + OpenSearch Serverless
 
 ## Shared workflow
 
@@ -63,12 +63,118 @@ Local mode is the default path for development and debugging.
 
 ## Serverless AWS mode
 
-Serverless mode is the cloud deployment path.
+Serverless mode is the cloud deployment path. The graph below reflects the
+Terraform-defined stack; [ADR-001](../ADR/ADR-001) records that the initial
+cloud deployment is still pending.
 
-- Lambda/AgentCore execution path
+- API Gateway HTTP API, with Cognito JWT authorization for chat requests
+- VPC-attached chat and document-indexing Lambda functions
 - Bedrock for inference and embeddings
 - OpenSearch Serverless for vector search
-- Redis/DynamoDB for cache/session support
+- ElastiCache Redis for caching and DynamoDB for session, analytics, and thresholds
+- CloudFront and a private S3 bucket for the static frontend and ingestion documents
+
+### AWS serverless architecture graph
+
+```mermaid
+flowchart LR
+  user([Browser / user])
+
+  subgraph aws["AWS Region"]
+    direction LR
+
+    subgraph edge["Frontend, identity, and API"]
+      cf["Amazon CloudFront<br/>HTTPS SPA"]
+      apiwaf["AWS WAFv2<br/>regional rate limit"]
+      apigw["API Gateway v2<br/>HTTP API"]
+      cognito["Amazon Cognito<br/>Managed login + User Pool"]
+      health["GET /health<br/>mock response"]
+      chatroute["POST /chat<br/>JWT required"]
+    end
+
+    frontendbucket[("Amazon S3<br/>private bucket<br/>frontend/ + documents/")]
+
+    subgraph vpc["VPC · private multi-AZ subnets · no NAT or IGW"]
+      chat["AWS Lambda<br/>chat / Strands graph"]
+      indexing["AWS Lambda<br/>document indexing"]
+      redis[("Amazon ElastiCache<br/>Redis · TLS")]
+      aossvpce["AOSS interface<br/>VPC endpoint"]
+      bedrockvpce["Bedrock Runtime interface<br/>VPC endpoint"]
+      secretsvpce["Secrets Manager interface<br/>VPC endpoint"]
+      s3vpce["S3 gateway<br/>VPC endpoint"]
+      ddbvpce["DynamoDB gateway<br/>VPC endpoint"]
+    end
+
+    opensearch[("Amazon OpenSearch Serverless<br/>vector collection<br/>VPC-only network policy")]
+    bedrock["Amazon Bedrock<br/>foundation models + Guardrail"]
+    sessionddb[("DynamoDB<br/>session history")]
+    analyticsddb[("DynamoDB<br/>analytics / indexing dedup")]
+    thresholdsddb[("DynamoDB<br/>runtime thresholds")]
+    secrets["AWS Secrets Manager<br/>Tavily + Redis credentials"]
+    iam["IAM Lambda execution role<br/>least-privilege policies"]
+    logs["Amazon CloudWatch Logs<br/>Lambda log groups"]
+    metrics["Amazon CloudWatch Metrics<br/>StrandsRAG / stage"]
+    xray["AWS X-Ray<br/>active tracing"]
+    alarm["CloudWatch alarm<br/>errors/total > 10 / 5 min"]
+    sns["Amazon SNS<br/>optional alarm notifications"]
+
+    cf -->|"OAC · frontend/ only"| frontendbucket
+    user -->|"HTTPS · SPA"| cf
+    user -->|"Sign in button · redirect"| cognito
+    cognito -->|"Hosted sign-in / sign-up · OAuth callback + tokens"| cf
+    user -->|"HTTPS API request"| apiwaf
+    apiwaf -->|"WAF-associated API stage"| apigw
+    apigw -->|"GET /health"| health
+    apigw -->|"POST /chat · Cognito JWT"| chatroute
+    chatroute --> chat
+
+    frontendbucket -->|"ObjectCreated · documents/"| indexing
+    indexing -->|"read uploaded object"| s3vpce
+    s3vpce --> frontendbucket
+
+    chat -->|"cache · TLS 6379"| redis
+    chat -->|"vector / hybrid search"| aossvpce
+    indexing -->|"embeddings + index writes"| aossvpce
+    aossvpce --> opensearch
+
+    chat --> bedrockvpce
+    indexing --> bedrockvpce
+    bedrockvpce -->|"inference, embeddings, guardrail"| bedrock
+
+    chat --> ddbvpce
+    indexing --> ddbvpce
+    ddbvpce --> sessionddb
+    ddbvpce --> analyticsddb
+    ddbvpce --> thresholdsddb
+
+    chat --> secretsvpce
+    indexing --> secretsvpce
+    secretsvpce --> secrets
+
+    chat -. execution role .-> iam
+    indexing -. execution role .-> iam
+    chat -. logs .-> logs
+    indexing -. logs .-> logs
+    chat -. custom metrics .-> metrics
+    indexing -. custom metrics .-> metrics
+    chat -. active tracing .-> xray
+    indexing -. active tracing .-> xray
+    metrics --> alarm
+    alarm -. optional action .-> sns
+  end
+```
+
+Solid arrows show request, event, or data paths; dotted arrows show IAM or
+observability relationships. API Gateway's health route is a public mock
+integration and does not invoke Lambda. The S3 bucket blocks public access:
+CloudFront's origin access control reads only `frontend/`, while S3 object
+creation under `documents/` invokes the indexing Lambda. Lambda traffic to
+Bedrock, OpenSearch Serverless, Secrets Manager, S3, and DynamoDB uses the VPC
+endpoints shown; Redis is reached directly inside the VPC. Redis and
+OpenSearch are not publicly reachable. The frontend has no username/password
+form: its sign-in button redirects to Cognito managed login, which returns to
+the registered frontend callback. Local development remains unauthenticated by
+default and does not include Cognito sign-in.
 
 ### Bedrock Guardrails
 

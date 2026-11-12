@@ -15,9 +15,8 @@
 //         REACT_APP_API_HOST / REACT_APP_API_PORT (defaults localhost:8000).
 //         The "localhost" literal lives ONLY in this local-dev branch.
 //   * Auth (Requirements 7.4, 7.5):
-//       - Serverless mode is gated behind an explicit flag OR inferred from the
-//         Cognito user-pool id being present, so local mode keeps working with
-//         no auth and no Cognito config.
+//       - Cognito can only be enabled when REACT_APP_API_URL selects serverless
+//         mode. Local mode remains unauthenticated.
 
 /**
  * Full API base URL for serverless builds, if provided at build time.
@@ -67,24 +66,24 @@ export function isServerlessMode() {
 export const authConfig = {
   userPoolId: process.env.REACT_APP_USER_POOL_ID,
   userPoolClientId: process.env.REACT_APP_USER_POOL_CLIENT_ID,
+  cognitoDomain: process.env.REACT_APP_COGNITO_DOMAIN,
   region: process.env.REACT_APP_AWS_REGION,
 };
 
 /**
  * Whether Cognito auth is enabled for this build.
  *
- * Enabled when EITHER:
- *   - REACT_APP_AUTH_ENABLED is explicitly "true", OR
- *   - a Cognito user-pool id is present (serverless deploys always set it).
+ * Enabled only in serverless mode, when REACT_APP_AUTH_ENABLED is explicitly
+ * "true" or both user-pool and app-client ids are configured.
  *
- * This stays `false` for local-mode development (no serverless env vars set),
- * so the existing no-auth localhost flow is completely unchanged.
+ * Local development stays unauthenticated; DEPLOYMENT_MODE does not control
+ * this browser build.
  * @returns {boolean}
  */
 export function isAuthEnabled() {
   const explicit = (process.env.REACT_APP_AUTH_ENABLED || '').toLowerCase() === 'true';
   const inferred = Boolean(authConfig.userPoolId && authConfig.userPoolClientId);
-  return explicit || inferred;
+  return isServerlessMode() && (explicit || inferred);
 }
 
 // Convenience constant for modules that only need the resolved base URL once.

@@ -171,12 +171,13 @@ an explicit environment configuration change.
 
 **Coverage limits and validation.**
 
-- Semantic-cache hits return before a Converse request, so the current query
-  are screened by `ApplyGuardrail` with source `INPUT` before cache lookup.
-  When PII is anonymized, the sanitized query is used for embedding, cache
-  lookup, and subsequent generation. A blocked query returns immediately
-  without reading the cache. A cache hit itself does not make a Converse call
-  or re-run output/contextual grounding against its stored answer and sources.
+- The current query is screened by `ApplyGuardrail` with source `INPUT` before
+  semantic-cache lookup. When PII is anonymized, the sanitized query is used
+  for embedding, cache lookup, and subsequent generation. A blocked query
+  returns immediately without reading the cache. A semantic-cache hit does not
+  make a Converse call, but the cached answer is checked with `ApplyGuardrail`
+  (`OUTPUT`) against the current query and its stored source text. If the cached
+  entry has no usable source text, the router returns a refusal instead.
 - The shared router refuses to generate when its selected sources have no
   usable text, so its Bedrock RAG path does not generate an ungrounded answer
   and then skip the contextual-grounding call. Direct Bedrock generation
@@ -370,6 +371,6 @@ thing being graded should not also be the grader.
 - `tests/unit/test_tools/test_cloudwatch_answer_metrics.py` — the `answer/*`
   metrics reach CloudWatch end-to-end.
 - `tests/unit/test_tools/test_bedrock_guardrails.py` — Bedrock input screening
-  before cache lookup, PII anonymization propagation, and output/contextual
-  Guardrails behavior.
+  before cache lookup, PII anonymization propagation, cached-answer output
+  checks, no-source cache refusals, and output/contextual Guardrails behavior.
 - `tests/unit/test_eval_local.py` — the eval harness scoring/grading logic.

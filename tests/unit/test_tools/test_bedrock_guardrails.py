@@ -232,6 +232,107 @@ def test_anonymized_input_is_used_for_cache_lookup() -> None:
     assert runtime.guardrail_requests[0]["source"] == "INPUT"
 
 
+@pytest.mark.parametrize(
+    ("guardrail_response", "expected_answer"),
+    [
+        (
+            {"action": "NONE", "outputs": [{"text": "Guardrail-evaluated answer"}]},
+            "Guardrail-evaluated answer",
+        ),
+        (
+            {
+                "action": "GUARDRAIL_INTERVENED",
+                "outputs": [{"text": "Cached answer blocked by policy."}],
+            },
+            "Cached answer blocked by policy.",
+        ),
+    ],
+)
+def test_cached_answer_is_checked_against_query_and_cached_sources(
+    guardrail_response: dict[str, Any],
+    expected_answer: str,
+) -> None:
+    runtime = _FakeBedrockRuntime(guardrail_response=guardrail_response)
+    client = BedrockClient(settings=_guardrail_settings(), client=runtime)
+
+    class _CachedAnswerLLM:
+        bedrock_guardrails_enabled = True
+
+        def embed_text(self, _text: str) -> list[float]:
+            return [0.1, 0.2]
+
+        def apply_output_guardrail(
+            self, question: str, answer: str, sources: list[dict[str, Any]]
+        ) -> str:
+            return client.apply_output_guardrail(question, answer, sources)
+
+    class _CachedAnswerSemanticCache:
+        def search_semantic_cache(self, **_kwargs: Any) -> dict[str, Any]:
+            return {
+                "response": "Cached answer",
+                "similarity": 0.99,
+                "sources": [{"text": "Cached grounding source."}],
+            }
+
+    result = route_rag_query(
+        "What is HNSW?",
+        llm=_CachedAnswerLLM(),
+        vector_store=object(),
+        cache=None,
+        semantic_cache=_CachedAnswerSemanticCache(),
+        kb_index="rag-kb",
+    )
+
+    assert result.answer == expected_answer
+    assert result.cache_hit is True
+    assert runtime.guardrail_request is not None
+    assert runtime.guardrail_request["source"] == "OUTPUT"
+    content = runtime.guardrail_request["content"]
+    assert content[0]["text"] == {"text": "What is HNSW?", "qualifiers": ["query"]}
+    assert content[1]["text"] == {
+        "text": "Cached answer",
+        "qualifiers": ["guard_content"],
+    }
+    assert content[2]["text"] == {
+        "text": "Cached grounding source.",
+        "qualifiers": ["grounding_source"],
+    }
+
+
+def test_cached_answer_without_grounding_refuses_without_output_check() -> None:
+    runtime = _FakeBedrockRuntime()
+    client = BedrockClient(settings=_guardrail_settings(), client=runtime)
+
+    class _CachedAnswerLLM:
+        bedrock_guardrails_enabled = True
+
+        def embed_text(self, _text: str) -> list[float]:
+            return [0.1, 0.2]
+
+        def apply_output_guardrail(
+            self, question: str, answer: str, sources: list[dict[str, Any]]
+        ) -> str:
+            return client.apply_output_guardrail(question, answer, sources)
+
+    class _UnGroundedSemanticCache:
+        def search_semantic_cache(self, **_kwargs: Any) -> dict[str, Any]:
+            return {"response": "Cached answer", "similarity": 0.99, "sources": []}
+
+    result = route_rag_query(
+        "What is HNSW?",
+        llm=_CachedAnswerLLM(),
+        vector_store=object(),
+        cache=None,
+        semantic_cache=_UnGroundedSemanticCache(),
+        kb_index="rag-kb",
+    )
+
+    assert result.answer.startswith("I couldn't find usable source information")
+    assert result.cache_hit is True
+    assert result.grounding_score == 0.0
+    assert runtime.guardrail_request is None
+
+
 def test_intervened_output_uses_guardrail_message() -> None:
     response = {
         "action": "GUARDRAIL_INTERVENED",

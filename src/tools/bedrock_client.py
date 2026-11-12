@@ -297,13 +297,27 @@ class BedrockClient:
             temperature=temperature,
             max_tokens=max_tokens,
         )
-        if not self.settings.use_bedrock_guardrails:
+        return self.apply_output_guardrail(question, answer, sources)
+
+    @property
+    def bedrock_guardrails_enabled(self) -> bool:
+        """Whether Bedrock Guardrails are configured for this client."""
+        return self.settings.use_bedrock_guardrails
+
+    def apply_output_guardrail(
+        self,
+        question: str,
+        answer: str,
+        sources: list[dict],
+    ) -> str:
+        """Evaluate an existing RAG answer against its query and grounding sources."""
+        if not self.bedrock_guardrails_enabled:
             return answer
 
         source_chunks = [
             str(source.get("text") or source.get("snippet") or "")
             for source in sources
-            if source.get("text") or source.get("snippet")
+            if isinstance(source, dict) and (source.get("text") or source.get("snippet"))
         ]
         if not source_chunks:
             return answer

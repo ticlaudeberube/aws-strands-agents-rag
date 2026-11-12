@@ -170,9 +170,10 @@ selected sources contain no usable text. If the output check intervenes, the
 response is replaced by the Guardrail's output (or a generic refusal). If an
 `ApplyGuardrail` call fails or returns an unexpected action, the error is
 surfaced rather than silently returning unchecked content. Semantic-cache hits
-are input-screened but do not make a Converse call or re-run output/contextual
-grounding against their cached answer. Local mode does not invoke Bedrock
-Guardrails.
+are input-screened and run through the OUTPUT Guardrail using the current query
+and cached source text; entries without usable cached source text are refused.
+Cache hits still do not make a Converse call. Local mode does not invoke
+Bedrock Guardrails.
 
 `BEDROCK_GUARDRAIL_TRACE` defaults to `false`. Enable it only for controlled
 debugging: Converse trace details can contain sensitive matched text. The

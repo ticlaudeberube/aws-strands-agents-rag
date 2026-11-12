@@ -135,9 +135,9 @@ MAX_TOP_K = 50
 # context is the anti-hallucination safeguard: the model is never asked to
 # answer a query it has no supporting sources for.
 NO_GROUNDING_ANSWER = (
-    "I don't have information about that in my knowledge base, and a web search "
-    "didn't return anything usable. Try rephrasing your question or asking about "
-    "vector databases, embeddings, or RAG."
+    "I couldn't find usable source information to support an answer to that "
+    "request. Try rephrasing your question or asking about vector databases, "
+    "embeddings, or RAG."
 )
 
 # Temporal keywords that force a cache bypass (Req 2.3). Mirrors the local
@@ -212,8 +212,8 @@ def _has_usable_grounding(sources: list[dict]) -> bool:
     for source in sources:
         if not isinstance(source, dict):
             continue
-        text = (source.get("text") or source.get("snippet") or "").strip()
-        if text:
+        text = source.get("text") or source.get("snippet")
+        if isinstance(text, str) and text.strip():
             return True
     return False
 
@@ -718,12 +718,45 @@ def route_rag_query(
             if cached_entry is not None:
                 answer = (cached_entry.get("response") or "").strip()
                 if answer:
+                    cached_sources = cached_entry.get("sources", [])
+                    if not isinstance(cached_sources, list):
+                        cached_sources = []
+
+                    # Bedrock cache hits need the same output/contextual check
+                    # as fresh answers. Without source text, refuse the hit
+                    # rather than returning an ungrounded cached answer.
+                    if getattr(llm, "bedrock_guardrails_enabled", False):
+                        if not _has_usable_grounding(cached_sources):
+                            logger.warning(
+                                "[ROUTING] Cached answer has no usable grounding; "
+                                "returning honest refusal"
+                            )
+                            return RoutingResult(
+                                answer=NO_GROUNDING_ANSWER,
+                                sources=cached_sources,
+                                tier_used="cache",
+                                cache_hit=True,
+                                confidence_score=float(
+                                    cached_entry.get("similarity", semantic_threshold)
+                                ),
+                                grounding_score=0.0,
+                                metrics=result_metrics.metrics,
+                            )
+
+                        apply_output_guardrail = getattr(llm, "apply_output_guardrail", None)
+                        if not callable(apply_output_guardrail):
+                            raise TypeError(
+                                "Bedrock Guardrails are enabled but the LLM client does not "
+                                "provide apply_output_guardrail."
+                            )
+                        answer = apply_output_guardrail(question, answer, cached_sources)
+
                     # Req 2.2: cache hit ≥ threshold with non-empty answer →
-                    # return WITHOUT calling the LLM.
+                    # return without generating a new answer.
                     logger.info("[ROUTING] Semantic cache hit → returning cached answer")
                     return RoutingResult(
                         answer=answer,
-                        sources=cached_entry.get("sources", []),
+                        sources=cached_sources,
                         tier_used="cache",
                         cache_hit=True,
                         confidence_score=float(cached_entry.get("similarity", semantic_threshold)),

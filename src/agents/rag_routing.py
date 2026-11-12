@@ -13,10 +13,9 @@ backend *protocols* defined in :mod:`src.tools.interfaces`:
 Because it never references a concrete client, the same routing function serves
 both deployment modes. In Serverless Mode it is wired into the graph by
 ``create_rag_graph`` (task 8.1) and invoked by the Lambda handler (task 10). In
-Local Mode the long-running ``StrandsGraphRAGAgent.answer_question`` path is
-left untouched (byte-for-byte equivalent to its historical behaviour), so this
-module introduces no regression there; it is a shared capability the serverless
-branch consumes.
+Local Mode also uses this function through
+``StrandsGraphRAGAgent.answer_question``. Its local LLM client does not expose
+the optional Bedrock input-screening capability.
 
 Routing contract (Requirements 2.1–2.6, 3.6, 3.7)
 -------------------------------------------------
@@ -651,21 +650,47 @@ def route_rag_query(
         history: Optional prior conversation turns (``{"question","answer"}`` or
             ``{"role","content"}`` dicts). When supplied, a compact transcript of
             the most recent turns is prepended to the generation prompt so
-            multi-turn references resolve. Embeddings and cache keys stay keyed
-            on the raw question, so caching behaviour is unchanged.
+            multi-turn references resolve. With Bedrock Guardrails enabled, an
+            anonymized query is used for embeddings, cache keys, and generation;
+            otherwise the original question is used.
 
     Returns:
         A :class:`RoutingResult` describing the chosen tier and the answer.
     """
     result_metrics: RoutingResult = RoutingResult(answer="")  # scratch for early metrics
 
+    # Bedrock screens the raw user query before cache lookup, so a semantic
+    # cache hit cannot bypass input Guardrails. Local LLM clients do not expose
+    # this optional capability.
+    screen_input = getattr(llm, "screen_input", None)
+    if callable(screen_input):
+        screened = screen_input(question)
+        if (
+            not isinstance(screened, tuple)
+            or len(screened) != 2
+            or not isinstance(screened[0], str)
+            or not isinstance(screened[1], bool)
+        ):
+            raise TypeError("LLM screen_input must return a (str, bool) tuple.")
+        question, input_blocked = screened
+        if input_blocked:
+            logger.info("[ROUTING] Bedrock input Guardrail intervened; skipping routing")
+            return RoutingResult(
+                answer=question,
+                tier_used="guardrail",
+                confidence_score=0.0,
+                grounding_score=0.0,
+                metrics=result_metrics.metrics,
+            )
+
     # ---- Tier 0: force_web_search bypasses cache AND KB (Req 2.6) ----------
     if force_web_search:
         logger.info("[ROUTING] force_web_search=True → bypassing cache and KB")
         web_result = _build_web_result(question, web_search, kb_sources=[], confidence=0.0)
         web_result.metrics = result_metrics.metrics
-        # Generate from whatever sources the web search produced (empty when the
-        # search was unavailable; the unavailable flag is already set).
+        if not _has_usable_grounding(web_result.sources):
+            web_result.answer = NO_GROUNDING_ANSWER
+            return web_result
         web_result.answer = _generate_from_sources(
             llm, question, web_result.sources, temperature, max_tokens, history
         )
@@ -708,6 +733,9 @@ def route_rag_query(
                 logger.info("[ROUTING] Cached entry has empty answer → web search (Req 2.5)")
                 web_result = _build_web_result(question, web_search, kb_sources=[], confidence=0.0)
                 web_result.metrics = result_metrics.metrics
+                if not _has_usable_grounding(web_result.sources):
+                    web_result.answer = NO_GROUNDING_ANSWER
+                    return web_result
                 web_result.answer = _generate_from_sources(
                     llm, question, web_result.sources, temperature, max_tokens, history
                 )
@@ -744,7 +772,7 @@ def route_rag_query(
         # an answer on. Return an honest refusal instead of asking the LLM to
         # generate from weak/empty context (which invites fabrication).
         grounding_sources = web_result.sources or kb_sources
-        if web_result.web_search_unavailable and not _has_usable_grounding(grounding_sources):
+        if not _has_usable_grounding(grounding_sources):
             logger.warning(
                 "[ROUTING] No usable KB or web grounding (relevance=%.3f) → "
                 "returning honest 'no results' instead of generating",
@@ -759,6 +787,20 @@ def route_rag_query(
         return web_result
 
     # ---- Generation from KB context ---------------------------------------
+    if not _has_usable_grounding(kb_sources):
+        logger.warning(
+            "[ROUTING] No usable KB grounding (relevance=%.3f) → "
+            "returning honest 'no results' instead of generating",
+            relevance,
+        )
+        return RoutingResult(
+            answer=NO_GROUNDING_ANSWER,
+            sources=kb_sources,
+            tier_used="kb",
+            confidence_score=relevance,
+            metrics=result_metrics.metrics,
+        )
+
     answer = _generate_from_sources(llm, question, kb_sources, temperature, max_tokens, history)
     grounding_score = compute_grounding_score(answer, kb_sources)
 
@@ -1101,6 +1143,18 @@ def _generate_from_sources(
     prepended to the question so the model has conversational context.
     """
     prompt = _format_prompt(llm, question, sources, history)
+    generate_from_sources = getattr(llm, "generate_from_sources", None)
+    if callable(generate_from_sources):
+        return str(
+            generate_from_sources(
+                prompt=prompt,
+                question=question,
+                sources=sources,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+        )
+
     try:
         return str(llm.generate(prompt=prompt, temperature=temperature, max_tokens=max_tokens))
     except TypeError:

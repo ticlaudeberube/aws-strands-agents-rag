@@ -138,6 +138,53 @@ No index migration is needed for existing indexes that already map chunk
 `.env.example`), or set `HYBRID_SEARCH_ENABLED=false` to use vector-only
 knowledge-base retrieval.
 
+### Bedrock Guardrails (serverless)
+
+The Terraform serverless stack provisions a Bedrock Guardrail, creates an
+immutable numbered version, and passes its ID and version to the chat Lambda.
+The Lambda execution role receives `bedrock:ApplyGuardrail` scoped to that
+Guardrail. Guardrails are active only when `DEPLOYMENT_MODE=serverless` and
+both `BEDROCK_GUARDRAIL_ID` and `BEDROCK_GUARDRAIL_VERSION` are configured;
+these two settings must be provided together.
+
+The provisioned policy currently:
+
+- Checks prompt attacks on input (`HIGH`) and hate/misconduct on input and
+  output (`MEDIUM`).
+- Denies the configured `OffTopicGeneralChatter` topic.
+- Anonymizes email addresses; blocks US Social Security Numbers, Canadian
+  Social Insurance Numbers, and Canadian health numbers.
+- Uses contextual grounding and query relevance thresholds of `0.7`.
+
+At entry to the shared RAG router (after the topic and security checks), a
+serverless query is screened with `ApplyGuardrail` using source `INPUT` before
+semantic-cache lookup. A blocked query returns a refusal without proceeding;
+if the Guardrail anonymizes PII, the sanitized query is used for embedding,
+cache lookup, and generation. Bedrock Converse also applies the configured
+guardrail to model calls.
+
+After RAG generation, the application calls `ApplyGuardrail` with the question
+marked as `query`, the answer marked as `guard_content`, and retrieved text
+marked as `grounding_source`. The shared router refuses to generate when its
+selected sources contain no usable text. If the output check intervenes, the
+response is replaced by the Guardrail's output (or a generic refusal). If an
+`ApplyGuardrail` call fails or returns an unexpected action, the error is
+surfaced rather than silently returning unchecked content. Semantic-cache hits
+are input-screened but do not make a Converse call or re-run output/contextual
+grounding against their cached answer. Local mode does not invoke Bedrock
+Guardrails.
+
+`BEDROCK_GUARDRAIL_TRACE` defaults to `false`. Enable it only for controlled
+debugging: Converse trace details can contain sensitive matched text. The
+Terraform Lambda environment does not enable trace, so setting this value in
+your local `.env` does not change an already-deployed Lambda; configure the
+Lambda environment explicitly only if debugging requires it.
+
+PII anonymization affects the response, not the original content sent to
+Bedrock. If Bedrock model invocation logging is enabled, review CloudWatch log
+encryption, access controls, and retention before processing sensitive or
+regulated data.
+
 ## What is actually supported
 
 - Local mode uses Ollama and a local OpenSearch container.

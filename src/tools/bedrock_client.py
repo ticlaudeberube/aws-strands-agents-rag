@@ -204,16 +204,40 @@ class BedrockClient:
         """
 
         def _do() -> dict:
-            return self.client.converse(  # type: ignore[no-any-return]
-                modelId=model_id,
-                messages=[{"role": "user", "content": [{"text": prompt}]}],
-                inferenceConfig={
+            request: dict[str, Any] = {
+                "modelId": model_id,
+                "messages": [{"role": "user", "content": [{"text": prompt}]}],
+                "inferenceConfig": {
                     "temperature": temperature,
                     "maxTokens": max_tokens,
                 },
-            )
+            }
+            if self.settings.use_bedrock_guardrails:
+                from src.agents.bedrock_guardrails import get_bedrock_guardrail_config
+
+                request["guardrailConfig"] = get_bedrock_guardrail_config(self.settings)
+            return self.client.converse(**request)  # type: ignore[no-any-return]
 
         return self._call_with_retry(_do, model_id, "converse")
+
+    def screen_input(self, query: str) -> tuple[str, bool]:
+        """Apply the configured input Guardrail before query routing.
+
+        Returns the possibly anonymized query and whether it was blocked.
+        Guardrail/API errors propagate so a configured policy is never silently
+        bypassed.
+        """
+        if not self.settings.use_bedrock_guardrails:
+            return query, False
+
+        from src.agents.bedrock_guardrails import apply_bedrock_input_guardrail
+
+        screened_query, blocked, _ = apply_bedrock_input_guardrail(
+            self.settings,
+            query=query,
+            bedrock_runtime_client=self.client,
+        )
+        return screened_query, blocked
 
     # ------------------------------------------------------------------
     # Generation (Req 5.1, 5.4, 5.5)
@@ -258,6 +282,42 @@ class BedrockClient:
             max_tokens=tokens,
         )
         return self._extract_text(result)
+
+    def generate_from_sources(
+        self,
+        prompt: str,
+        question: str,
+        sources: list[dict],
+        temperature: float = 0.3,
+        max_tokens: int | None = 1024,
+    ) -> str:
+        """Generate and contextually evaluate a RAG answer when Guardrails are enabled."""
+        answer = self.generate(
+            prompt=prompt,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        if not self.settings.use_bedrock_guardrails:
+            return answer
+
+        source_chunks = [
+            str(source.get("text") or source.get("snippet") or "")
+            for source in sources
+            if source.get("text") or source.get("snippet")
+        ]
+        if not source_chunks:
+            return answer
+
+        from src.agents.bedrock_guardrails import apply_bedrock_output_guardrail
+
+        final_text, _, _ = apply_bedrock_output_guardrail(
+            self.settings,
+            query=question,
+            answer=answer,
+            source_chunks=source_chunks,
+            bedrock_runtime_client=self.client,
+        )
+        return final_text
 
     def _resolve_model_id(self, model: str | None) -> str:
         """Resolve the effective inference model ID (Req 5.1, 5.4).

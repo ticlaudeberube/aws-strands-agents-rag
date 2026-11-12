@@ -67,6 +67,16 @@ class _WorkingWebSearch:
         )
 
 
+class _EmptySnippetWebSearch:
+    """Web search reporting results without any usable source text."""
+
+    def search(self, query: str, max_results: int = 3) -> tuple[list[dict], str]:
+        return (
+            [{"title": "Empty result", "url": "https://example.com", "snippet": " "}],
+            "success",
+        )
+
+
 def _route(llm: _FakeLLM, vector_store: _VectorStore, web_search: Any) -> rag_routing.RoutingResult:
     """Invoke the router with caches disabled so only KB/web tiers run."""
     return route_rag_query(
@@ -119,6 +129,55 @@ def test_low_relevance_with_working_web_search_generates_from_web() -> None:
     assert llm.generate_called is True
 
 
+def test_web_fallback_with_empty_snippets_refuses_without_generation() -> None:
+    weak_kb = [{"id": "1", "text": "", "metadata": {}, "distance": 0.05}]
+    llm = _FakeLLM()
+
+    result = _route(llm, _VectorStore(weak_kb), _EmptySnippetWebSearch())
+
+    assert result.answer == NO_GROUNDING_ANSWER
+    assert llm.generate_called is False
+
+
+def test_forced_web_without_usable_sources_refuses_without_generation() -> None:
+    llm = _FakeLLM()
+    result = route_rag_query(
+        "latest vector database news",
+        llm=llm,
+        vector_store=_VectorStore([]),
+        cache=None,
+        semantic_cache=None,
+        web_search=_UnavailableWebSearch(),
+        kb_index="rag-kb",
+        force_web_search=True,
+    )
+
+    assert result.answer == NO_GROUNDING_ANSWER
+    assert result.web_search_unavailable is True
+    assert llm.generate_called is False
+
+
+def test_empty_semantic_cache_entry_without_web_sources_refuses() -> None:
+    class _EmptyAnswerSemanticCache:
+        def search_semantic_cache(self, **_kwargs: Any) -> dict[str, Any]:
+            return {"response": "", "similarity": 0.99}
+
+    llm = _FakeLLM()
+    result = route_rag_query(
+        "what is some obscure thing",
+        llm=llm,
+        vector_store=_VectorStore([]),
+        cache=None,
+        semantic_cache=_EmptyAnswerSemanticCache(),
+        web_search=_UnavailableWebSearch(),
+        kb_index="rag-kb",
+    )
+
+    assert result.answer == NO_GROUNDING_ANSWER
+    assert result.web_search_unavailable is True
+    assert llm.generate_called is False
+
+
 def test_strong_kb_relevance_bypasses_gate_and_generates() -> None:
     """Relevance above threshold never reaches the web-fallback refusal gate."""
     strong_kb = [
@@ -136,6 +195,18 @@ def test_strong_kb_relevance_bypasses_gate_and_generates() -> None:
     assert result.tier_used == "kb"
     assert result.answer != NO_GROUNDING_ANSWER
     assert llm.generate_called is True
+
+
+def test_strong_kb_relevance_without_usable_text_refuses() -> None:
+    """A strong score is not sufficient when the retrieved source has no text."""
+    empty_kb = [{"id": "1", "text": " ", "metadata": {}, "distance": 0.9}]
+    llm = _FakeLLM()
+
+    result = _route(llm, _VectorStore(empty_kb), _UnavailableWebSearch())
+
+    assert result.answer == NO_GROUNDING_ANSWER
+    assert result.tier_used == "kb"
+    assert llm.generate_called is False
 
 
 def test_has_usable_grounding_detects_text_and_snippet() -> None:

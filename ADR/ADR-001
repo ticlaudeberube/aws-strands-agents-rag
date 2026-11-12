@@ -1,0 +1,67 @@
+# ADR-001: Serverless AWS Architecture for Strands Agents RAG
+
+* **Status:** Accepted (Provisioned via Terraform, Pending Initial Cloud Deploy)
+* **Date:** 2026-11-11
+* **Scope:** Production AWS Serverless Infrastructure (`DEPLOYMENT_MODE=serverless`)
+
+## 1. Context and Problem Statement
+The `aws-strands-agents-rag` system requires a production cloud architecture that maintains strict functional parity with local development (`FastAPI + Ollama + local OpenSearch`) while meeting enterprise security, scalability, and operational observability requirements.
+
+Specifically, the architecture must:
+1. Run the multi-step Strands Agents graph (`TopicChecker -> SecurityChecker -> RAGWorker`) without diverging from local retrieval behavior (`shared_route`).
+2. Isolate vector storage, caching, and compute inside private network boundaries.
+3. Support both real-time authenticated chat queries and asynchronous document ingestion.
+
+## 2. Decision Drivers
+* **Dev/Prod Parity:** Reuse the same Strands graph and OpenSearch HNSW (`VECTORDB_SEARCH_EF`) configuration across local and cloud modes, while keeping cloud-specific managed services explicit.
+* **Defense-in-Depth Security:** Prevent public exposure of vector databases, caches, and compute functions while protecting public API endpoints against abuse.
+* **Operational Simplicity:** Use modular Terraform (`infrastructure/terraform/`) with automated alerting and distributed tracing.
+
+## 3. Architectural Decisions
+
+### 3.1 Compute & Agent Orchestration: VPC-Attached AWS Lambda
+* **Decision:** Execute the Strands Agents SDK workflow directly inside **AWS Lambda** (`chat` and `indexing` functions) attached to private VPC subnets, rather than deploying onto managed Amazon Bedrock AgentCore Runtime microVMs.
+* **Rationale:** Standard request/response RAG queries complete well within Lambda execution limits. Running `shared_route` directly inside Lambda avoids double-compute overhead while leveraging serverless auto-scaling.
+
+### 3.2 Edge Security & API Layer: CloudFront + WAFv2 + API Gateway v2 + Cognito
+* **Decision:** Serve the frontend SPA via **Amazon CloudFront** backed by **S3** (`frontend/`), and expose `POST /chat` and `GET /health` via **API Gateway v2 (HTTP API)** protected by **AWS WAFv2** rate limiting, 100 RPS stage throttling, and an **Amazon Cognito User Pool** JWT authorizer.
+* **Rationale:** Enforces end-to-end HTTPS, strict CORS restricted to the CloudFront domain, and authenticated access before invoking Lambda compute.
+
+### 3.3 AI Inference & Embeddings: Amazon Bedrock
+* **Decision:** Replace local Ollama models with **Amazon Bedrock** foundation models (`bedrock_inference_model_id` and `bedrock_embedding_model_id`).
+* **Rationale:** Provides managed, IAM-authenticated inference and embedding generation without managing GPU infrastructure.
+
+### 3.4 Content Safety: Amazon Bedrock Guardrails
+* **Decision:** Provision a Bedrock Guardrail with Terraform and enable it for serverless chat when both `BEDROCK_GUARDRAIL_ID` and `BEDROCK_GUARDRAIL_VERSION` are configured. The shared RAG router screens the query with `ApplyGuardrail` (`INPUT`) before cache lookup; it uses anonymized query text for subsequent routing and returns a refusal for blocked input. Bedrock Converse applies the configured Guardrail during generation, and a separate `ApplyGuardrail` (`OUTPUT`) check evaluates generated RAG content against the query and retrieved grounding sources.
+* **Grounding behavior:** The shared router refuses to generate when its selected sources have no usable text. Direct generation paths outside the shared router are not covered by this source-availability check.
+* **Rationale:** Adds managed prompt-attack, content, topic, PII, contextual-grounding, and query-relevance filters to serverless inference, complementing rather than replacing application-level checks.
+
+### 3.5 Data, Vector Search & State Tier: OpenSearch Serverless + ElastiCache Redis + DynamoDB
+* **Decision:**
+  * **Vector Store:** **Amazon OpenSearch Serverless (AOSS)** accessed privately via an AOSS VPC interface endpoint (`vpc_endpoint_ids["aoss"]`).
+  * **Cache:** **ElastiCache Redis** deployed in private subnets for low-latency response and retrieval caching.
+  * **Persistence & Config:** Three **Amazon DynamoDB** tables for conversation history (`session`), telemetry (`analytics`), and dynamic guardrail/fallback thresholds (`thresholds`).
+* **Rationale:** Keeps all data-tier traffic on the private AWS network while separating ephemeral caching (Redis) from durable state and runtime configuration (DynamoDB).
+
+### 3.6 Event-Driven Ingestion: S3 ObjectCreated Trigger
+* **Decision:** Trigger the `indexing` Lambda automatically on `s3:ObjectCreated:*` events under the `documents/` prefix of the shared S3 bucket.
+* **Rationale:** Decouples document uploads from real-time chat traffic and automates chunking, Bedrock embedding, and OpenSearch indexing.
+
+### 3.7 Observability: CloudWatch + AWS X-Ray
+* **Decision:** Enable active **AWS X-Ray** tracing on both Lambdas, emit custom metrics to the `StrandsRAG/<stage>` CloudWatch namespace, and configure an automated alarm when `errors/total > 10` within 5 minutes.
+* **Rationale:** Provides end-to-end latency visibility across multi-step agent calls and proactive failure detection.
+
+## 4. Consequences
+
+### Positive
+* **Zero Public Data Exposure:** Lambdas, Redis, and OpenSearch Serverless operate strictly within private VPC subnets and endpoints.
+* **Shared routing behavior:** Local and serverless modes reuse the shared RAG router, including the no-usable-source refusal. Serverless additionally uses Bedrock Guardrails; Local Mode does not invoke them.
+* **Built-In Resilience:** Multi-AZ subnet placement combined with Strands anti-hallucination hooks (hard-block injection guard + widened-retrieval retry + web fallback) and serverless Bedrock Guardrails.
+
+### Trade-Offs & Risks
+* **Baseline Idle Cost:** Unlike pure pay-per-request serverless components, **ElastiCache Redis** and **OpenSearch Serverless OCUs** incur continuous hourly charges even at zero traffic.
+* **VPC Cold Starts & Timeout Ceiling:** VPC-attached Lambdas executing sequential Bedrock calls may experience cold-start latency and remain bounded by Lambda's 15-minute maximum execution limit.
+* **State Bootstrap Dependency:** Requires manual creation of the Terraform remote-state S3 bucket and DynamoDB lock table prior to `terraform init`.
+* **Guardrail coverage and cache behavior:** Input Guardrails run before semantic-cache lookup, but a cache hit does not make a Converse call or re-run output/contextual grounding against its cached answer and sources. The standalone MCP generation tool is also outside the shared router's source-availability gate.
+* **Guardrail policy risk and cost:** The configured denied-topic examples may reject legitimate technical questions. Input screening and output checks add Bedrock API calls, latency, and cost; policy behavior and operational impact still require validation in the deployed AWS environment.
+* **Fail-visible Guardrail errors:** A configured `ApplyGuardrail` failure or unrecognized intervention is surfaced as an error rather than silently bypassing the policy or returning unchecked content.

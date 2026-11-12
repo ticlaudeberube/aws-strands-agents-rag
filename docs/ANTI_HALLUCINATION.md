@@ -27,12 +27,12 @@ here.
 
 ## The layered defenses
 
-Defenses run in order; each is a separate, independently testable layer. The two
-answer paths — the shared serverless router (`src/agents/rag_routing.py`,
-`route_rag_query`) and the local graph path
-(`src/agents/strands_graph_agent.py`, `StrandsGraphRAGAgent.answer_question` →
-`rag_worker_node` → `create_answer_generation_tool`) — apply the **same**
-grounding logic via shared helpers, so both modes behave consistently.
+The main application answer paths use the shared router
+(`src/agents/rag_routing.py`, `route_rag_query`): serverless binds it to
+Bedrock, and Local Mode binds it to Ollama/OpenSearch. Those paths share the
+same grounding and caveat helpers. Other entrypoints, including the standalone
+MCP answer-generation tool, do not necessarily use this routing pipeline; see
+Layer 2 for the scope of the no-grounding refusal.
 
 ### Layer 1 — Grounding prompt rule (input to generation)
 
@@ -48,17 +48,17 @@ is exactly why the code-level layers below back it up.
 
 ### Layer 2 — Honest refusal on no grounding (pre-generation gate)
 
-When retrieval produces nothing usable, the pipeline returns an honest refusal
-instead of generating from empty/placeholder context.
-
-- Shared router: in the web-search fallback branch of `route_rag_query`, when KB
-  relevance is below `web_fallback_threshold` **and** web search returns no
-  usable sources, it returns `NO_GROUNDING_ANSWER` and never calls the LLM.
-- Local path: `generate_answer` checks `rag_routing._has_usable_grounding(sources)`
-  before generating; with no usable sources it returns `NO_GROUNDING_ANSWER`
-  with `confidence=0.0` and never calls the LLM.
+Before generation, the shared router checks the sources selected for the
+answer. If none contains usable text, it returns `NO_GROUNDING_ANSWER` without
+calling the LLM. This applies to the main Local Mode and serverless routes,
+including forced-web and empty-answer semantic-cache fallbacks. If a web result
+has no snippet, it is not usable grounding; if web search is unavailable but
+the KB has text, the router can still generate from that KB text.
 
 "Usable" means at least one source carries non-empty `text`/`snippet` content.
+This guarantee is scoped to the shared router. The standalone MCP
+`LocalOpenSearchAgent.generate_answer` tool generates directly and does not
+apply this shared refusal/caveat pipeline.
 
 ### Layer 3 — Post-generation grounding + confidence check (output gate)
 
@@ -70,16 +70,21 @@ by both modes) scores it and applies **at most one** caveat, in priority order:
    the retrieved source text) is below `answer_grounding_threshold`. Appends
    `LOW_GROUNDING_CAVEAT`, pulls confidence down to the grounding score, emits
    the `answer/low_grounding` metric.
-2. **Low confidence** — grounding passed but the heuristic confidence
-   (`_calculate_confidence_score`: source distance + answer shape) is below
-   `answer_confidence_threshold`. Appends `LOW_CONFIDENCE_CAVEAT`, emits
+2. **Low confidence** — grounding passed but the route's confidence value is
+   below `answer_confidence_threshold`. The shared router currently supplies
+   average KB relevance for KB answers and a fixed web-result confidence for web
+   answers. Cache hits carry their similarity as confidence metadata but return
+   before this check. The caveat check itself runs for freshly generated KB
+   answers; it appends `LOW_CONFIDENCE_CAVEAT` and emits
    `answer/low_confidence`.
 
 The two caveats are **mutually exclusive** — a user never sees two stacked
-hedges. The grounding check is a cheap, deterministic lexical safety net, not a
-semantic judge; it deliberately flags-with-a-caveat rather than hard-blocks,
-because a valid paraphrase can score low. (For semantic verification, see the
-optional LLM judge in the eval harness below.)
+hedges. The grounding check is a deterministic lexical calculation, not a
+semantic judge or proof that a response is factually correct. It deliberately
+flags-with-a-caveat rather than hard-blocks, because a valid paraphrase can
+score low and unsupported text can share words with a source. (For an
+additional, still imperfect semantic signal, see the optional LLM judge in the
+eval harness below.)
 
 **Soft-steer retry (before the caveat).** When a freshly generated KB answer
 fails the grounding check, `route_rag_query` first attempts *one* self-correction
@@ -91,8 +96,9 @@ a reflection loop. This is the "steer, don't block" technique — the agent adap
 and completes rather than hedging. If the retry still fails the bar, the
 caveat/confidence logic above applies exactly as before. The retry emits
 `answer/grounding_retry`, runs at most once, and is toggled by
-`grounding_retry_enabled` (default on). It lives in the shared router, so both
-modes get it; the local single-shot `generate_answer` tool path is unaffected.
+`grounding_retry_enabled` (default on). It runs only for the regular KB-answer
+path, not for forced-web answers, web-fallback answers, cache hits, or the
+standalone MCP `generate_answer` tool.
 
 ### Layer 4 — In-code guardrails (topic + security gates)
 
@@ -106,16 +112,18 @@ Before retrieval, two deterministic gates run (`src/agents/strands_graph_agent.p
   injection attempts. Risky queries route to a fixed rejection.
 
 These are enforced in code (not only in prompts), matching the workshop's
-"neurosymbolic guardrail" technique. Word-boundary matching eliminates the
-substring false positives that previously let off-topic queries through; genuine
-whole-word ambiguity (e.g. "rag doll") is caught downstream by Layer 2/3 when the
-KB has no relevant content.
+"neurosymbolic guardrail" technique. Word-boundary matching reduces substring
+false positives (for example, matching "rag" inside "storage"), but keyword and
+pattern checks are heuristics, not comprehensive topic classification or
+security analysis. They can miss novel or obfuscated attacks and can classify
+ambiguous queries incorrectly; downstream retrieval and answer-quality checks
+are additional safeguards, not guarantees.
 
 > **Note — two gating paths.** `answer_question` (async local entrypoint) uses
 > LLM-based topic/security agents as the primary gate, falling back to the
 > in-code functions on error; the graph-node functions use the in-code checks
-> directly. Both are live. See the metrics below to observe which outcomes
-> occur in practice.
+> directly. Both are live. The answer-quality/routing metrics below do not
+> measure topic/security classification outcomes.
 
 ### Layer 4b — Hard block at the tool-call boundary (framework hook)
 
@@ -129,13 +137,61 @@ jailbreak/injection pattern (reusing `_is_security_attack`, the single source of
 truth), the hook sets `event.cancel_tool` and the tool never runs — the model
 receives an error-status result instead.
 
-This is the article's **hard block vs soft steer** distinction applied here: a
-security/injection attempt is a *hard* block the LLM cannot route around (it is
-enforced by the framework before the tool runs), as opposed to the Layer 3
-caveats, which *soft*-hedge an answer the agent still returns. The hook fails
-**open** on a detector exception (logged loudly) because the node-level gates
-remain in place upstream — a detector bug should not blanket-block legitimate
-traffic. Covered by `tests/unit/test_agents/test_guardrail_hooks.py`.
+This enforces a block at the **tool-call boundary**: a matching tool call is
+cancelled before that tool executes. It does not by itself guarantee that the
+model cannot answer directly, select a different action, or evade the
+pattern-based detector. Unlike this tool-call cancellation, Layer 3 caveats
+soften a generated answer rather than blocking it. The hook fails **open** on a
+detector exception (logged loudly), so the hook itself is not a fail-closed
+security boundary. Covered by `tests/unit/test_agents/test_guardrail_hooks.py`.
+
+### Layer 4c — Bedrock Guardrails (managed serverless filters)
+
+In serverless mode, when a Guardrail ID and numbered version are configured,
+`BedrockClient` adds `guardrailConfig` to Converse calls. The Terraform-managed
+policy checks prompt attacks on input, hate/misconduct on input and output, a
+configured denied topic, selected PII types, and contextual grounding/relevance.
+For RAG generation with retrieved text, the application also calls the
+standalone `ApplyGuardrail` API with the question marked as `query`, the answer
+as `guard_content`, and retrieved chunks as `grounding_source`. That additional
+check is skipped when there is no retrieved source text.
+
+An intervention replaces the generated output with the Guardrail result (or a
+generic refusal). An API failure or unexpected action is surfaced as an error;
+the application does not silently return the unchecked answer. This managed
+filter is separate from the local in-code checks above and does not make them
+comprehensive. Guardrails PII anonymization changes the returned content, not
+the original text sent to Bedrock; if model invocation logging is enabled,
+protect and limit access to those logs. Guardrail trace is disabled by default
+because trace details may contain sensitive matched content. See
+[GETTING_STARTED.md](GETTING_STARTED.md#bedrock-guardrails-serverless) for
+configuration and operational notes. The Terraform Lambda environment does
+not set `BEDROCK_GUARDRAIL_TRACE`; enabling trace for a deployed Lambda requires
+an explicit environment configuration change.
+
+**Coverage limits and validation.**
+
+- Semantic-cache hits return before a Converse request, so the current query
+  are screened by `ApplyGuardrail` with source `INPUT` before cache lookup.
+  When PII is anonymized, the sanitized query is used for embedding, cache
+  lookup, and subsequent generation. A blocked query returns immediately
+  without reading the cache. A cache hit itself does not make a Converse call
+  or re-run output/contextual grounding against its stored answer and sources.
+- The shared router refuses to generate when its selected sources have no
+  usable text, so its Bedrock RAG path does not generate an ungrounded answer
+  and then skip the contextual-grounding call. Direct Bedrock generation
+  outside the shared router is not covered by that source-availability gate;
+  Converse filters still apply when Guardrails are configured.
+- The denied-topic policy is configured as `OffTopicGeneralChatter`, with
+  examples including general coding and weather. This can overlap with valid
+  technical questions about implementing RAG or vector-search integrations.
+  Test representative in-scope coding questions and genuinely out-of-scope
+  prompts against the deployed version before relying on that topic boundary.
+- Unit tests with a stub client and `terraform validate` verify local wiring
+  and configuration shape; they do not prove AWS accepts the policy in the
+  target account/region or that its filters behave as intended. Validate a
+  deployed non-production Guardrail with representative safe, denied-topic,
+  prompt-attack, PII, and grounding cases before production use.
 
 ### Layer 5 — Correct routing classification
 
@@ -163,8 +219,9 @@ harness below.
 
 ### Runtime tuning without a redeploy (serverless)
 
-In serverless mode the six thresholds above are **compile-time defaults** that
-can be overridden at runtime from a DynamoDB table, so an operator can retune
+In serverless mode the six settings-backed values above (which can also be set
+through environment variables) can be overridden at runtime from a DynamoDB
+table, so an operator can retune
 grounding without shipping code. Set `DYNAMODB_THRESHOLDS_TABLE` (Terraform
 provisions `…-thresholds` and wires the env var + a read-only IAM grant) and add
 one item per knob:
@@ -234,13 +291,15 @@ evaluation harness closes that loop.
 
 ### Why MLflow, and why local
 
-- **It answers "did my change help?"** Run a fixed, tagged question set through
+- **It helps answer "did my change help?"** Run a fixed, tagged question set through
   the pipeline, log grounding/confidence/refusal/caveat/tier/latency plus a
-  pass/fail per question, and compare runs. Tuning `answer_grounding_threshold`
-  from 0.35 → 0.45 becomes a measured before/after, not a guess.
-- **It's a regression gate.** The deterministic (lexical-only) run is fast and
-  reproducible, suitable for CI: fail the build if, say, out-of-scope pass rate
-  drops (topic gate got looser).
+  pass/fail per question, and compare runs. Tuning
+  `answer_grounding_threshold` from 0.35 → 0.45 becomes a measured
+  before/after, not a guess.
+- **It can support a regression gate.** Lexical scoring and grading avoid an
+  LLM judge, but end-to-end runs still depend on model and retrieval behavior
+  and are not guaranteed deterministic. CI only fails on these measures if
+  the harness is explicitly wired into a CI workflow.
 - **It's isolated and free.** `mlflow` lives in the `eval` optional-dependency
   group, is imported lazily, and is never reachable from the runtime/serverless
   path. Local mode runs fully offline (Ollama + OpenSearch), so there is no AWS
@@ -250,9 +309,9 @@ evaluation harness closes that loop.
 ### Benefits summary
 
 - Turns threshold/prompt tuning into evidence-backed decisions.
-- Catches anti-hallucination regressions automatically (CI gate).
-- Separates the strong deterministic signal (lexical grounding) from an optional
-  semantic read (LLM judge), so you choose cost vs depth per run.
+- Can catch anti-hallucination regressions when its checks are run in CI.
+- Separates deterministic lexical scoring from an optional semantic read
+  (LLM judge), so you choose cost vs depth per run.
 - Produces a per-run audit trail (`results.json`) of exactly what the agent did.
 
 ### How to run
@@ -263,7 +322,7 @@ the optional LLM judge, and how to interpret results — is in
 
 ```bash
 uv pip install -e '.[eval]'              # install the eval extra once
-uv run scripts/eval_local.py             # deterministic, lexical metrics only
+uv run scripts/eval_local.py             # lexical metrics, without an LLM judge
 uv run scripts/eval_local.py --judge --judge-model llama3.1:8b   # add LLM judge
 uv run mlflow ui --port 5001             # compare runs at http://127.0.0.1:5001
 ```
@@ -293,21 +352,24 @@ thing being graded should not also be the grader.
 | Technique | Status here | Layer |
 |---|---|---|
 | Honest retrieval / no-results | Implemented | Layers 1–3 |
-| Neurosymbolic guardrails | Implemented (+ framework-level hard block) | Layers 4, 4b |
-| Agent steering (self-correct) | Implemented — one-shot widened-retrieval retry, then caveat/refuse (not a full reflection loop) | Layer 3 |
+| Neurosymbolic guardrails | Implemented (heuristic checks + tool-call cancellation; not a comprehensive security boundary) | Layers 4, 4b |
+| Managed Bedrock Guardrails | Implemented for configured serverless calls | Layer 4c |
+| Agent steering (self-correct) | Implemented — one-shot widened-retrieval retry, then caveat if needed (not a full reflection loop) | Layer 3 |
 | Semantic tool selection | Not implemented (2-tool pipeline; low value) | — |
 | Multi-agent validation | Not implemented; optional LLM judge covers offline eval | eval harness |
 
 ## Tests
 
-- `tests/unit/test_agents/test_rag_routing_grounding.py` — refusal gate,
-  grounding score, grounding/confidence caveat mutual exclusivity, word-boundary
+- `tests/unit/test_agents/test_rag_routing_grounding.py` — shared-router refusal
+  gate, including forced-web, empty-cache, and empty-snippet paths; grounding
+  score, grounding/confidence caveat mutual exclusivity, and word-boundary
   temporal matching.
-- `tests/unit/test_agents/test_local_generation_grounding.py` — local-path
-  parity (refusal + caveats).
 - `tests/unit/test_agents/test_guardrail_hooks.py` — the Layer 4b hard-block
   hook: cancels tool calls on a detected attack, allows safe input, fails open
   on detector error.
 - `tests/unit/test_tools/test_cloudwatch_answer_metrics.py` — the `answer/*`
   metrics reach CloudWatch end-to-end.
+- `tests/unit/test_tools/test_bedrock_guardrails.py` — Bedrock input screening
+  before cache lookup, PII anonymization propagation, and output/contextual
+  Guardrails behavior.
 - `tests/unit/test_eval_local.py` — the eval harness scoring/grading logic.

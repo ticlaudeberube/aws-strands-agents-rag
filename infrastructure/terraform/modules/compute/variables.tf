@@ -193,3 +193,17 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+variable "bedrock_guardrail_id" {
+  description = "Bedrock Guardrail ID applied to inference calls"
+  type        = string
+}
+
+variable "bedrock_guardrail_version" {
+  description = "Pinned Bedrock Guardrail version"
+  type        = string
+}
+
+variable "bedrock_guardrail_arn" {
+  description = "Bedrock Guardrail ARN for least-privilege IAM permissions"
+  type        = string
+}

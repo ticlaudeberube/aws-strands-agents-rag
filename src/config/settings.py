@@ -4,7 +4,7 @@ import logging
 import os
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings
 
 logger = logging.getLogger(__name__)
@@ -116,6 +116,41 @@ class Settings(BaseSettings):
         validation_alias="HYBRID_SEARCH_VECTOR_WEIGHT",
         description="Positive RRF rank weight for the vector results.",
     )
+
+    # Amazon Bedrock Guardrails are enabled only in serverless mode when both
+    # the guardrail ID and immutable version are configured.
+    bedrock_guardrail_id: str | None = Field(
+        default=None,
+        validation_alias="BEDROCK_GUARDRAIL_ID",
+        description="Amazon Bedrock Guardrail ID.",
+    )
+    bedrock_guardrail_version: str | None = Field(
+        default=None,
+        validation_alias="BEDROCK_GUARDRAIL_VERSION",
+        description="Pinned Amazon Bedrock Guardrail version.",
+    )
+    bedrock_guardrail_trace: bool = Field(
+        default=False,
+        validation_alias="BEDROCK_GUARDRAIL_TRACE",
+        description="Enable sensitive Guardrails trace output for debugging only.",
+    )
+
+    @model_validator(mode="after")
+    def validate_bedrock_guardrail_configuration(self) -> "Settings":
+        if bool(self.bedrock_guardrail_id) != bool(self.bedrock_guardrail_version):
+            raise ValueError(
+                "BEDROCK_GUARDRAIL_ID and BEDROCK_GUARDRAIL_VERSION must be set together."
+            )
+        return self
+
+    @property
+    def use_bedrock_guardrails(self) -> bool:
+        """Return True only for configured serverless Guardrails."""
+        return (
+            self.deployment_mode == "serverless"
+            and bool(self.bedrock_guardrail_id)
+            and bool(self.bedrock_guardrail_version)
+        )
 
     # Deployment Mode
     # Single source of truth for selecting backends. "local" wires Ollama +

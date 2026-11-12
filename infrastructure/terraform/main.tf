@@ -65,6 +65,18 @@ module "data" {
 }
 
 # ---------------------------------------------------------------------------
+# Guardrails — managed Bedrock Guardrail for input, output, and grounding checks
+# ---------------------------------------------------------------------------
+module "guardrails" {
+  source = "./modules/guardrails"
+
+  name_prefix = local.name_prefix
+  stage       = var.stage
+
+  tags = local.common_tags
+}
+
+# ---------------------------------------------------------------------------
 # Compute (task 15.1) — Lambda chat + indexing functions and the least-privilege
 # IAM role/policies, VPC-attached to networking private subnets, wired to the
 # data-tier outputs. The S3 ObjectCreated trigger (Req 9.1) is enabled once the
@@ -95,6 +107,9 @@ module "compute" {
   bedrock_inference_model_id = var.bedrock_inference_model_id
   bedrock_embedding_model_id = var.bedrock_embedding_model_id
   bedrock_model_override     = var.bedrock_model_override
+  bedrock_guardrail_id       = module.guardrails.guardrail_id
+  bedrock_guardrail_version  = module.guardrails.guardrail_version
+  bedrock_guardrail_arn      = module.guardrails.guardrail_arn
 
   # S3 documents bucket from the frontend module (task 17). Wiring these in
   # activates the compute S3 ObjectCreated trigger for the indexing Lambda

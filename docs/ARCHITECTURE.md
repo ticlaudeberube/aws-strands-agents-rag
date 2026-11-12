@@ -70,6 +70,24 @@ Serverless mode is the cloud deployment path.
 - OpenSearch Serverless for vector search
 - Redis/DynamoDB for cache/session support
 
+### Bedrock Guardrails
+
+The Terraform stack creates a versioned Bedrock Guardrail and injects its ID
+and version into the Lambda environment. When serverless mode has both values,
+`BedrockClient` adds `guardrailConfig` to Converse requests. The RAG routing
+path also uses `ApplyGuardrail` after generation when retrieved text is
+available: it labels the user question as the query, the generated answer as
+guarded content, and retrieved chunks as grounding sources. An intervention
+replaces the generated answer; API errors are not silently ignored.
+
+The current Terraform policy includes prompt-attack, hate/misconduct, denied
+topic, PII, and contextual grounding/relevance filters. Email addresses are
+anonymized; configured US and Canadian identifiers are blocked. The grounding
+and relevance thresholds default to `0.7`. Trace is disabled by default.
+Local mode does not call Bedrock Guardrails. See
+[docs/GETTING_STARTED.md](GETTING_STARTED.md#bedrock-guardrails-serverless) for
+the full policy and sensitive-data notes.
+
 ## Mode selection
 
 The switch is controlled by `DEPLOYMENT_MODE` in `.env` and `src/config/settings.py`:

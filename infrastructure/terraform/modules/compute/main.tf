@@ -84,6 +84,8 @@ locals {
     BEDROCK_INFERENCE_MODEL_ID = var.bedrock_inference_model_id
     BEDROCK_EMBEDDING_MODEL_ID = var.bedrock_embedding_model_id
     BEDROCK_MODEL_OVERRIDE     = var.bedrock_model_override
+    BEDROCK_GUARDRAIL_ID       = var.bedrock_guardrail_id
+    BEDROCK_GUARDRAIL_VERSION  = var.bedrock_guardrail_version
 
     # Secrets Manager secret identifiers (Req 10.1, 11.5). The names MUST match
     # the pydantic validation_alias values the app reads at cold start:
@@ -348,6 +350,7 @@ resource "aws_lambda_function" "chat" {
     aws_iam_role_policy_attachment.lambda_least_privilege,
     aws_iam_role_policy_attachment.lambda_vpc_access,
     aws_iam_role_policy_attachment.lambda_xray_write,
+    aws_iam_role_policy.chat_bedrock_guardrail,
   ]
 }
 
@@ -420,4 +423,23 @@ resource "aws_s3_bucket_notification" "documents" {
   }
 
   depends_on = [aws_lambda_permission.allow_s3_invoke_indexing]
+}
+
+resource "aws_iam_role_policy" "chat_bedrock_guardrail" {
+  name = "${var.name_prefix}-chat-bedrock-guardrail"
+  role = aws_iam_role.lambda_exec.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AllowApplyBedrockGuardrail"
+        Effect = "Allow"
+        Action = [
+          "bedrock:ApplyGuardrail"
+        ]
+        Resource = var.bedrock_guardrail_arn
+      }
+    ]
+  })
 }

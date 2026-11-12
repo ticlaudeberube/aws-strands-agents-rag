@@ -75,19 +75,15 @@ class VectorStore(Protocol):
         index: str,
         query_vector: list[float],
         k: int = 10,
+        filters: dict | None = None,
+        query_text: str | None = None,
     ) -> list[dict]:
-        """k-NN search; results ranked non-increasing by similarity score."""
-        ...
+        """Search using vector similarity, optionally combined with lexical ranking.
 
-    def index_document(
-        self,
-        index: str,
-        doc_id: str,
-        vector: list[float],
-        text: str,
-        metadata: dict,
-    ) -> None:
-        """Index a single document chunk into ``index``."""
+        ``query_text`` requests hybrid retrieval when supported by the backend.
+        Backends should preserve the meaning of ``distance`` for consumers that
+        use it as a vector-relevance score.
+        """
         ...
 
 

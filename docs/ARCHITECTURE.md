@@ -13,7 +13,7 @@ User query
   -> SecurityChecker
   -> RAGWorker
      -> [hard-block hook: cancels tool calls on a security/injection attempt]
-     -> retrieval backend
+     -> retrieval backend (hybrid BM25 + vector k-NN by default; HYBRID_SEARCH_ENABLED)
      -> answer generation
      -> grounding check
           -> weak? one widened-retrieval retry, then caveat if still weak
@@ -36,12 +36,21 @@ Bedrock in serverless. `LOCAL_VECTOR_BACKEND` selects the local engine and
 currently accepts only `opensearch`. See
 [docs/GETTING_STARTED.md](GETTING_STARTED.md) for the setup steps.
 
-Retrieval uses pure vector (k-NN) similarity with HNSW. Local and serverless
-share the same recall knob, `VECTORDB_SEARCH_EF` (OpenSearch `ef_search`, clamped
-to at least `top_k`), and the same web-search fallback decision
-(`average_relevance` vs `WEB_SEARCH_FALLBACK_THRESHOLD`). `knn_search()` also
-accepts an optional metadata filter, which is unused by default — retrieval is
-unfiltered unless a caller passes one.
+Knowledge-base retrieval uses hybrid search by default: a vector k-NN search
+and a BM25 search on chunk text are run separately and combined by weighted
+Reciprocal Rank Fusion. `HYBRID_SEARCH_BM25_WEIGHT` and
+`HYBRID_SEARCH_VECTOR_WEIGHT` weight the ranked lists, not the OpenSearch
+similarity scores. The response order follows the fused RRF score, while
+`distance` retains the raw vector score when available; lexical-only results
+have no vector `distance`. The web-search fallback threshold continues to use
+the average numeric vector relevance, not the RRF ranking score.
+
+Local and serverless vector searches share the `VECTORDB_SEARCH_EF` recall
+knob (OpenSearch `ef_search`, clamped to at least `top_k`). Optional metadata
+filters are applied to both the vector and lexical searches when provided;
+retrieval remains unfiltered by default. The semantic response-cache index
+continues to use vector-only search. See
+[docs/GETTING_STARTED.md](GETTING_STARTED.md) for configuration and tuning.
 
 ## Local mode
 

@@ -982,7 +982,12 @@ def _kb_search(
             return list(cached)
 
     try:
-        sources = vector_store.knn_search(kb_index, query_vector, top_k)
+        sources = vector_store.knn_search(
+            kb_index,
+            query_vector,
+            top_k,
+            query_text=question,
+        )
     except Exception as exc:  # noqa: BLE001 - degrade to web fallback
         logger.warning("[ROUTING] KB vector search failed: %s", exc)
         return []

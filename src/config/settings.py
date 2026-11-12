@@ -94,6 +94,29 @@ class Settings(BaseSettings):
         description="HNSW search-time beam width (ef). Higher = better recall, slower. >= top_k.",
     )
 
+    # Hybrid search (BM25 lexical + vector kNN). When enabled, KB retrieval runs
+    # separate lexical and vector searches, then fuse their ranked results.
+    # This recovers exact-term / rare-token matches (API names, acronyms,
+    # version numbers) that pure vector similarity misses. Disable for
+    # pure-vector behaviour.
+    hybrid_search_enabled: bool = Field(
+        default=True,
+        validation_alias="HYBRID_SEARCH_ENABLED",
+        description="Combine BM25 lexical scoring with vector kNN for KB retrieval.",
+    )
+    hybrid_search_bm25_weight: float = Field(
+        default=0.5,
+        gt=0,
+        validation_alias="HYBRID_SEARCH_BM25_WEIGHT",
+        description="Positive RRF rank weight for the BM25 lexical results.",
+    )
+    hybrid_search_vector_weight: float = Field(
+        default=1.0,
+        gt=0,
+        validation_alias="HYBRID_SEARCH_VECTOR_WEIGHT",
+        description="Positive RRF rank weight for the vector results.",
+    )
+
     # Deployment Mode
     # Single source of truth for selecting backends. "local" wires Ollama +
     # Ollama + local vector DB + FastAPI; "serverless" wires Bedrock + OpenSearch + Lambda.

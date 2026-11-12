@@ -116,6 +116,28 @@ The Layer 2/3 cache defaults to in-process (`InMemoryCache`); set
 `REDIS_CACHE_ENABLED=true` (with a local Redis on `REDIS_ENDPOINT`, default
 `localhost:6379`) to use Redis instead for a fuller prod-parity backend set.
 
+### Hybrid search (BM25 + vector)
+
+Knowledge-base retrieval uses hybrid search by default in both local and
+serverless modes. It runs a vector k-NN search and a BM25 lexical search over
+chunk text separately, then combines their rankings with weighted Reciprocal
+Rank Fusion (RRF). This can improve retrieval for exact terms and rare tokens
+such as API names, acronyms, and version numbers. The semantic response-cache
+index remains vector-only.
+
+The positive `HYBRID_SEARCH_BM25_WEIGHT` and `HYBRID_SEARCH_VECTOR_WEIGHT`
+settings control the relative contribution of each result ranking during RRF;
+they are not boosts on OpenSearch scores. Metadata filters, when supplied by a
+caller, constrain both searches. The `distance` field remains the raw vector
+score for documents returned by k-NN; lexical-only matches have no vector score
+and are excluded from the average vector-relevance calculation used for web
+fallback. RRF determines result order, not the relevance threshold.
+
+No index migration is needed for existing indexes that already map chunk
+`text` as a searchable text field. Configure these values in `.env` (see
+`.env.example`), or set `HYBRID_SEARCH_ENABLED=false` to use vector-only
+knowledge-base retrieval.
+
 ## What is actually supported
 
 - Local mode uses Ollama and a local OpenSearch container.

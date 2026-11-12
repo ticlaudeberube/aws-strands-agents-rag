@@ -74,7 +74,14 @@ def test_router_low_grounding_flows_to_emitter_end_to_end() -> None:
             return "Pinecone bills forty dollars monthly for replica pods."
 
     class _VS:
-        def knn_search(self, _i: str, _v: list[float], _k: int) -> list[dict]:
+        def knn_search(
+            self,
+            _i: str,
+            _v: list[float],
+            _k: int,
+            filters: dict | None = None,
+            query_text: str | None = None,
+        ) -> list[dict]:
             return [{"id": "1", "text": "Milvus uses HNSW indexing.", "distance": 0.9}]
 
     rag_routing.route_rag_query(

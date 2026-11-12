@@ -116,6 +116,11 @@ class OpenSearchClient:
             getattr(settings, "vectordb_hnsw_ef_construction", None) or HNSW_EF_CONSTRUCTION
         )
         self.search_ef = getattr(settings, "vectordb_search_ef", None) or 64
+        # Hybrid search (BM25 + vector) config. Read once here so both modes
+        # share the same tunables via the same env vars.
+        self.hybrid_search_enabled = bool(getattr(settings, "hybrid_search_enabled", False))
+        self.hybrid_bm25_weight = float(getattr(settings, "hybrid_search_bm25_weight", 0.5))
+        self.hybrid_vector_weight = float(getattr(settings, "hybrid_search_vector_weight", 1.0))
 
         if client is not None:
             self.client = client
@@ -203,22 +208,35 @@ class OpenSearchClient:
         query_vector: list[float],
         k: int = 10,
         filters: dict | None = None,
+        query_text: str | None = None,
     ) -> list[dict]:
         """k-NN search over ``index`` using HNSW (cosine), with a recall knob.
 
-        Returns up to ``k`` documents ranked **non-increasing** by cosine
-        similarity score (highest similarity first) in the shape
-        ``{"id", "text", "metadata", "distance"}`` where ``distance`` carries the
-        cosine similarity score (Requirements 4.2).
+        Returns up to ``k`` documents ranked **non-increasing** by relevance
+        score (highest first) in the shape ``{"id", "text", "metadata",
+        "distance"}`` where ``distance`` carries the OpenSearch ``_score``
+        (Requirements 4.2).
+
+        Hybrid search
+        -------------
+        When ``settings.hybrid_search_enabled`` is true, ``query_text`` is
+        provided, and ``index`` is not the semantic cache, vector and lexical
+        results are retrieved separately and combined by weighted reciprocal
+        rank fusion. The ``distance`` field remains the raw vector score for
+        vector matches; lexical-only matches have no vector ``distance``. This
+        keeps downstream relevance thresholds on the same scale. Hybrid mode
+        applies metadata filters to both searches.
 
         Args:
             index: Index to search.
             query_vector: Query embedding.
             k: Max number of results (top_k).
             filters: Optional OpenSearch filter query (e.g.
-                ``{"term": {"metadata.source": "official"}}``) applied as a
-                metadata pre-filter inside the k-NN clause. ``None`` (default)
-                means pure vector similarity, unchanged behaviour.
+                ``{"term": {"metadata.source": "official"}}``) applied to
+                both vector and lexical retrieval. ``None`` (default) means no
+                metadata filtering.
+            query_text: Optional raw query string. Required to activate the BM25
+                lexical clause of hybrid search; ``None`` forces pure vector.
 
         The HNSW search-time beam width (``ef_search``) is set from
         ``settings.vectordb_search_ef``, clamped to at least ``k``; higher values
@@ -230,18 +248,49 @@ class OpenSearchClient:
             # ef_search must be >= k to return k candidates; shared recall knob.
             "method_parameters": {"ef_search": max(self.search_ef, k)},
         }
-        if filters is not None:
+        if filters:
             knn_clause["filter"] = filters
 
-        body = {
-            "size": k,
-            "query": {"knn": {"vector": knn_clause}},
-        }
+        use_hybrid = (
+            self.hybrid_search_enabled
+            and index != self.cache_index
+            and bool(query_text and query_text.strip())
+        )
+        if use_hybrid:
+            vector_response = self.client.search(
+                index=index,
+                body={"size": k, "query": {"knn": {"vector": knn_clause}}},
+            )
+            lexical_query: dict[str, Any] = {"match": {"text": {"query": query_text}}}
+            if filters:
+                lexical_query = {
+                    "bool": {
+                        "must": [lexical_query],
+                        "filter": filters,
+                    }
+                }
+            lexical_response = self.client.search(
+                index=index,
+                body={"size": k, "query": lexical_query},
+            )
+            return self._fuse_hybrid_results(
+                self._parse_search_hits(vector_response),
+                self._parse_search_hits(lexical_response),
+                k=k,
+            )
 
-        response = self.client.search(index=index, body=body)
+        response = self.client.search(
+            index=index,
+            body={"size": k, "query": {"knn": {"vector": knn_clause}}},
+        )
+        results = self._parse_search_hits(response)
+        results.sort(key=lambda item: item.get("distance", 0.0), reverse=True)
+        return results
+
+    def _parse_search_hits(self, response: dict[str, Any]) -> list[dict[str, Any]]:
+        """Convert OpenSearch hits to the shared vector-store result shape."""
         hits = (response or {}).get("hits", {}).get("hits", [])
-
-        results: list[dict] = []
+        results: list[dict[str, Any]] = []
         for hit in hits:
             source = hit.get("_source", {}) or {}
             metadata = source.get("metadata", {})
@@ -258,10 +307,38 @@ class OpenSearchClient:
                     "distance": hit.get("_score", 0.0),
                 }
             )
+        return results
 
-        # OpenSearch returns hits ordered by _score descending, but guarantee the
-        # contract explicitly: non-increasing by score (descending cosine sim).
-        results.sort(key=lambda item: item.get("distance", 0.0), reverse=True)
+    def _fuse_hybrid_results(
+        self,
+        vector_hits: list[dict[str, Any]],
+        lexical_hits: list[dict[str, Any]],
+        k: int,
+        rrf_k: int = 60,
+    ) -> list[dict[str, Any]]:
+        """Fuse ranked retrieval lists without conflating BM25 and vector scores."""
+        documents: dict[str, dict[str, Any]] = {}
+        scores: dict[str, float] = {}
+
+        for rank, hit in enumerate(vector_hits, start=1):
+            doc_id = str(hit.get("id") or hit.get("text", ""))
+            documents[doc_id] = dict(hit)
+            scores[doc_id] = self.hybrid_vector_weight / (rrf_k + rank)
+
+        for rank, hit in enumerate(lexical_hits, start=1):
+            doc_id = str(hit.get("id") or hit.get("text", ""))
+            if doc_id not in documents:
+                lexical_only = dict(hit)
+                lexical_only["distance"] = None
+                documents[doc_id] = lexical_only
+            scores[doc_id] = scores.get(doc_id, 0.0) + (self.hybrid_bm25_weight / (rrf_k + rank))
+
+        ranked_ids = sorted(scores, key=scores.__getitem__, reverse=True)[:k]
+        results = []
+        for doc_id in ranked_ids:
+            document = documents[doc_id]
+            document["rrf_score"] = scores[doc_id]
+            results.append(document)
         return results
 
     def index_document(

@@ -36,8 +36,17 @@ class _VectorStore:
 
     def __init__(self, results: list[dict]) -> None:
         self._results = results
+        self.queries: list[str | None] = []
 
-    def knn_search(self, _index: str, _vector: list[float], _k: int) -> list[dict]:
+    def knn_search(
+        self,
+        _index: str,
+        _vector: list[float],
+        _k: int,
+        filters: dict | None = None,
+        query_text: str | None = None,
+    ) -> list[dict]:
+        self.queries.append(query_text)
         return list(self._results)
 
 
@@ -340,13 +349,27 @@ class _TopKAwareVectorStore:
         self._base_top_k = base_top_k
         self.calls: list[int] = []
 
-    def knn_search(self, _index: str, _vector: list[float], k: int) -> list[dict]:
+    def knn_search(
+        self,
+        _index: str,
+        _vector: list[float],
+        k: int,
+        filters: dict | None = None,
+        query_text: str | None = None,
+    ) -> list[dict]:
         self.calls.append(k)
         if k <= self._base_top_k:
             # Weak but text-bearing: relevance passes the web-fallback gate, but
             # the content won't ground the strong answer.
             return [{"id": "w", "text": "Unrelated filler about postage rates.", "distance": 0.9}]
         return [{"id": "s", "text": self.STRONG_TEXT, "distance": 0.95}]
+
+
+def test_kb_search_passes_raw_question_to_vector_store() -> None:
+    vector_store = _VectorStore([{"id": "source", "text": "HNSW vector search", "distance": 0.9}])
+    _route(_FakeLLM(), vector_store, _UnavailableWebSearch())
+    assert vector_store.queries
+    assert all(query == "what is some obscure thing" for query in vector_store.queries)
 
 
 class _SourceAwareLLM:

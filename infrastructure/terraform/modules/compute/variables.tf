@@ -159,19 +159,23 @@ variable "lambda_source_code_hash" {
 # ---------------------------------------------------------------------------
 # S3 documents bucket wiring (Req 9.1).
 #
-# The documents bucket is created in the frontend module (task 17). These
-# inputs default to null so this module validates standalone; the root wires
-# the real bucket id/arn in once the frontend module exists, which enables the
-# aws_lambda_permission + aws_s3_bucket_notification resources (count = 1).
+# The bucket ID and ARN can be unknown until apply, so resource counts use an
+# explicit plan-time toggle instead of inferring it from those values.
 # ---------------------------------------------------------------------------
+variable "enable_s3_trigger" {
+  description = "Create the S3 ObjectCreated permission and notification resources."
+  type        = bool
+  default     = false
+}
+
 variable "documents_bucket_id" {
-  description = "S3 documents bucket id/name (from the frontend module). null disables the S3 ObjectCreated trigger for standalone validation."
+  description = "S3 documents bucket id/name (from the frontend module)."
   type        = string
   default     = null
 }
 
 variable "documents_bucket_arn" {
-  description = "S3 documents bucket ARN (from the frontend module). null disables the S3 trigger and widens the S3 read IAM resource to a name-prefixed pattern."
+  description = "S3 documents bucket ARN (from the frontend module)."
   type        = string
   default     = null
 }

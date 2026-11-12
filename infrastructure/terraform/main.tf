@@ -111,10 +111,12 @@ module "compute" {
   bedrock_guardrail_version  = module.guardrails.guardrail_version
   bedrock_guardrail_arn      = module.guardrails.guardrail_arn
 
-  # S3 documents bucket from the frontend module (task 17). Wiring these in
-  # activates the compute S3 ObjectCreated trigger for the indexing Lambda
-  # (Req 9.1). This creates a compute -> frontend dependency, which is safe:
+  # S3 documents bucket from the frontend module (task 17). This explicit
+  # plan-time toggle enables the ObjectCreated trigger while the bucket id/arn
+  # remain unknown until apply (Req 9.1). This creates a compute -> frontend
+  # dependency, which is safe:
   # the frontend module does not depend on compute, so there is no cycle.
+  enable_s3_trigger    = true
   documents_bucket_id  = module.frontend.documents_bucket_id
   documents_bucket_arn = module.frontend.documents_bucket_arn
 

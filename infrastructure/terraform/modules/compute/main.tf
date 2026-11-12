@@ -54,11 +54,6 @@ locals {
   tavily_secret_name = "${var.name_prefix}/tavily-api-key"
   redis_secret_name  = "${var.name_prefix}/redis-credentials"
 
-  # Whether to wire the S3 ObjectCreated notification. The documents bucket is
-  # created in the frontend module (task 17); until the root passes its id/arn
-  # in, these resources are skipped so this module validates standalone (Req 9.1).
-  enable_s3_trigger = var.documents_bucket_id == null ? 0 : 1
-
   # Shared environment variables for both functions (Req 11 wiring). The chat
   # handler needs all of them; the indexing handler mainly needs Bedrock +
   # OpenSearch + the analytics table, but passing the full set is harmless and
@@ -401,7 +396,7 @@ resource "aws_lambda_function" "indexing" {
 # module validates standalone now; the root wires the bucket in later.
 # ---------------------------------------------------------------------------
 resource "aws_lambda_permission" "allow_s3_invoke_indexing" {
-  count = local.enable_s3_trigger
+  count = var.enable_s3_trigger ? 1 : 0
 
   statement_id   = "AllowExecutionFromS3Documents"
   action         = "lambda:InvokeFunction"
@@ -412,7 +407,7 @@ resource "aws_lambda_permission" "allow_s3_invoke_indexing" {
 }
 
 resource "aws_s3_bucket_notification" "documents" {
-  count = local.enable_s3_trigger
+  count = var.enable_s3_trigger ? 1 : 0
 
   bucket = var.documents_bucket_id
 

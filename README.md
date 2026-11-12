@@ -14,6 +14,7 @@ A dual-mode RAG system that currently supports both local development and AWS se
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — runtime architecture and routing
 - [docs/API_SERVER.md](docs/API_SERVER.md) — API contract and endpoints
 - [docs/ANTI_HALLUCINATION.md](docs/ANTI_HALLUCINATION.md) — anti-hallucination design, thresholds, and observability
+- [docs/ROADMAP.md](docs/ROADMAP.md) — follow-up work for Guardrails, PII handling, and token-aware chunking
 - [docs/EVAL_LOCAL.md](docs/EVAL_LOCAL.md) — local MLflow evaluation harness
 - [docs/CHATBOT_GUI_FEATURES.md](docs/CHATBOT_GUI_FEATURES.md) — frontend feature reference
 - [docs/INDEX.md](docs/INDEX.md) — active doc index

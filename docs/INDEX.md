@@ -15,6 +15,7 @@ This is the current, active documentation set for the project.
 
 - [ANTI_HALLUCINATION.md](ANTI_HALLUCINATION.md) — layered anti-hallucination design, thresholds, and observability
 - [EVAL_LOCAL.md](EVAL_LOCAL.md) — local MLflow evaluation harness (usage and interpretation)
+- [ROADMAP.md](ROADMAP.md) — follow-up work for Guardrails, PII handling, and token-aware chunking
 
 ## Deployment
 

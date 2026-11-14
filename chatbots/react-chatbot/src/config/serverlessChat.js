@@ -64,7 +64,13 @@ export async function serverlessChat({
 
   // Map the serverless tier to the UI's response_type vocabulary.
   const tier = data.tier_used || 'kb';
-  const responseType = tier === 'cache' ? 'cached' : tier === 'websearch' ? 'web_search' : 'rag';
+  const responseType = tier === 'cache'
+    ? 'cached'
+    : tier === 'websearch'
+      ? 'web_search'
+      : tier === 'topic'
+        ? 'out_of_scope'
+        : 'rag';
 
   return {
     answer: typeof data.answer === 'string' ? data.answer : String(data.answer || ''),

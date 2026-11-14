@@ -143,6 +143,11 @@ requires a non-production AWS deployment:
 - [ ] Verify token refresh/re-authentication and sign-out behavior against the
   deployed user pool and app client.
 
+## 9. Context engineering
+- chatbot should be able to accept fuzzy contextuel question using it's context.
+- AKA: Are you able to continue chatting about the latest topic using context
+- Which responds off topic reponse: I can help with questions about vector databases, vector search, embeddings, and RAG.
+
 **Acceptance:** An unauthenticated browser can sign in through Cognito and
 complete the hosted-login OAuth callback; the client sends a valid access token
 to `POST /chat`; missing or invalid tokens are rejected by API Gateway; expired

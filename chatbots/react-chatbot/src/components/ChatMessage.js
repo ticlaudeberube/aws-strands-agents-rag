@@ -46,6 +46,8 @@ function ChatMessage({ message }) {
       return <span className="cached-badge">⚡ CACHED</span>;
     } else if (responseType === 'web_search') {
       return <span className="web-search-badge">🌐 WEB</span>;
+    } else if (responseType === 'out_of_scope') {
+      return <span className="generated-badge">ℹ️ SCOPE</span>;
     } else if (isWebSearch) {
       // Fallback: detect web search from sources if response_type not available
       return <span className="web-search-badge">🌐 WEB</span>;

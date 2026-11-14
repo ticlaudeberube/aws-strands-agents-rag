@@ -7,9 +7,9 @@ shim. The shim exposes the same interface the chat endpoint calls
 (``answer_question`` / ``answer_question_no_cache`` / ``web_search`` /
 ``stream_answer_web_search_only``) and delegates answering to the serverless
 ``shared_route`` from ``create_rag_graph`` — the exact Lambda code path — backed
-by REAL Bedrock + LOCAL OpenSearch/Redis containers.
-
-No edits are made to ``api_server.py`` or ``src/``. This server simply:
+by REAL Bedrock + LOCAL OpenSearch/Redis containers. Container-specific client
+wiring stays in this wrapper while the shared serverless routing remains the
+same code used by the Lambda handler. This server simply:
     1. loads .env.serverless-local,
     2. builds injected serverless backends (Bedrock + local OpenSearch/Redis),
     3. seeds a couple of KB docs so retrieval returns context,
@@ -168,6 +168,7 @@ class ServerlessAgentShim:
         self.settings = settings
         self.initialization_error: str | None = None
         self._last_stream_sources: list[dict] = []
+        self._last_stream_tier = ""
 
         # Injected serverless backends: real Bedrock, local OpenSearch, local
         # Redis, local DynamoDB (session history, matching the Lambda handler).
@@ -266,6 +267,7 @@ class ServerlessAgentShim:
             max_tokens=max_tokens,
             history=history,
         )
+        self._last_stream_tier = result.tier_used
         self._persist_turn(session_id, question, result.answer)
         return result
 
@@ -278,9 +280,13 @@ class ServerlessAgentShim:
         max_tokens: int | None = None,
         session_id: str = "",
     ) -> dict:
-        """Answer via the serverless shared route; returns {'answer','sources'}."""
+        """Answer via the serverless shared route."""
         result = self._run(question, top_k, temperature, max_tokens, session_id)
-        return {"answer": result.answer, "sources": result.sources}
+        return {
+            "answer": result.answer,
+            "sources": result.sources,
+            "tier_used": result.tier_used,
+        }
 
     async def answer_question_no_cache(
         self,
@@ -295,6 +301,7 @@ class ServerlessAgentShim:
         cache first; for a local GUI test this distinction is immaterial, so we
         reuse the same route and return the (answer, sources) tuple form."""
         result = self._run(question, top_k, temperature, max_tokens, session_id)
+        self._last_stream_tier = result.tier_used
         return result.answer, result.sources
 
     async def stream_answer(
@@ -315,6 +322,7 @@ class ServerlessAgentShim:
         is loaded/persisted via DynamoDB, matching the Lambda handler.
         """
         result = self._run(question, top_k, temperature, max_tokens, session_id)
+        self._last_stream_tier = result.tier_used
         # Tag sources so the endpoint's response_type logic (cached/web/rag)
         # classifies this correctly.
         sources = list(result.sources)
@@ -335,6 +343,7 @@ class ServerlessAgentShim:
     ):
         """Bypass-cache streaming path; same route (see answer_question_no_cache)."""
         result = self._run(question, top_k, temperature, max_tokens, session_id)
+        self._last_stream_tier = result.tier_used
         self._last_stream_sources = list(result.sources)
         yield result.answer
 
@@ -357,7 +366,15 @@ class ServerlessAgentShim:
         search is unavailable (no key / API down / no results), yields an
         informative message instead.
         """
+        from src.agents.topic_scope import OUT_OF_SCOPE_ANSWER, is_question_in_scope
+
         self._last_stream_sources = []
+        self._last_stream_tier = "websearch"
+
+        if not is_question_in_scope(question):
+            self._last_stream_tier = "topic"
+            yield OUT_OF_SCOPE_ANSWER
+            return
 
         if self.web_search is None:
             yield (
@@ -375,8 +392,8 @@ class ServerlessAgentShim:
 
         if status != "success" or not results:
             yield (
-                "Web search returned no usable results "
-                f"(status: {status}). Try rephrasing your question."
+                "Web search is unavailable or returned no usable results "
+                f"(status: {status}). Check the configured Tavily API key and quota, then try again."
             )
             return
 

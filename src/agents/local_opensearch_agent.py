@@ -131,6 +131,7 @@ class LocalOpenSearchAgent:
         self.settings = settings
         self.initialization_error: str | None = None
         self._last_stream_sources: list[dict] = []
+        self._last_stream_tier = ""
 
         # Build the local OpenSearch client up front so we can ensure indexes and
         # expose it for health/cache listing. create_rag_graph will reuse it.
@@ -185,12 +186,14 @@ class LocalOpenSearchAgent:
         temperature: float | None,
         max_tokens: int | None,
     ) -> Any:
-        return self._shared_route(
+        result = self._shared_route(
             question,
             top_k=top_k,
             temperature=temperature,
             max_tokens=max_tokens,
         )
+        self._last_stream_tier = result.tier_used
+        return result
 
     async def answer_question(
         self,
@@ -257,8 +260,15 @@ class LocalOpenSearchAgent:
         **_kwargs: Any,
     ):  # noqa: ANN201
         """Force-web path. Delegates to the graph's force_web_search route."""
+        from src.agents.topic_scope import OUT_OF_SCOPE_ANSWER, is_question_in_scope
+
         self._last_stream_sources = []
+        if not is_question_in_scope(question):
+            self._last_stream_tier = "topic"
+            yield OUT_OF_SCOPE_ANSWER
+            return
         if self.web_search is None:
+            self._last_stream_tier = "websearch"
             yield (
                 "Web search is not enabled. Set ENABLE_WEB_SEARCH_SUPPLEMENT=true "
                 "and TAVILY_API_KEY, then restart."
@@ -275,13 +285,20 @@ class LocalOpenSearchAgent:
         max_tokens: int | None = None,  # noqa: ARG002
     ) -> tuple[str, list[dict]]:
         """Sync force-web answer (non-streaming chat path). Returns (answer, sources)."""
+        from src.agents.topic_scope import OUT_OF_SCOPE_ANSWER, is_question_in_scope
+
+        if not is_question_in_scope(question):
+            self._last_stream_tier = "topic"
+            return OUT_OF_SCOPE_ANSWER, []
         if self.web_search is None:
+            self._last_stream_tier = "websearch"
             return (
                 "Web search is not enabled. Set ENABLE_WEB_SEARCH_SUPPLEMENT=true "
                 "and TAVILY_API_KEY, then restart.",
                 [],
             )
         result = self._shared_route(question, force_web_search=True)
+        self._last_stream_tier = result.tier_used
         return result.answer, list(result.sources)
 
     # ------------------------------------------------------------------ #

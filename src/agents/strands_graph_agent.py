@@ -32,6 +32,7 @@ from pydantic import BaseModel, Field
 from strands import Agent
 
 from src.agents import prompts, rag_routing
+from src.agents.topic_scope import OUT_OF_SCOPE_ANSWER, is_question_in_scope
 from src.agents.node_config import NodeConfigManager
 from src.agents.node_metrics import GraphMetrics, NodeMetrics
 from src.config import Settings
@@ -247,84 +248,11 @@ def _is_security_attack(
     return False
 
 
-def _is_question_in_scope(question: str, ollama_client: OllamaClient, settings: Settings) -> bool:
-    """Check if question is about databases, search, or information retrieval.
-
-    Uses fast keyword matching for instant classification without LLM calls.
-    This enables sub-second rejection of out-of-scope queries.
-    """
-    question_lower = question.lower()
-
-    # Fast keyword-based pre-filter
-    # Includes all major vector database and information retrieval products.
-    # The knowledge base is vector-database-agnostic: no single product is
-    # privileged, so every vendor keyword carries the same weight. Add vendor
-    # keywords here as new documentation corpora are ingested.
-    in_scope_keywords = {
-        # Core concepts
-        "vector database": 10,
-        "vector db": 10,
-        "vector search": 9,
-        "vector": 6,
-        "embedding": 8,
-        "embeddings": 8,
-        "rag": 8,
-        "retrieval augmented": 8,
-        "retrieval": 7,
-        "semantic search": 7,
-        "similarity search": 7,
-        "index": 6,
-        "indexing": 6,
-        "collection": 6,
-        "schema": 5,
-        "similarity": 6,
-        "dense retrieval": 7,
-        "sparse retrieval": 7,
-        "knn": 7,
-        "nearest neighbor": 7,
-        "comparison": 4,
-        # Vector database products (no vendor is privileged over another)
-        "milvus": 9,
-        "pinecone": 9,
-        "weaviate": 9,
-        "qdrant": 9,
-        "voyageai": 9,
-        "voyage": 8,
-        "elasticsearch": 6,
-        "opensearch": 6,
-        "redis": 6,
-        "faiss": 7,
-        "chroma": 8,
-        "annoy": 7,
-        "postgres": 5,
-        "pgvector": 8,
-        "mysql": 5,
-        # Index techniques
-        "hnsw": 8,
-        "ivf": 8,
-    }
-
-    # Word-boundary matching against the whole question. This correctly handles
-    # multi-word keywords ("vector database") AND avoids substring false
-    # positives that the previous ``keyword in word`` check produced — e.g.
-    # "rag" matching "storage", "annoy" matching the verb "annoy", or "mysql"
-    # pulling an otherwise off-topic question in-scope.
-    score = 0
-    matched: list[str] = []
-    for keyword, weight in in_scope_keywords.items():
-        if re.search(rf"\b{re.escape(keyword)}\b", question_lower):
-            score += weight
-            matched.append(keyword)
-
-    # Any keyword match means in-scope.
-    if score > 0:
-        logger.debug(f"[SCOPE_CHECK] Keyword match (score={score}, matched={matched}): in-scope")
-        return True
-
-    # Fast reject: No keywords at all = definitely out of scope
-    # This avoids expensive LLM calls for clearly out-of-scope queries
-    logger.debug("[SCOPE_CHECK] No keyword match (score=0): out-of-scope (fast reject)")
-    return False
+def _is_question_in_scope(
+    question: str, ollama_client: OllamaClient | None = None, settings: Settings | None = None
+) -> bool:
+    """Keep the graph's existing scope-check interface backed by the shared classifier."""
+    return is_question_in_scope(question)
 
 
 # ============================================================================
@@ -594,9 +522,7 @@ def create_rag_graph(
     # NODE 4: Failure Handlers
     def reject_out_of_scope(state: dict) -> dict:
         """Handle out-of-scope queries."""
-        state["final_answer"] = (
-            "I can help with questions about vector databases, vector search, embeddings, and RAG."
-        )
+        state["final_answer"] = OUT_OF_SCOPE_ANSWER
         state["final_sources"] = []
         state["final_confidence"] = 0.0
         logger.info("[REJECTION] Out-of-scope query")
@@ -741,6 +667,15 @@ def create_rag_graph(
         ``history`` (optional prior turns) is forwarded so generation has
         multi-turn conversational context.
         """
+        if not is_question_in_scope(question):
+            logger.info("[TOPIC_CHECK] Rejected out-of-scope query before RAG routing")
+            return rag_routing.RoutingResult(
+                answer=OUT_OF_SCOPE_ANSWER,
+                tier_used="topic",
+                confidence_score=0.0,
+                grounding_score=0.0,
+            )
+
         return rag_routing.route_rag_query(
             question,
             llm=ollama_client,

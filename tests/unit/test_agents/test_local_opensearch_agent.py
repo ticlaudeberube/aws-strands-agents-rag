@@ -28,6 +28,7 @@ class _FakeRoutingResult:
         self.answer = "OpenSearch-backed answer"
         self.sources = [{"text": "ctx", "distance": 0.9}]
         self.cache_hit = False
+        self.tier_used = "kb"
 
 
 def _fake_graph(route_calls: list[dict]) -> dict:
@@ -80,6 +81,32 @@ async def test_stream_answer_yields_answer_and_sets_sources() -> None:
 
     assert chunks == ["OpenSearch-backed answer"]
     assert agent._last_stream_sources == [{"text": "ctx", "distance": 0.9}]
+
+
+@pytest.mark.asyncio
+async def test_force_web_rejects_out_of_scope_before_search_or_routing() -> None:
+    route_calls: list[dict] = []
+    with (
+        patch("src.tools.opensearch_client.OpenSearchClient.for_local") as mock_for_local,
+        patch(
+            "src.agents.strands_graph_agent.create_rag_graph", return_value=_fake_graph(route_calls)
+        ),
+    ):
+        mock_for_local.return_value.ensure_indexes.return_value = None
+        from src.agents.local_opensearch_agent import LocalOpenSearchAgent
+
+        agent = LocalOpenSearchAgent(_settings())
+        chunks = [
+            chunk
+            async for chunk in agent.stream_answer_web_search_only(
+                question="Who is the US president?"
+            )
+        ]
+
+    assert chunks == [
+        "I can help with questions about vector databases, vector search, embeddings, and RAG."
+    ]
+    assert route_calls == []
 
 
 def test_degraded_mode_when_opensearch_unavailable() -> None:

@@ -20,6 +20,7 @@ from src.agents.strands_graph_agent import (
     _is_security_attack,
     create_rag_graph,
 )
+from src.agents.topic_scope import OUT_OF_SCOPE_ANSWER, is_question_in_scope
 from src.config import Settings
 
 # ============================================================================
@@ -204,6 +205,9 @@ class TestScopeDetection:
         result = _is_question_in_scope(question, mock_ollama, settings)
         assert result is False
 
+    def test_out_of_scope_current_events_question(self):
+        assert is_question_in_scope("Who is the US president?") is False
+
 
 # ============================================================================
 # UNIT TESTS: Validation Result Models
@@ -306,6 +310,17 @@ class TestGraphConfiguration:
 
         assert "web search" not in result["final_answer"].lower()
         assert result["final_sources"] == []
+
+    def test_shared_route_rejects_out_of_scope_before_rag(self, settings):
+        graph_config = _make_graph(settings)
+
+        with patch("src.agents.strands_graph_agent.rag_routing.route_rag_query") as route:
+            result = graph_config["shared_route"]("Who is the US president?")
+
+        route.assert_not_called()
+        assert result.answer == OUT_OF_SCOPE_ANSWER
+        assert result.sources == []
+        assert result.tier_used == "topic"
 
 
 if __name__ == "__main__":

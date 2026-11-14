@@ -35,8 +35,11 @@ What runs where:
   helpers to point at the plain local containers while still calling real Bedrock.
 
 So the local serverless path is driven by two **wrapper scripts** that inject
-local-pointed clients into the real `create_rag_graph` / `shared_route`. They do
-**not** modify `api_server.py` or anything in `src/`.
+local-pointed clients into the real `create_rag_graph` / `shared_route`. The
+wrappers keep container-specific client wiring local; the shared route rejects
+out-of-scope questions before cache lookup, retrieval, or Bedrock generation.
+The local GUI's direct forced-web-search path applies the same scope check before
+calling Tavily, matching the cloud Lambda route.
 
 The one production change that *was* made (approved separately) is migrating
 `src/tools/bedrock_client.py` to the Bedrock **Converse** API, so generation

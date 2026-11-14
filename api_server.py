@@ -58,8 +58,15 @@ VECTOR_DB_HEALTH_CHECK_TIMEOUT_SECONDS = 2.0
 # ============================================================================
 
 
-def _determine_response_type(sources: list[dict]) -> tuple[str, bool]:
+def _determine_response_type(
+    sources: list[dict], force_web_search: bool = False, tier_used: str | None = None
+) -> tuple[str, bool]:
     """Determine response type and caching status from sources (DRY helper)."""
+    if tier_used == "topic":
+        return "out_of_scope", False
+    if force_web_search or tier_used == "websearch":
+        return "web_search", False
+
     has_cached_sources = any(s.get("source_type") == "cached" for s in sources)
     has_web_sources = any(s.get("source_type") == "web_search" for s in sources)
 
@@ -1193,7 +1200,11 @@ def _stream_chat_completions(
                 sources = agent._last_stream_sources or []
 
                 # Use DRY helper to determine response type and create timing
-                response_type, is_cached = _determine_response_type(sources)
+                response_type, is_cached = _determine_response_type(
+                    sources,
+                    force_web_search=force_web_search,
+                    tier_used=getattr(agent, "_last_stream_tier", None),
+                )
                 timing_data = _create_timing_data(
                     0, response_type, is_cached
                 )  # Streaming doesn't track total time easily
@@ -1328,6 +1339,7 @@ async def chat_completions(request: ChatCompletionRequest, bypass_cache: bool = 
         logger.info(f"[CHAT_ENDPOINT] - temperature: {temperature}, max_tokens: {max_tokens}")
 
         timing_data = {}
+        tier_used = None
         try:
             if force_web_search:
                 # 🌐 FORCE WEB SEARCH: Only web search, no knowledge base.
@@ -1380,6 +1392,7 @@ async def chat_completions(request: ChatCompletionRequest, bypass_cache: bool = 
                 if isinstance(result, dict):
                     answer = result["answer"]
                     sources = result["sources"]
+                    tier_used = result.get("tier_used")
                 else:
                     answer, sources = result
         except Exception as e:
@@ -1412,12 +1425,16 @@ async def chat_completions(request: ChatCompletionRequest, bypass_cache: bool = 
 
         # Calculate total query time and create response using DRY helpers
         total_time = time.time() - total_start_time
-        response_type, is_cached = _determine_response_type(sources)
+        response_type, is_cached = _determine_response_type(
+            sources,
+            force_web_search=force_web_search,
+            tier_used=tier_used or getattr(current_agent, "_last_stream_tier", None),
+        )
         timing_data = _create_timing_data(total_time * 1000, response_type, is_cached)
 
         # Record metrics for monitoring
         global graph_metrics
-        early_exit = response_type == "rag" and "out of scope" in str(answer).lower()
+        early_exit = response_type == "out_of_scope"
         graph_metrics.record_request(
             duration_ms=total_time * 1000, success=True, early_exit=early_exit
         )

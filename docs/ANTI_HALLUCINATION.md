@@ -100,74 +100,70 @@ caveat/confidence logic above applies exactly as before. The retry emits
 path, not for forced-web answers, web-fallback answers, cache hits, or the
 standalone MCP `generate_answer` tool.
 
-### Layer 4 — In-code guardrails (topic + security gates)
+### Layer 4 — In-code guardrails (security + scope gate)
 
-Before retrieval, two deterministic gates run (`src/agents/strands_graph_agent.py`):
+Two deterministic checks run before retrieval. Both answer paths reach them
+through `shared_route` (`src/agents/strands_graph_agent.py`): the local facade,
+the serverless Lambda handler, and the web-only streams.
 
-- **Topic gate** — `_is_question_in_scope` matches domain keywords with
-  **word boundaries** (so "rag" matches the acronym but not "sto**rag**e", and
-  multi-word keywords like "vector database" match correctly). Off-topic queries
-  route to a fixed rejection.
-- **Security gate** — `_is_security_attack` pattern-matches jailbreak /
-  injection attempts. Risky queries route to a fixed rejection.
+1. **Security screen** — `screen_security()` in `src/agents/guardrails.py` runs
+   first, before any embedding. `is_security_attack()` matches jailbreak phrases
+   (substring), command phrases (word boundaries, so "steal" does not match
+   "stealth"), and code-injection tokens. A match returns a fixed refusal.
+2. **Scope gate** — `ScopeGate` in `src/agents/guardrails.py` runs inside
+   `route_rag_query` after the query is embedded. The query is in scope when its
+   highest cosine similarity to any of the eight anchor descriptions in
+   `ANCHORS` is at least the mode threshold:
+   - Local: `nomic-embed-text` (Ollama), threshold **0.50**.
+   - Serverless: Titan v1 (Bedrock, 768-dim PCA output as used by the runtime),
+     threshold **0.35**.
 
-These are enforced in code (not only in prompts), matching the workshop's
-"neurosymbolic guardrail" technique. Word-boundary matching reduces substring
-false positives (for example, matching "rag" inside "storage"), but keyword and
-pattern checks are heuristics, not comprehensive topic classification or
-security analysis. They can miss novel or obfuscated attacks and can classify
-ambiguous queries incorrectly; downstream retrieval and answer-quality checks
-are additional safeguards, not guarantees.
+   The threshold can be overridden with `SCOPE_SIMILARITY_THRESHOLD`. Follow-ups
+   are embedded as the last user turn plus the question, so references such as
+   "what about its cost?" resolve. A first-turn query reuses the vector the
+   routing already computed, so it costs no extra embedding call.
 
-> **Note — two gating paths.** `answer_question` (async local entrypoint) uses
-> LLM-based topic/security agents as the primary gate, falling back to the
-> in-code functions on error; the graph-node functions use the in-code checks
-> directly. Both are live. The answer-quality/routing metrics below do not
-> measure topic/security classification outcomes.
+Both checks **fail closed**. If the security detector or the embedding call
+raises, the query is blocked or rejected, and the error is logged. A failed
+embedding call in serverless mode therefore rejects the query. There is no
+keyword fallback.
 
-### Layer 4b — Hard block at the tool-call boundary (framework hook)
+The keyword check in `src/agents/topic_scope.py` is no longer used at runtime.
+It remains the offline baseline for `scripts/eval_scope.py`. The graph nodes
+`topic_check` and `security_check` in `create_rag_graph` still call keyword
+functions, but the runtime entry points call `shared_route` directly and do not
+execute those nodes.
 
-The node-level security gate above runs *inside* a gating path. To make the
-security block hold **regardless of which path ran** — the gap the "two gating
-paths" note describes — a Strands `BeforeToolCallEvent` hook
-(`SecurityGuardrailHook`, `src/agents/guardrail_hooks.py`) is attached to the
-`RAGWorker` agent. Strands fires it immediately before *any* tool the agent
-selected is executed; when the pending tool's input matches a known
-jailbreak/injection pattern (reusing `_is_security_attack`, the single source of
-truth), the hook sets `event.cancel_tool` and the tool never runs — the model
-receives an error-status result instead.
+Calibration and the labeled sets are in [EVAL_LOCAL.md](EVAL_LOCAL.md#scope-classifier-comparison).
+Changing `ANCHORS` or the model requires re-running that comparison.
 
-This enforces a block at the **tool-call boundary**: a matching tool call is
-cancelled before that tool executes. It does not by itself guarantee that the
-model cannot answer directly, select a different action, or evade the
-pattern-based detector. Unlike this tool-call cancellation, Layer 3 caveats
-soften a generated answer rather than blocking it. The hook fails **open** on a
-detector exception (logged loudly), so the hook itself is not a fail-closed
-security boundary. Covered by `tests/unit/test_agents/test_guardrail_hooks.py`.
+Pattern checks are heuristics, not comprehensive security analysis. They can miss
+novel or obfuscated attacks. The scope gate can misclassify ambiguous queries in
+either direction. Downstream retrieval and answer-quality checks are additional
+safeguards, not guarantees.
 
 ### Layer 4c — Bedrock Guardrails (managed serverless filters)
 
 In serverless mode, when a Guardrail ID and numbered version are configured,
-`BedrockClient` adds `guardrailConfig` to Converse calls. The Terraform-managed
-policy checks prompt attacks on input, hate/misconduct on input and output, a
-configured denied topic, selected PII types, and contextual grounding/relevance.
-For RAG generation with retrieved text, the application also calls the
-standalone `ApplyGuardrail` API with the question marked as `query`, the answer
-as `guard_content`, and retrieved chunks as `grounding_source`. That additional
-check is skipped when there is no retrieved source text.
-
-An intervention replaces the generated output with the Guardrail result (or a
-generic refusal). An API failure or unexpected action is surfaced as an error;
+the application calls the standalone `ApplyGuardrail` API on the input and on
+the generated answer. The Terraform-managed policy checks prompt attacks on
+input, hate/misconduct on input and output, selected PII types, and contextual
+grounding/relevance. The output call marks the question as `query`, the answer
+as `guard_content`, and retrieved chunks as `grounding_source`; without source
+text only the non-grounding policies run. Converse calls carry no
+`guardrailConfig`, so retrieved chunks and the prompt template are not screened
+a second time. Topic scope is handled by the in-code scope gate (Layer 4).
+A blocked answer returns a `guardrail` tier refusal; the router skips the
+grounding retry and cache writes. PII anonymization rewrites the answer and is
+not treated as a block.
+An API failure or unexpected action is surfaced as an error;
 the application does not silently return the unchecked answer. This managed
 filter is separate from the local in-code checks above and does not make them
 comprehensive. Guardrails PII anonymization changes the returned content, not
 the original text sent to Bedrock; if model invocation logging is enabled,
-protect and limit access to those logs. Guardrail trace is disabled by default
-because trace details may contain sensitive matched content. See
+protect and limit access to those logs. See
 [GETTING_STARTED.md](GETTING_STARTED.md#bedrock-guardrails-serverless) for
-configuration and operational notes. The Terraform Lambda environment does
-not set `BEDROCK_GUARDRAIL_TRACE`; enabling trace for a deployed Lambda requires
-an explicit environment configuration change.
+configuration and operational notes.
 
 **Coverage limits and validation.**
 
@@ -181,17 +177,11 @@ an explicit environment configuration change.
 - The shared router refuses to generate when its selected sources have no
   usable text, so its Bedrock RAG path does not generate an ungrounded answer
   and then skip the contextual-grounding call. Direct Bedrock generation
-  outside the shared router is not covered by that source-availability gate;
-  Converse filters still apply when Guardrails are configured.
-- The denied-topic policy is configured as `OffTopicGeneralChatter`, with
-  examples including general coding and weather. This can overlap with valid
-  technical questions about implementing RAG or vector-search integrations.
-  Test representative in-scope coding questions and genuinely out-of-scope
-  prompts against the deployed version before relying on that topic boundary.
+  outside the shared router is not screened by the Guardrail.
 - Unit tests with a stub client and `terraform validate` verify local wiring
   and configuration shape; they do not prove AWS accepts the policy in the
   target account/region or that its filters behave as intended. Validate a
-  deployed non-production Guardrail with representative safe, denied-topic,
+  deployed non-production Guardrail with representative safe,
   prompt-attack, PII, and grounding cases before production use.
 
 ### Layer 5 — Correct routing classification
@@ -250,6 +240,7 @@ backstop):
 
 - `answer/low_grounding` (Count) — answers flagged as poorly supported.
 - `answer/low_confidence` (Count) — answers with a weak retrieval match.
+- `answer/guardrail_blocked` (Count) — answers blocked by the Bedrock OUTPUT Guardrail (serverless only).
 - `answer/grounding_retry` (Count) — the soft-steer retrieval retry fired. A
   rising `grounding_retry` with a flat `low_grounding` means the retry is
   recovering answers; both rising means the KB likely lacks the content.
@@ -270,7 +261,7 @@ and `aws-opentelemetry-distro`, and the compute module sets
 `enable_otel`, default on). With that, AgentCore auto-instruments Strands and
 emits invocation logs, per-tool-call traces (which tool ran, input/output,
 latency), and guardrail blocks to CloudWatch — no custom instrumentation code.
-This makes the Layer 4b hard blocks and the `answer/grounding_retry` path
+This makes the Layer 4 security blocks and the `answer/grounding_retry` path
 directly observable in a trace, complementing the aggregate metrics. X-Ray
 active tracing (and the role's X-Ray write permission) is already enabled, so
 traces have a sink.
@@ -365,9 +356,9 @@ thing being graded should not also be the grader.
   gate, including forced-web, empty-cache, and empty-snippet paths; grounding
   score, grounding/confidence caveat mutual exclusivity, and word-boundary
   temporal matching.
-- `tests/unit/test_agents/test_guardrail_hooks.py` — the Layer 4b hard-block
-  hook: cancels tool calls on a detected attack, allows safe input, fails open
-  on detector error.
+- `tests/unit/test_agents/test_guardrails.py` — the Layer 4 screen: security
+  runs before scope, command words match on word boundaries, and both checks
+  fail closed on exceptions.
 - `tests/unit/test_tools/test_cloudwatch_answer_metrics.py` — the `answer/*`
   metrics reach CloudWatch end-to-end.
 - `tests/unit/test_tools/test_bedrock_guardrails.py` — Bedrock input screening

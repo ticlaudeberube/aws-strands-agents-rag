@@ -58,7 +58,7 @@ DEPLOYMENT_MODE=serverless
 3. Fill in the AWS values required by the current implementation, including:
 
 ```env
-AWS_REGION=us-west-1
+AWS_REGION=us-east-1
 BEDROCK_INFERENCE_MODEL_ID=anthropic.claude-3-haiku-20240307-v1:0
 BEDROCK_EMBEDDING_MODEL_ID=amazon.titan-embed-text-v1
 OPENSEARCH_ENDPOINT=https://...
@@ -89,6 +89,14 @@ The settings file is the live source of truth for runtime selection:
 - `.env.example`
 
 The app does not rely on a legacy `use_agentcore` flag. The supported switch is `DEPLOYMENT_MODE`.
+
+### Scope gate threshold
+
+Queries are checked against eight in-scope anchor descriptions by embedding
+similarity (see [ANTI_HALLUCINATION.md](ANTI_HALLUCINATION.md#layer-4--in-code-guardrails-security--scope-gate)).
+Set `SCOPE_SIMILARITY_THRESHOLD` to override the mode default: `0.50` for local
+(`nomic-embed-text`) and `0.35` for serverless (Titan). Change it only after
+re-running `scripts/eval_scope.py` on both labeled sets.
 
 ### Local vector backend (OpenSearch)
 
@@ -151,7 +159,6 @@ The provisioned policy currently:
 
 - Checks prompt attacks on input (`HIGH`) and hate/misconduct on input and
   output (`MEDIUM`).
-- Denies the configured `OffTopicGeneralChatter` topic.
 - Anonymizes email addresses; blocks US Social Security Numbers, Canadian
   Social Insurance Numbers, and Canadian health numbers.
 - Uses contextual grounding and query relevance thresholds of `0.7`.
@@ -160,14 +167,17 @@ At entry to the shared RAG router (after the topic and security checks), a
 serverless query is screened with `ApplyGuardrail` using source `INPUT` before
 semantic-cache lookup. A blocked query returns a refusal without proceeding;
 if the Guardrail anonymizes PII, the sanitized query is used for embedding,
-cache lookup, and generation. Bedrock Converse also applies the configured
-guardrail to model calls.
+cache lookup, and generation. Converse requests do not carry a
+`guardrailConfig`, so each check runs once. Throttled `ApplyGuardrail` calls
+are retried with the same backoff as model calls.
 
 After RAG generation, the application calls `ApplyGuardrail` with the question
 marked as `query`, the answer marked as `guard_content`, and retrieved text
 marked as `grounding_source`. The shared router refuses to generate when its
-selected sources contain no usable text. If the output check intervenes, the
-response is replaced by the Guardrail's output (or a generic refusal). If an
+selected sources contain no usable text. If the output check blocks the answer,
+the router returns the Guardrail's refusal with `tier_used="guardrail"`, emits
+the `answer/guardrail_blocked` metric, and skips the grounding retry and cache
+writes. PII anonymization rewrites the answer without counting as a block. If an
 `ApplyGuardrail` call fails or returns an unexpected action, the error is
 surfaced rather than silently returning unchecked content. Semantic-cache hits
 are input-screened and run through the OUTPUT Guardrail using the current query
@@ -175,11 +185,9 @@ and cached source text; entries without usable cached source text are refused.
 Cache hits still do not make a Converse call. Local mode does not invoke
 Bedrock Guardrails.
 
-`BEDROCK_GUARDRAIL_TRACE` defaults to `false`. Enable it only for controlled
-debugging: Converse trace details can contain sensitive matched text. The
-Terraform Lambda environment does not enable trace, so setting this value in
-your local `.env` does not change an already-deployed Lambda; configure the
-Lambda environment explicitly only if debugging requires it.
+The guardrail version is replaced whenever the guardrail definition changes
+(`replace_triggered_by`), so a `terraform apply` rolls the Lambda to the new
+version number.
 
 PII anonymization affects the response, not the original content sent to
 Bedrock. If Bedrock model invocation logging is enabled, review CloudWatch log
@@ -191,7 +199,7 @@ regulated data.
 - Local mode uses Ollama and a local OpenSearch container.
 - Serverless mode uses Bedrock, OpenSearch, Redis/DynamoDB, and AWS Lambda/AgentCore patterns.
 - Web search is optional and controlled by the current Tavily configuration.
-- The Strands graph remains the shared business flow: TopicChecker → SecurityChecker → RAGWorker.
+- Every query passes the security screen in `shared_route`, then the embedding scope gate inside the shared RAG routing (`route_rag_query`).
 
 ### Anti-hallucination tuning
 

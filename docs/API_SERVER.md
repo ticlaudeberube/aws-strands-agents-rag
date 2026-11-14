@@ -33,12 +33,14 @@ curl -X POST http://localhost:8000/v1/chat/completions \
     "model": "rag-agent",
     "messages": [{
       "role": "user",
-      "content": "What is Milvus?"
+      "content": [{"type": "text", "text": "What is Milvus?"}]
     }],
     "temperature": 0.1,
     "max_tokens": 2000
   }'
 ```
+`messages[].content` must be a list of typed parts (`{"type": "text", "text": ...}`).
+A plain string returns HTTP 422.
 
 The request accepts standard OpenAI-style chat fields plus project-specific options such as `force_web_search`.
 When forced web search is requested while web search is disabled in settings,

@@ -145,6 +145,7 @@ class LocalOpenSearchAgent:
 
         self._graph = create_rag_graph(settings, opensearch_client=self._opensearch)
         self._shared_route = self._graph["shared_route"]
+        self._scope_gate = self._graph.get("scope_gate")
         backends = self._graph.get("backends", {})
         self.web_search = backends.get("web_search")
         # Ollama client (the graph's LLM backend) for the MCP-skill primitives
@@ -260,10 +261,15 @@ class LocalOpenSearchAgent:
         **_kwargs: Any,
     ):  # noqa: ANN201
         """Force-web path. Delegates to the graph's force_web_search route."""
-        from src.agents.topic_scope import OUT_OF_SCOPE_ANSWER, is_question_in_scope
+        from src.agents.guardrails import OUT_OF_SCOPE_ANSWER, screen_security
 
         self._last_stream_sources = []
-        if not is_question_in_scope(question):
+        block = screen_security(question)
+        if block is not None:
+            self._last_stream_tier = block.tier
+            yield block.answer
+            return
+        if self._scope_gate is not None and not self._scope_gate.allows(question):
             self._last_stream_tier = "topic"
             yield OUT_OF_SCOPE_ANSWER
             return
@@ -285,9 +291,13 @@ class LocalOpenSearchAgent:
         max_tokens: int | None = None,  # noqa: ARG002
     ) -> tuple[str, list[dict]]:
         """Sync force-web answer (non-streaming chat path). Returns (answer, sources)."""
-        from src.agents.topic_scope import OUT_OF_SCOPE_ANSWER, is_question_in_scope
+        from src.agents.guardrails import OUT_OF_SCOPE_ANSWER, screen_security
 
-        if not is_question_in_scope(question):
+        block = screen_security(question)
+        if block is not None:
+            self._last_stream_tier = block.tier
+            return block.answer, []
+        if self._scope_gate is not None and not self._scope_gate.allows(question):
             self._last_stream_tier = "topic"
             return OUT_OF_SCOPE_ANSWER, []
         if self.web_search is None:

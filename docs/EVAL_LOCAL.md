@@ -291,3 +291,65 @@ gates; use `--judge` for periodic deeper reads.
 - `avg_grounding_score` vs `avg_judge_faithfulness` divergence indicates the
   lexical check is mis-estimating (usually heavy paraphrasing) — useful when
   deciding whether to raise/lower `answer_grounding_threshold`.
+
+## Scope classifier comparison
+
+`scripts/eval_scope.py` scores the scope decision alone, with no retrieval or
+generation. It uses two labeled sets:
+
+- `eval/scope_labels.jsonl` (47 questions, 14 follow-ups with history). Used to
+  pick the anchor set and the thresholds.
+- `eval/scope_heldout.jsonl` (29 questions, 5 follow-ups). Not used for tuning.
+  Check thresholds against it before changing them.
+
+```bash
+uv run python scripts/eval_scope.py --method keyword
+uv run python scripts/eval_scope.py --method embedding --embed-backend ollama-client \
+    --thresholds 0.45,0.50,0.55
+uv run python scripts/eval_scope.py --method embedding --embed-backend bedrock-client \
+    --thresholds 0.30,0.35,0.40
+uv run python scripts/eval_scope.py --method llm --llm-model llama3.1:8b
+uv run python scripts/eval_scope.py --labels eval/scope_heldout.jsonl --method embedding \
+    --embed-backend bedrock-client --thresholds 0.35
+```
+
+`--embed-backend ollama-client` and `bedrock-client` call the same `embed_text`
+methods the runtime uses. `ollama` and `bedrock` call the raw embedding APIs and
+are kept for comparison. The raw Titan vector scores differently from the PCA
+vector serverless uses, so do not use `bedrock` numbers to set the serverless
+threshold.
+
+Results (the first accuracy column is the tuning set; the second is held-out):
+
+| method | accuracy (tuning / held-out) | follow-ups (tuning) | time per question | notes |
+|---|---|---|---|---|
+| keyword (offline baseline) | 0.851 / not run | 0.643 | under 1 ms | misses "index funds", "stock index", and keyword-free follow-ups |
+| local `nomic-embed-text`, t=0.50 | 0.894 / 1.000 | 0.857 | about 30 ms | **local production threshold** |
+| local `nomic-embed-text`, t=0.55 | 0.915 / 0.966 | 0.929 | about 30 ms | |
+| serverless Titan PCA, t=0.35 | 0.915 / 1.000 | 0.929 | about 200 ms | **serverless production threshold** |
+| serverless Titan PCA, t=0.40 | 0.936 / 0.966 | 1.000 | about 200 ms | held-out in-scope recall drops |
+| LLM `llama3.1:8b` | 1.000 / not run | 1.000 | about 1.4 s | accurate, but too slow for the low-CPU target |
+| LLM `llama3.2:1b` | 0.468 / not run | 0.286 | not measured | answers OUT for almost every query |
+| LLM `qwen2.5:0.5b` | 0.511 / not run | 0.357 | not measured | rejects most in-scope queries |
+
+The first pass used `all-minilm` and reached 0.957 on the tuning set. That
+model is not used anywhere in the runtime, so its numbers are superseded.
+
+Production check: `ScopeGate` with the thresholds above, run through the same
+history path as `route_rag_query`, reproduced the calibration on both sets:
+
+- Local: tuning 0.894 (follow-ups 0.857); held-out 1.000 (follow-ups 1.000).
+- Serverless: tuning 0.915 (follow-ups 0.929); held-out 1.000 (follow-ups 1.000).
+
+Before follow-ups were embedded with their prior turn, serverless follow-up
+accuracy on the tuning set was 0.643. That is why the gate uses the prior turn.
+
+Caveats:
+
+- All labels were written by hand for this comparison. The thresholds were
+  chosen on the tuning set and checked on a 29-question held-out set, which is
+  still small. One miss moves held-out accuracy by about 3 points.
+- Latency was measured on the development Mac, not on the low-CPU desktop.
+- Serverless numbers come from Titan v1 through the Bedrock client in
+  `us-east-1`. Any change to the PCA matrix (`BEDROCK_PCA_MATRIX_URI`) changes
+  the vectors, so re-run the Titan rows after changing it.

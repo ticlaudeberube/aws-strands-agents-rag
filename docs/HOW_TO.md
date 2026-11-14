@@ -83,7 +83,7 @@ DEPLOYMENT_MODE=serverless
 3. Add the required AWS values in `.env`, including at minimum:
 
 ```env
-AWS_REGION=us-west-1
+AWS_REGION=us-east-1
 BEDROCK_INFERENCE_MODEL_ID=anthropic.claude-3-haiku-20240307-v1:0
 BEDROCK_EMBEDDING_MODEL_ID=amazon.titan-embed-text-v1
 OPENSEARCH_ENDPOINT=https://...
@@ -112,9 +112,8 @@ The app uses the same core Strands pattern in both modes:
 
 ```text
 User query
-  -> TopicChecker
-  -> SecurityChecker
-  -> RAGWorker
+  -> security screen, then scope gate (embedding anchors)
+  -> RAGWorker (shared_route: cache -> KB -> web)
      -> retrieval backend
      -> answer generation
      -> source output

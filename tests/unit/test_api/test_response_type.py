@@ -3,6 +3,7 @@
 import pytest
 
 import api_server
+from src.agents.guardrails import ANCHORS, ScopeGate
 from scripts.serverless_api_server import ServerlessAgentShim
 
 
@@ -52,6 +53,10 @@ async def test_serverless_force_web_rejects_out_of_scope_before_search() -> None
     shim = object.__new__(ServerlessAgentShim)
     shim.web_search = _SearchMustNotRun()
     shim._last_stream_sources = []
+    shim._scope_gate = ScopeGate(
+        embed=lambda text: [1.0, 0.0] if text in ANCHORS else [0.0, 1.0],
+        threshold=0.5,
+    )
 
     messages = [
         message async for message in shim.stream_answer_web_search_only("Who is the US president?")

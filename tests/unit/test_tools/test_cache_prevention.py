@@ -202,13 +202,15 @@ class TestRejectionMessageConsistency:
 
     def test_blocked_tool_message_is_vendor_neutral(self):
         """The guardrail's blocked-tool message scopes to vector DBs/RAG, not one vendor."""
-        from src.agents.guardrail_hooks import BLOCKED_TOOL_MESSAGE
+        from src.agents.guardrails import SECURITY_REFUSAL_ANSWER
+        from src.agents.topic_scope import OUT_OF_SCOPE_ANSWER
 
-        lowered = BLOCKED_TOOL_MESSAGE.lower()
+        lowered = OUT_OF_SCOPE_ANSWER.lower()
         assert "vector database" in lowered
         assert "rag" in lowered
         # The knowledge base is vendor-agnostic: no single product is named.
         assert "milvus" not in lowered
+        assert "milvus" not in SECURITY_REFUSAL_ANSWER.lower()
 
     def test_security_risk_message_mentions_security(self):
         """Verify security risk message mentions security."""

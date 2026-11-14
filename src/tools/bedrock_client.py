@@ -212,10 +212,6 @@ class BedrockClient:
                     "maxTokens": max_tokens,
                 },
             }
-            if self.settings.use_bedrock_guardrails:
-                from src.agents.bedrock_guardrails import get_bedrock_guardrail_config
-
-                request["guardrailConfig"] = get_bedrock_guardrail_config(self.settings)
             return self.client.converse(**request)  # type: ignore[no-any-return]
 
         return self._call_with_retry(_do, model_id, "converse")
@@ -235,7 +231,7 @@ class BedrockClient:
         screened_query, blocked, _ = apply_bedrock_input_guardrail(
             self.settings,
             query=query,
-            bedrock_runtime_client=self.client,
+            bedrock_runtime_client=self._guardrail_runtime(),
         )
         return screened_query, blocked
 
@@ -291,18 +287,71 @@ class BedrockClient:
         temperature: float = 0.3,
         max_tokens: int | None = 1024,
     ) -> str:
-        """Generate and contextually evaluate a RAG answer when Guardrails are enabled."""
+        """Generate a RAG answer and evaluate it with the OUTPUT Guardrail.
+
+        Raises:
+            OutputGuardrailBlocked: when the Guardrail blocks the answer, so the
+                caller can skip retries and caching.
+        """
         answer = self.generate(
             prompt=prompt,
             temperature=temperature,
             max_tokens=max_tokens,
         )
-        return self.apply_output_guardrail(question, answer, sources)
+        final_text, blocked = self.check_output_guardrail(question, answer, sources)
+        if blocked:
+            from src.agents.bedrock_guardrails import OutputGuardrailBlocked
+
+            raise OutputGuardrailBlocked(final_text)
+        return final_text
 
     @property
     def bedrock_guardrails_enabled(self) -> bool:
         """Whether Bedrock Guardrails are configured for this client."""
         return self.settings.use_bedrock_guardrails
+
+    def _guardrail_runtime(self) -> Any:
+        """Return a runtime facade whose ``apply_guardrail`` retries on throttling."""
+        client = self
+
+        class _RetryingRuntime:
+            def apply_guardrail(self, **request: Any) -> dict:
+                return client._call_with_retry(
+                    lambda: client.client.apply_guardrail(**request),
+                    str(request.get("guardrailIdentifier", "")),
+                    "apply_guardrail",
+                )
+
+        return _RetryingRuntime()
+
+    def check_output_guardrail(
+        self,
+        question: str,
+        answer: str,
+        sources: list[dict],
+    ) -> tuple[str, bool]:
+        """Evaluate a RAG answer. Returns ``(final_text, was_blocked)``.
+
+        Runs even without source text (PII and content policies still apply);
+        contextual grounding is evaluated only when source text is present.
+        """
+        if not self.bedrock_guardrails_enabled:
+            return answer, False
+        source_chunks = [
+            str(source.get("text") or source.get("snippet") or "")
+            for source in sources
+            if isinstance(source, dict) and (source.get("text") or source.get("snippet"))
+        ]
+        from src.agents.bedrock_guardrails import apply_bedrock_output_guardrail
+
+        final_text, blocked, _ = apply_bedrock_output_guardrail(
+            self.settings,
+            query=question,
+            answer=answer,
+            source_chunks=source_chunks,
+            bedrock_runtime_client=self._guardrail_runtime(),
+        )
+        return final_text, blocked
 
     def apply_output_guardrail(
         self,
@@ -310,28 +359,8 @@ class BedrockClient:
         answer: str,
         sources: list[dict],
     ) -> str:
-        """Evaluate an existing RAG answer against its query and grounding sources."""
-        if not self.bedrock_guardrails_enabled:
-            return answer
-
-        source_chunks = [
-            str(source.get("text") or source.get("snippet") or "")
-            for source in sources
-            if isinstance(source, dict) and (source.get("text") or source.get("snippet"))
-        ]
-        if not source_chunks:
-            return answer
-
-        from src.agents.bedrock_guardrails import apply_bedrock_output_guardrail
-
-        final_text, _, _ = apply_bedrock_output_guardrail(
-            self.settings,
-            query=question,
-            answer=answer,
-            source_chunks=source_chunks,
-            bedrock_runtime_client=self.client,
-        )
-        return final_text
+        """Evaluate an existing RAG answer (for example a cache hit); returns the text."""
+        return self.check_output_guardrail(question, answer, sources)[0]
 
     def _resolve_model_id(self, model: str | None) -> str:
         """Resolve the effective inference model ID (Req 5.1, 5.4).

@@ -161,6 +161,8 @@ class ServerlessAgentShim:
     serverless Cache -> KB -> (Web) pipeline, not a reimplementation.
     """
 
+    _scope_gate = None  # set from graph["scope_gate"] in __init__; None disables the gate
+
     def __init__(self, settings: Settings):
         from src.agents.strands_graph_agent import create_rag_graph
         from src.tools.bedrock_client import BedrockClient
@@ -189,6 +191,7 @@ class ServerlessAgentShim:
             redis_cache=self._redis,
         )
         self._shared_route = self._graph["shared_route"]
+        self._scope_gate = self._graph.get("scope_gate")
 
         # Web search follows the graph's configuration (disabled unless enabled
         # via ENABLE_WEB_SEARCH_SUPPLEMENT + a Tavily key).
@@ -366,12 +369,17 @@ class ServerlessAgentShim:
         search is unavailable (no key / API down / no results), yields an
         informative message instead.
         """
-        from src.agents.topic_scope import OUT_OF_SCOPE_ANSWER, is_question_in_scope
+        from src.agents.guardrails import OUT_OF_SCOPE_ANSWER, screen_security
 
         self._last_stream_sources = []
         self._last_stream_tier = "websearch"
 
-        if not is_question_in_scope(question):
+        block = screen_security(question)
+        if block is not None:
+            self._last_stream_tier = block.tier
+            yield block.answer
+            return
+        if self._scope_gate is not None and not self._scope_gate.allows(question):
             self._last_stream_tier = "topic"
             yield OUT_OF_SCOPE_ANSWER
             return

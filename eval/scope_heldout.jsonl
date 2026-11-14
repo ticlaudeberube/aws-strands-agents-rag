@@ -1,0 +1,29 @@
+{"id": "h-in-001", "question": "How is a vector index kept up to date when documents change?", "history": [], "label": "in"}
+{"id": "h-in-002", "question": "Why do embeddings from different models not compare well?", "history": [], "label": "in"}
+{"id": "h-in-003", "question": "What is the difference between a bi-encoder and a cross-encoder for search?", "history": [], "label": "in"}
+{"id": "h-in-004", "question": "Should I store raw text next to the vectors in my database?", "history": [], "label": "in"}
+{"id": "h-in-005", "question": "How do I tell if my retriever is returning irrelevant passages?", "history": [], "label": "in"}
+{"id": "h-in-006", "question": "What does a recall@10 number tell me about a search system?", "history": [], "label": "in"}
+{"id": "h-in-007", "question": "Can I combine keyword search and vector search in one query?", "history": [], "label": "in"}
+{"id": "h-in-008", "question": "How large should my knowledge base chunks be for question answering?", "history": [], "label": "in"}
+{"id": "h-in-009", "question": "Is a managed vector service worth it compared with self-hosting?", "history": [], "label": "in"}
+{"id": "h-in-010", "question": "How do I stop a RAG model from making up facts?", "history": [], "label": "in"}
+{"id": "h-in-011", "question": "What is product quantization in a vector index?", "history": [], "label": "in"}
+{"id": "h-in-012", "question": "Which distance metric works best for normalized embeddings?", "history": [], "label": "in"}
+{"id": "h-fu-in-001", "question": "Does that also apply to the cosine version?", "history": [{"role": "user", "content": "What does the dot product metric measure in a vector search?"}, {"role": "assistant", "content": "It measures the projection of one vector onto another and is sensitive to magnitude."}], "label": "in"}
+{"id": "h-fu-in-002", "question": "How would I set that up in the database?", "history": [{"role": "user", "content": "Can I use HNSW with metadata filters?"}, {"role": "assistant", "content": "Yes, most engines apply the filter during graph traversal or after candidate retrieval."}], "label": "in"}
+{"id": "h-fu-in-003", "question": "What happens to the answer quality then?", "history": [{"role": "user", "content": "What chunk overlap should I use for RAG?"}, {"role": "assistant", "content": "A 10 to 20 percent overlap is a common starting point."}], "label": "in"}
+{"id": "h-out-001", "question": "What is a good name for my new puppy?", "history": [], "label": "out"}
+{"id": "h-out-002", "question": "Summarize the plot of a famous detective novel.", "history": [], "label": "out"}
+{"id": "h-out-003", "question": "How do I change the oil in my car?", "history": [], "label": "out"}
+{"id": "h-out-004", "question": "What are the rules of chess for castling?", "history": [], "label": "out"}
+{"id": "h-out-005", "question": "How many calories are in an avocado?", "history": [], "label": "out"}
+{"id": "h-out-006", "question": "Help me write a cover letter for a nursing job.", "history": [], "label": "out"}
+{"id": "h-out-007", "question": "What is the tallest mountain in South America?", "history": [], "label": "out"}
+{"id": "h-out-008", "question": "How do I reset my home router password?", "history": [], "label": "out"}
+{"id": "h-out-009", "question": "What should I pack for a camping weekend?", "history": [], "label": "out"}
+{"id": "h-out-010", "question": "Which index finger is used for playing the piano?", "history": [], "label": "out"}
+{"id": "h-out-011", "question": "Write a short birthday message for my sister.", "history": [], "label": "out"}
+{"id": "h-out-012", "question": "How do I bake sourdough bread at home?", "history": [], "label": "out"}
+{"id": "h-fu-out-001", "question": "And how long does that take to cook?", "history": [{"role": "user", "content": "How do I make a vegetable lasagna?"}, {"role": "assistant", "content": "Layer noodles, sauce, and vegetables, then bake."}], "label": "out"}
+{"id": "h-fu-out-002", "question": "Is it safe for my dog to eat that?", "history": [{"role": "user", "content": "What fruits are good for a healthy snack?"}, {"role": "assistant", "content": "Apples and berries are good choices."}], "label": "out"}

@@ -1,0 +1,47 @@
+{"id": "s-in-001", "question": "What is Milvus?", "history": [], "label": "in"}
+{"id": "s-in-002", "question": "How does HNSW indexing trade recall for speed?", "history": [], "label": "in"}
+{"id": "s-in-003", "question": "Explain cosine similarity for sentence embeddings.", "history": [], "label": "in"}
+{"id": "s-in-004", "question": "What chunk size works best for retrieval augmented generation?", "history": [], "label": "in"}
+{"id": "s-in-005", "question": "How do I create a k-NN index in OpenSearch?", "history": [], "label": "in"}
+{"id": "s-in-006", "question": "Which is better for semantic search, dense or sparse retrieval?", "history": [], "label": "in"}
+{"id": "s-in-007", "question": "What does pgvector support for approximate nearest neighbor search?", "history": [], "label": "in"}
+{"id": "s-in-008", "question": "Is Qdrant a good choice for a small RAG prototype?", "history": [], "label": "in"}
+{"id": "s-in-009", "question": "How many dimensions does the nomic embedding model produce?", "history": [], "label": "in"}
+{"id": "s-in-010", "question": "What is a collection in Weaviate?", "history": [], "label": "in"}
+{"id": "s-in-011", "question": "How do I reduce latency for vector search queries?", "history": [], "label": "in"}
+{"id": "s-in-012", "question": "What metadata filters can I apply during a similarity search?", "history": [], "label": "in"}
+{"id": "s-in-013", "question": "How should I evaluate retrieval quality in a RAG pipeline?", "history": [], "label": "in"}
+{"id": "s-in-014", "question": "What is the role of an embedding model in a vector database?", "history": [], "label": "in"}
+{"id": "s-in-015", "question": "Compare FAISS and Chroma for local development.", "history": [], "label": "in"}
+{"id": "s-out-001", "question": "What is the capital of France?", "history": [], "label": "out"}
+{"id": "s-out-002", "question": "Write me a poem about the ocean.", "history": [], "label": "out"}
+{"id": "s-out-003", "question": "How do I renew my passport?", "history": [], "label": "out"}
+{"id": "s-out-004", "question": "What is a good recipe for banana bread?", "history": [], "label": "out"}
+{"id": "s-out-005", "question": "Who won the football match last night?", "history": [], "label": "out"}
+{"id": "s-out-006", "question": "Should I invest in index funds or bonds?", "history": [], "label": "out"}
+{"id": "s-out-007", "question": "How much storage does my laptop have?", "history": [], "label": "out"}
+{"id": "s-out-008", "question": "Tell me a story about a dragon.", "history": [], "label": "out"}
+{"id": "s-out-009", "question": "What are the symptoms of a cold?", "history": [], "label": "out"}
+{"id": "s-out-010", "question": "How do I fix a leaking kitchen faucet?", "history": [], "label": "out"}
+{"id": "s-out-011", "question": "Which stock index performed best this year?", "history": [], "label": "out"}
+{"id": "s-out-012", "question": "Plan a three-day trip to Lisbon.", "history": [], "label": "out"}
+{"id": "s-out-013", "question": "What is the boiling point of water at sea level?", "history": [], "label": "out"}
+{"id": "s-out-014", "question": "Translate good morning into Spanish.", "history": [], "label": "out"}
+{"id": "s-out-015", "question": "How do I train for a marathon in six weeks?", "history": [], "label": "out"}
+{"id": "s-out-016", "question": "Give me tips for a job interview at a bank.", "history": [], "label": "out"}
+{"id": "s-out-017", "question": "What is the best way to store fresh basil?", "history": [], "label": "out"}
+{"id": "s-out-018", "question": "Explain photosynthesis to a ten year old.", "history": [], "label": "out"}
+{"id": "s-fu-in-001", "question": "What about its indexing cost?", "history": [{"role": "user", "content": "What is Milvus?"}, {"role": "assistant", "content": "Milvus is an open-source vector database for similarity search."}], "label": "in"}
+{"id": "s-fu-in-002", "question": "And how does that compare to HNSW?", "history": [{"role": "user", "content": "How does Milvus store vectors?"}, {"role": "assistant", "content": "Milvus stores vectors in segments and builds indexes per segment."}], "label": "in"}
+{"id": "s-fu-in-003", "question": "Can it filter on metadata too?", "history": [{"role": "user", "content": "Tell me about OpenSearch k-NN."}, {"role": "assistant", "content": "OpenSearch k-NN supports approximate nearest neighbor search over vector fields."}], "label": "in"}
+{"id": "s-fu-in-004", "question": "Which one should I pick for that?", "history": [{"role": "user", "content": "Compare Qdrant and Weaviate for a RAG chatbot."}, {"role": "assistant", "content": "Both support hybrid search and metadata filtering."}], "label": "in"}
+{"id": "s-fu-in-005", "question": "How many chunks would I need to index for that?", "history": [{"role": "user", "content": "What chunk size works for RAG?"}, {"role": "assistant", "content": "Chunks of 300 to 500 tokens are common."}], "label": "in"}
+{"id": "s-fu-in-006", "question": "And the cost of running it locally?", "history": [{"role": "user", "content": "Is pgvector good for a RAG prototype?"}, {"role": "assistant", "content": "Yes, pgvector works well for small RAG prototypes."}], "label": "in"}
+{"id": "s-fu-in-007", "question": "What dimension does that model use?", "history": [{"role": "user", "content": "Which embedding model is good for English retrieval?"}, {"role": "assistant", "content": "all-MiniLM-L6-v2 is a small, common choice for English retrieval."}], "label": "in"}
+{"id": "s-fu-in-008", "question": "Does it support recall tuning?", "history": [{"role": "user", "content": "How do I tune an HNSW index?"}, {"role": "assistant", "content": "Adjust ef_construction and M to trade build time against recall."}], "label": "in"}
+{"id": "s-fu-out-001", "question": "And what will the weather be there?", "history": [{"role": "user", "content": "Plan a three-day trip to Lisbon."}, {"role": "assistant", "content": "Day one: Alfama and the castle. Day two: Belem."}], "label": "out"}
+{"id": "s-fu-out-002", "question": "What about the price of that dish?", "history": [{"role": "user", "content": "What is a good recipe for banana bread?"}, {"role": "assistant", "content": "Mash three ripe bananas, mix with flour, sugar, and eggs."}], "label": "out"}
+{"id": "s-fu-out-003", "question": "Who played goalkeeper in that game?", "history": [{"role": "user", "content": "Who won the football match last night?"}, {"role": "assistant", "content": "The home team won two to one."}], "label": "out"}
+{"id": "s-fu-out-004", "question": "Should I bring a coat as well?", "history": [{"role": "user", "content": "Plan a three-day trip to Lisbon."}, {"role": "assistant", "content": "Pack light clothes and a rain jacket."}], "label": "out"}
+{"id": "s-fu-out-005", "question": "How long should I bake it for?", "history": [{"role": "user", "content": "Give me a banana bread recipe."}, {"role": "assistant", "content": "Mix the batter and pour it into a loaf tin."}], "label": "out"}
+{"id": "s-fu-out-006", "question": "What about its fees?", "history": [{"role": "user", "content": "Should I invest in index funds or bonds?"}, {"role": "assistant", "content": "Index funds usually have lower fees than actively managed funds."}], "label": "out"}

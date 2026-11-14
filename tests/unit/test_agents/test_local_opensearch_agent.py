@@ -13,6 +13,7 @@ from unittest.mock import patch
 
 import pytest
 
+from src.agents.guardrails import ANCHORS, ScopeGate
 from src.config.settings import Settings
 
 
@@ -31,12 +32,24 @@ class _FakeRoutingResult:
         self.tier_used = "kb"
 
 
+def _scope_stub() -> ScopeGate:
+    """Gate where only anchor descriptions are in scope (deterministic, no model)."""
+    return ScopeGate(
+        embed=lambda text: [1.0, 0.0] if text in ANCHORS else [0.0, 1.0],
+        threshold=0.5,
+    )
+
+
 def _fake_graph(route_calls: list[dict]) -> dict:
     def shared_route(question: str, **kwargs: Any) -> _FakeRoutingResult:
         route_calls.append({"question": question, **kwargs})
         return _FakeRoutingResult()
 
-    return {"shared_route": shared_route, "backends": {"web_search": None}}
+    return {
+        "shared_route": shared_route,
+        "backends": {"web_search": None},
+        "scope_gate": _scope_stub(),
+    }
 
 
 @pytest.mark.asyncio

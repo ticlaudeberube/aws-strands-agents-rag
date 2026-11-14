@@ -31,10 +31,11 @@ from typing import Any
 from pydantic import BaseModel, Field
 from strands import Agent
 
-from src.agents import prompts, rag_routing
-from src.agents.topic_scope import OUT_OF_SCOPE_ANSWER, is_question_in_scope
+from src.agents import guardrails, prompts, rag_routing
+from src.agents.guardrails import ScopeGate, is_security_attack, keyword_in_scope
 from src.agents.node_config import NodeConfigManager
 from src.agents.node_metrics import GraphMetrics, NodeMetrics
+from src.agents.topic_scope import OUT_OF_SCOPE_ANSWER
 from src.config import Settings
 from src.tools import (
     InMemoryCache,
@@ -141,118 +142,11 @@ def _calculate_confidence_score(sources: list[dict], answer: str) -> float:
         return 0.5
 
 
-def _is_security_attack(
-    question: str,
-    ollama_client: OllamaClient | None = None,
-    settings: Settings | None = None,
-) -> bool:
-    """Detect security attacks using fast pattern matching.
-
-    Uses proven pattern matching for jailbreaks and code injection attempts.
-    Avoids LLM-based classification to prevent false positives.
-
-    Args:
-        question: User query to validate
-        ollama_client: Ollama client (unused, for compatibility)
-        settings: Application settings (unused, for compatibility)
-
-    Returns:
-        True if query is unsafe, False if safe
-    """
-    question_lower = question.lower()
-    question_normalized = (
-        question_lower.replace("you're", "you are")
-        .replace("don't", "do not")
-        .replace("what's", "what is")
-    )
-
-    jailbreak_patterns = [
-        "forget your instruction",
-        "forget you are a",
-        "forget you",
-        "forget about",
-        "ignore your instruction",
-        "ignore your system",
-        "disregard your instruction",
-        "override your",
-        "bypass your",
-        "bypass the",
-        "bypass security",
-        "bypass restrictions",
-        "ignore the system prompt",
-        "ignore the previous instruction",
-        "you are no longer",
-        "ignore the scope",
-        "ignore the limitation",
-        "disregard",
-        "jailbreak",
-        "hack",
-        "offshore account",
-        "launder",
-        "ignore the rule",
-        "pretend you are",
-        "role play as",
-        "act as if you",
-        "what is your hidden",
-        "what is your system prompt",
-        "reveal your prompt",
-        "show me your instruction",
-        "dump your system prompt",
-        "tell me your secret",
-        "do not follow your",
-        "don't follow your",
-    ]
-
-    for pattern in jailbreak_patterns:
-        if pattern in question_lower or pattern in question_normalized:
-            logger.warning(f"[SECURITY_ATTACK] Jailbreak detected: '{pattern}'")
-            return True
-
-    if any(
-        cmd in question_lower
-        for cmd in [
-            "send money",
-            "transfer money",
-            "steal",
-            "delete",
-            "drop table",
-            "sql injection",
-            "fork bomb",
-            "ddos",
-            "malware",
-        ]
-    ):
-        logger.warning("[SECURITY_ATTACK] Command injection detected")
-        return True
-
-    injection_patterns = [
-        "'; drop",
-        "'; delete",
-        "'; update",
-        "'; insert",  # SQL
-        "rm -rf",
-        "exec(",
-        "eval(",
-        "__import__",  # Command execution
-        "subprocess",
-        "os.system",
-        "shell=true",  # Process execution
-    ]
-
-    for pattern in injection_patterns:
-        if pattern in question_lower:
-            logger.warning(f"[SECURITY_ATTACK] Injection detected: '{pattern}'")
-            return True
-
-    logger.debug(f"[SECURITY_CHECK] Query passed: {question[:100]}")
-    return False
-
-
 def _is_question_in_scope(
     question: str, ollama_client: OllamaClient | None = None, settings: Settings | None = None
 ) -> bool:
     """Keep the graph's existing scope-check interface backed by the shared classifier."""
-    return is_question_in_scope(question)
+    return keyword_in_scope(question)
 
 
 # ============================================================================
@@ -499,7 +393,7 @@ def create_rag_graph(
         node_metrics = NodeMetrics(node_name="security_check")
 
         # Use LLM-based classification with pattern matching fallback
-        is_attack = _is_security_attack(question, ollama_client, settings)
+        is_attack = is_security_attack(question)
 
         result = ValidationResult(
             is_valid=not is_attack,
@@ -530,10 +424,7 @@ def create_rag_graph(
 
     def reject_security_risk(state: dict) -> dict:
         """Handle security risks."""
-        state["final_answer"] = (
-            "I detected a security concern with your query. "
-            "Please rephrase and ask a legitimate question."
-        )
+        state["final_answer"] = guardrails.SECURITY_REFUSAL_ANSWER
         state["final_sources"] = []
         state["final_confidence"] = 0.0
         logger.info("[REJECTION] Query was a security risk")
@@ -651,6 +542,13 @@ def create_rag_graph(
             "grounding_retry_top_k_multiplier": settings.grounding_retry_top_k_multiplier,
         }
 
+    # Scope gate: embeds with the same client as retrieval, so local and serverless
+    # use their own model and calibrated threshold (see Settings.resolved_scope_threshold).
+    scope_gate = ScopeGate(
+        embed=ollama_client.embed_text,
+        threshold=settings.resolved_scope_threshold,
+    )
+
     def shared_route(
         question: str,
         top_k: int = rag_routing.DEFAULT_TOP_K,
@@ -667,11 +565,12 @@ def create_rag_graph(
         ``history`` (optional prior turns) is forwarded so generation has
         multi-turn conversational context.
         """
-        if not is_question_in_scope(question):
-            logger.info("[TOPIC_CHECK] Rejected out-of-scope query before RAG routing")
+        block = guardrails.screen_security(question)
+        if block is not None:
+            logger.info("[GUARDRAIL] Rejected query before RAG routing: tier=%s", block.tier)
             return rag_routing.RoutingResult(
-                answer=OUT_OF_SCOPE_ANSWER,
-                tier_used="topic",
+                answer=block.answer,
+                tier_used=block.tier,
                 confidence_score=0.0,
                 grounding_score=0.0,
             )
@@ -696,6 +595,7 @@ def create_rag_graph(
             max_tokens=max_tokens,
             metric_emitter=metric_emitter,
             history=history,
+            scope_gate=scope_gate.allows,
         )
 
     graph_config = {
@@ -731,11 +631,12 @@ def create_rag_graph(
         # decisions (Requirements 2.1-2.6, 3.6, 3.7). Invoked by the serverless
         # Lambda handler after the TopicChecker/SecurityChecker nodes pass.
         "shared_route": shared_route,
+        "scope_gate": scope_gate,
     }
 
     logger.info(
-        f"✓ RAG Graph created (mode={deployment_mode}): TopicChecker → "
-        "SecurityChecker → shared Cache→KB→Web routing"
+        f"✓ RAG Graph created (mode={deployment_mode}): security screen → "
+        "scope gate → shared Cache→KB→Web routing"
     )
 
     return graph_config

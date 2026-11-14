@@ -9,9 +9,8 @@ The current codebase supports two deployment modes with the same core Strands wo
 
 ```text
 User query
-  -> TopicChecker
-  -> SecurityChecker
-  -> RAGWorker
+  -> security screen, then scope gate (embedding anchors)
+  -> RAGWorker (shared_route: cache -> KB -> web)
      -> [hard-block hook: cancels tool calls on a security/injection attempt]
      -> retrieval backend (hybrid BM25 + vector k-NN by default; HYBRID_SEARCH_ENABLED)
      -> answer generation
@@ -180,14 +179,15 @@ default and does not include Cognito sign-in.
 
 The Terraform stack creates a versioned Bedrock Guardrail and injects its ID
 and version into the Lambda environment. When serverless mode has both values,
-`BedrockClient` adds `guardrailConfig` to Converse requests. The RAG routing
-path also uses `ApplyGuardrail` after generation when retrieved text is
-available: it labels the user question as the query, the generated answer as
-guarded content, and retrieved chunks as grounding sources. An intervention
-replaces the generated answer; API errors are not silently ignored.
+the router calls `ApplyGuardrail` on the input and again on the generated
+answer (the question as `query`, the answer as `guard_content`, retrieved chunks
+as `grounding_source`). Converse requests carry no `guardrailConfig`, so each
+check runs once. A blocked answer returns a `guardrail` tier result with no
+retry and no cache write; API errors are not silently ignored.
 
-The current Terraform policy includes prompt-attack, hate/misconduct, denied
-topic, PII, and contextual grounding/relevance filters. Email addresses are
+The current Terraform policy includes prompt-attack, hate/misconduct, PII, and
+contextual grounding/relevance filters. Topic scope is enforced by the
+in-code scope gate, not by a Bedrock denied topic. Email addresses are
 anonymized; configured US and Canadian identifiers are blocked. The grounding
 and relevance thresholds default to `0.7`. Trace is disabled by default.
 Local mode does not call Bedrock Guardrails. See
@@ -212,7 +212,7 @@ This is the actual source of truth in the current project. There is no supported
 - `src/config/settings.py` selects the active backend stack
 - `src/agents/strands_graph_agent.py` builds the shared graph (`create_rag_graph`) and the topic/security/RAG routing
 - `src/agents/local_opensearch_agent.py` is the local-mode agent facade over `shared_route`
-- `src/agents/guardrail_hooks.py` adds a framework-level hard block on the RAGWorker's tool calls (see [docs/ANTI_HALLUCINATION.md](ANTI_HALLUCINATION.md) Layer 4b)
+- `src/agents/guardrails.py` runs the security screen and the embedding scope gate, for both local and serverless modes (see [docs/ANTI_HALLUCINATION.md](ANTI_HALLUCINATION.md) Layer 4)
 - `src/tools/` contains the retrieval, embedding, cache, and web-search clients
 - The app captures sources and response metadata for the frontend and API callers
 

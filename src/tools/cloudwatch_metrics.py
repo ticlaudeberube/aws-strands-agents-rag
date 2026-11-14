@@ -51,6 +51,7 @@ __all__ = [
     "ERRORS_TOTAL",
     "ANSWER_LOW_GROUNDING",
     "ANSWER_LOW_CONFIDENCE",
+    "ANSWER_GUARDRAIL_BLOCKED",
 ]
 
 # ---- Metric names (design "CloudWatch Metric Dimensions") ----------------- #
@@ -65,6 +66,8 @@ ERRORS_TOTAL = "errors/total"
 # ``src.agents.rag_routing``). Kept in sync with the metric names defined there.
 ANSWER_LOW_GROUNDING = "answer/low_grounding"
 ANSWER_LOW_CONFIDENCE = "answer/low_confidence"
+# Bedrock OUTPUT Guardrail blocked the generated answer.
+ANSWER_GUARDRAIL_BLOCKED = "answer/guardrail_blocked"
 
 # Units keyed by metric name so EMF + put_metric_data agree.
 _METRIC_UNITS = {
@@ -78,6 +81,7 @@ _METRIC_UNITS = {
     "cache/opensearch_unavailable": "Count",
     ANSWER_LOW_GROUNDING: "Count",
     ANSWER_LOW_CONFIDENCE: "Count",
+    ANSWER_GUARDRAIL_BLOCKED: "Count",
 }
 
 

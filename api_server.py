@@ -62,7 +62,7 @@ def _determine_response_type(
     sources: list[dict], force_web_search: bool = False, tier_used: str | None = None
 ) -> tuple[str, bool]:
     """Determine response type and caching status from sources (DRY helper)."""
-    if tier_used == "topic":
+    if tier_used in ("topic", "security"):
         return "out_of_scope", False
     if force_web_search or tier_used == "websearch":
         return "web_search", False

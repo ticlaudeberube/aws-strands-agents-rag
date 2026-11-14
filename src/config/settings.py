@@ -129,11 +129,6 @@ class Settings(BaseSettings):
         validation_alias="BEDROCK_GUARDRAIL_VERSION",
         description="Pinned Amazon Bedrock Guardrail version.",
     )
-    bedrock_guardrail_trace: bool = Field(
-        default=False,
-        validation_alias="BEDROCK_GUARDRAIL_TRACE",
-        description="Enable sensitive Guardrails trace output for debugging only.",
-    )
 
     @model_validator(mode="after")
     def validate_bedrock_guardrail_configuration(self) -> "Settings":
@@ -442,8 +437,24 @@ class Settings(BaseSettings):
         validation_alias="TAVILY_API_KEY",
     )  # Tavily API key for web search (reads TAVILY_API_KEY from .env)
 
+    # Scope gate: minimum cosine similarity between the query embedding and the
+    # in-scope anchor descriptions (src/agents/guardrails.py). Unset uses the
+    # mode default, calibrated on eval/scope_labels.jsonl and eval/scope_heldout.jsonl.
+    scope_similarity_threshold: float | None = Field(
+        default=None,
+        validation_alias="SCOPE_SIMILARITY_THRESHOLD",
+        description="Scope embedding threshold. Default 0.35 serverless (Titan PCA), 0.50 local (nomic).",
+    )
+
+    @property
+    def resolved_scope_threshold(self) -> float:
+        """Return the configured scope threshold, or the default for the active mode."""
+        if self.scope_similarity_threshold is not None:
+            return self.scope_similarity_threshold
+        return 0.35 if self.deployment_mode == "serverless" else 0.50
+
     # AWS Configuration (optional)
-    aws_region: str | None = "us-west-1"
+    aws_region: str | None = "us-east-1"
     aws_access_key_id: str | None = None
     aws_secret_access_key: str | None = None
 

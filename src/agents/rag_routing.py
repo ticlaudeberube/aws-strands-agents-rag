@@ -51,10 +51,14 @@ Lambda handler can forward them to CloudWatch; a caller-supplied
 
 from __future__ import annotations
 
+import functools
 import logging
 import re
 from dataclasses import dataclass, field
 from typing import Any, Callable
+
+from src.agents.bedrock_guardrails import OutputGuardrailBlocked
+from src.agents.topic_scope import OUT_OF_SCOPE_ANSWER
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +73,7 @@ __all__ = [
     "ANSWER_LOW_GROUNDING",
     "ANSWER_LOW_CONFIDENCE",
     "ANSWER_GROUNDING_RETRY",
+    "ANSWER_GUARDRAIL_BLOCKED",
     "NO_GROUNDING_ANSWER",
     "LOW_GROUNDING_CAVEAT",
     "LOW_CONFIDENCE_CAVEAT",
@@ -91,6 +96,10 @@ ANSWER_LOW_CONFIDENCE = "answer/low_confidence"
 # retry is attempted (anti-hallucination soft steer), so dashboards can track
 # how often the self-correction path runs.
 ANSWER_GROUNDING_RETRY = "answer/grounding_retry"
+
+# Emitted when the Bedrock OUTPUT Guardrail blocks a generated answer. The
+# router returns the refusal without retrying generation or populating caches.
+ANSWER_GUARDRAIL_BLOCKED = "answer/guardrail_blocked"
 
 # Minimum fraction of the answer's content words that must also appear in the
 # retrieved source text for the answer to be considered "grounded". Tuned
@@ -587,6 +596,49 @@ def _build_web_result(
     )
 
 
+def _scope_rejection(result_metrics: RoutingResult) -> RoutingResult:
+    """Return the out-of-scope refusal used when the scope gate rejects a query."""
+    logger.info("[ROUTING] Scope gate rejected query before retrieval")
+    return RoutingResult(
+        answer=OUT_OF_SCOPE_ANSWER,
+        tier_used="topic",
+        confidence_score=0.0,
+        grounding_score=0.0,
+        metrics=result_metrics.metrics,
+    )
+
+
+def _guardrail_block_boundary(func: Callable[..., RoutingResult]) -> Callable[..., RoutingResult]:
+    """Turn an OUTPUT Guardrail block into a refusal result.
+
+    Raised from any generation call site, so no retry, grounding caveat, or
+    cache write runs on a blocked answer.
+    """
+
+    @functools.wraps(func)
+    def wrapper(*args: Any, **kwargs: Any) -> RoutingResult:
+        try:
+            return func(*args, **kwargs)
+        except OutputGuardrailBlocked as blocked:
+            logger.warning("[ROUTING] Bedrock output Guardrail blocked the answer")
+            emitter = kwargs.get("metric_emitter")
+            if callable(emitter):
+                try:
+                    emitter(ANSWER_GUARDRAIL_BLOCKED)
+                except Exception as exc:  # noqa: BLE001 - metrics must never break routing
+                    logger.warning("[ROUTING] metric_emitter failed: %s", exc)
+            return RoutingResult(
+                answer=blocked.message,
+                tier_used="guardrail",
+                confidence_score=0.0,
+                grounding_score=0.0,
+                metrics=[ANSWER_GUARDRAIL_BLOCKED],
+            )
+
+    return wrapper
+
+
+@_guardrail_block_boundary
 def route_rag_query(
     question: str,
     *,
@@ -608,6 +660,7 @@ def route_rag_query(
     max_tokens: int | None = None,
     metric_emitter: Callable[[str], None] | None = None,
     history: list[dict] | None = None,
+    scope_gate: Callable[[str, list[float] | None, list[dict] | None], bool] | None = None,
 ) -> RoutingResult:
     """Route a (validated) query through Cache → KB → Web Search.
 
@@ -647,6 +700,10 @@ def route_rag_query(
         temperature: LLM sampling temperature for generation.
         max_tokens: Optional max-token cap for generation.
         metric_emitter: Optional callback invoked with each warning-metric name.
+        scope_gate: Optional ``(question, query_vector_or_None, history) -> in_scope``.
+            Called after the query is embedded, so the vector is reused when there
+            is no prior turn. On the force-web path it is called with ``None``.
+            A False result returns the out-of-scope answer before any retrieval.
         history: Optional prior conversation turns (``{"question","answer"}`` or
             ``{"role","content"}`` dicts). When supplied, a compact transcript of
             the most recent turns is prepended to the generation prompt so
@@ -684,6 +741,8 @@ def route_rag_query(
             )
 
     # ---- Tier 0: force_web_search bypasses cache AND KB (Req 2.6) ----------
+    if force_web_search and scope_gate is not None and not scope_gate(question, None, history):
+        return _scope_rejection(result_metrics)
     if force_web_search:
         logger.info("[ROUTING] force_web_search=True → bypassing cache and KB")
         web_result = _build_web_result(question, web_search, kb_sources=[], confidence=0.0)
@@ -702,6 +761,10 @@ def route_rag_query(
     query_vector, redis_up = _get_query_embedding(question, llm, cache, bypass_cache=is_temporal)
     if cache is not None and not redis_up:
         _emit(CACHE_REDIS_UNAVAILABLE, result_metrics, metric_emitter)
+
+    # ---- Scope gate: reuses the query vector, so no second embedding call ---
+    if scope_gate is not None and not scope_gate(question, query_vector, history):
+        return _scope_rejection(result_metrics)
 
     # ---- Tier 1: cache check for non-temporal queries (Req 2.1, 2.2, 2.5) --
     if not is_temporal:

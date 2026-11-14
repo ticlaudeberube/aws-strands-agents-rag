@@ -4,7 +4,7 @@ resource "aws_bedrock_guardrail" "rag_guardrail" {
   blocked_input_messaging   = "I cannot process this request due to safety or topic restrictions."
   blocked_outputs_messaging = "I cannot provide a response that violates content or grounding policies."
 
-  # Content & Prompt Injection Filtering (replaces/reinforces SecurityChecker)
+  # Content & Prompt Injection Filtering (complements the in-code regex screen in src/agents/guardrails.py)
   content_policy_config {
     filters_config {
       input_strength  = "HIGH"
@@ -20,16 +20,6 @@ resource "aws_bedrock_guardrail" "rag_guardrail" {
       input_strength  = "MEDIUM"
       output_strength = "MEDIUM"
       type            = "MISCONDUCT"
-    }
-  }
-
-  # Topic Filtering (replaces/reinforces TopicChecker)
-  topic_policy_config {
-    topics_config {
-      name       = "OffTopicGeneralChatter"
-      definition = "Requests unrelated to the indexed knowledge base, such as creative writing, general coding, or personal advice."
-      examples   = ["Write me a poem", "Debug my Python script", "What is the weather?"]
-      type       = "DENY"
     }
   }
 
@@ -68,8 +58,15 @@ resource "aws_bedrock_guardrail" "rag_guardrail" {
   tags = var.tags
 }
 
-# Pin an immutable version for production stability
+# Immutable version snapshot of the DRAFT guardrail. A version never changes
+# after creation, so the resource is replaced whenever the guardrail is updated;
+# create_before_destroy keeps the Lambda pointed at a valid version during apply.
 resource "aws_bedrock_guardrail_version" "rag_guardrail_v1" {
   guardrail_arn = aws_bedrock_guardrail.rag_guardrail.guardrail_arn
   description   = "Production guardrail version for ${var.stage}"
+
+  lifecycle {
+    create_before_destroy = true
+    replace_triggered_by  = [aws_bedrock_guardrail.rag_guardrail]
+  }
 }

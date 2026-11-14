@@ -8,7 +8,7 @@ from src.agents.rag_routing import _generate_from_sources, route_rag_query
 from src.agents.bedrock_guardrails import (
     apply_bedrock_input_guardrail,
     apply_bedrock_output_guardrail,
-    get_bedrock_guardrail_config,
+    OutputGuardrailBlocked,
 )
 from src.config.settings import Settings
 from src.tools.bedrock_client import BedrockClient
@@ -67,19 +67,12 @@ def test_guardrail_settings_must_be_configured_as_a_pair() -> None:
         )
 
 
-def test_converse_guardrail_config_is_enabled_with_trace_disabled() -> None:
-    settings = _guardrail_settings()
+def test_converse_does_not_attach_guardrail_config() -> None:
     runtime = _FakeBedrockRuntime()
-    client = BedrockClient(settings=settings, client=runtime)
-
+    client = BedrockClient(settings=_guardrail_settings(), client=runtime)
     client.generate("RAG prompt")
-
     assert runtime.converse_request is not None
-    assert runtime.converse_request["guardrailConfig"] == {
-        "guardrailIdentifier": "guardrail-id",
-        "guardrailVersion": "1",
-        "trace": "disabled",
-    }
+    assert "guardrailConfig" not in runtime.converse_request
 
 
 def test_guardrails_are_not_added_in_local_mode() -> None:
@@ -369,6 +362,116 @@ def test_apply_guardrail_failure_does_not_silently_return_answer() -> None:
         )
 
 
-def test_guardrail_config_is_empty_when_disabled() -> None:
-    settings = Settings.model_validate({"DEPLOYMENT_MODE": "local"})
-    assert get_bedrock_guardrail_config(settings) == {}
+def test_anonymized_output_is_not_reported_as_blocked() -> None:
+    response = {
+        "action": "GUARDRAIL_INTERVENED",
+        "outputs": [{"text": "Contact {EMAIL}"}],
+        "assessments": [
+            {"sensitiveInformationPolicy": {"piiEntities": [{"action": "ANONYMIZED"}]}}
+        ],
+    }
+    final_text, blocked, _ = apply_bedrock_output_guardrail(
+        _guardrail_settings(),
+        query="Question",
+        answer="Contact a@b.com",
+        source_chunks=["Trusted source"],
+        bedrock_runtime_client=_FakeBedrockRuntime(response),
+    )
+    assert final_text == "Contact {EMAIL}"
+    assert blocked is False
+
+
+def test_output_guardrail_runs_without_sources_and_omits_grounding_blocks() -> None:
+    runtime = _FakeBedrockRuntime()
+    apply_bedrock_output_guardrail(
+        _guardrail_settings(),
+        query="Question",
+        answer="Answer",
+        source_chunks=[],
+        bedrock_runtime_client=runtime,
+    )
+    assert runtime.guardrail_request is not None
+    assert runtime.guardrail_request["content"] == [{"text": {"text": "Answer"}}]
+
+
+def test_generate_from_sources_raises_when_output_blocked() -> None:
+    runtime = _FakeBedrockRuntime(
+        guardrail_response={
+            "action": "GUARDRAIL_INTERVENED",
+            "outputs": [{"text": "Blocked."}],
+            "assessments": [{"contextualGroundingPolicy": {"filters": [{"action": "BLOCKED"}]}}],
+        }
+    )
+    client = BedrockClient(settings=_guardrail_settings(), client=runtime)
+    with pytest.raises(OutputGuardrailBlocked) as exc_info:
+        client.generate_from_sources("prompt", "Question", [{"text": "Source"}])
+    assert exc_info.value.message == "Blocked."
+
+
+def test_blocked_output_returns_guardrail_tier_without_retry_or_caching() -> None:
+    runtime = _FakeBedrockRuntime(
+        guardrail_response={
+            "action": "GUARDRAIL_INTERVENED",
+            "outputs": [{"text": "Blocked."}],
+            "assessments": [{"contextualGroundingPolicy": {"filters": [{"action": "BLOCKED"}]}}],
+        }
+    )
+    client = BedrockClient(settings=_guardrail_settings(), client=runtime)
+    emitted: list[str] = []
+
+    class _LLM:
+        bedrock_guardrails_enabled = True
+
+        def embed_text(self, _text: str) -> list[float]:
+            return [0.1, 0.2]
+
+        def generate_from_sources(self, **kwargs: Any) -> str:
+            return client.generate_from_sources(**kwargs)
+
+    class _Store:
+        def knn_search(self, *_args: Any, **_kwargs: Any) -> list[dict[str, Any]]:
+            return [{"text": "Source text about vectors.", "score": 0.9, "distance": 0.1}]
+
+    class _SemanticCache:
+        stored = False
+
+        def search_semantic_cache(self, *_args: Any, **_kwargs: Any) -> None:
+            return None
+
+        def store_semantic_cache(self, *_args: Any, **_kwargs: Any) -> None:
+            _SemanticCache.stored = True
+
+    result = route_rag_query(
+        "What is HNSW?",
+        llm=_LLM(),
+        vector_store=_Store(),
+        cache=None,
+        semantic_cache=_SemanticCache(),
+        kb_index="rag-kb",
+        metric_emitter=emitted.append,
+    )
+    assert result.tier_used == "guardrail"
+    assert result.answer == "Blocked."
+    assert emitted == ["answer/guardrail_blocked"]
+    assert _SemanticCache.stored is False
+    assert len([r for r in runtime.guardrail_requests if r["source"] == "OUTPUT"]) == 1
+
+
+def test_apply_guardrail_retries_on_throttling(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("src.tools.bedrock_client.time.sleep", lambda _s: None)
+
+    class _ThrottlingError(Exception):
+        response = {"Error": {"Code": "ThrottlingException"}}
+
+    class _Flaky(_FakeBedrockRuntime):
+        calls = 0
+
+        def apply_guardrail(self, **request: Any) -> dict[str, Any]:
+            _Flaky.calls += 1
+            if _Flaky.calls == 1:
+                raise _ThrottlingError("slow down")
+            return super().apply_guardrail(**request)
+
+    client = BedrockClient(settings=_guardrail_settings(), client=_Flaky())
+    client.check_output_guardrail("Question", "Answer", [{"text": "Source"}])
+    assert _Flaky.calls == 2

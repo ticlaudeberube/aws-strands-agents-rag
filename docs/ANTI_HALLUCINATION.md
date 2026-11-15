@@ -279,6 +279,8 @@ CloudWatch. Keep them separate when installing.
 
 ## Measuring with local MLflow
 
+For how these measurements feed change control, see [GOVERNANCE.md](GOVERNANCE.md).
+
 Code-level defenses tell you the system *can* be honest; they don't tell you
 whether a change made it *more* honest across your corpus. The local MLflow
 evaluation harness closes that loop.

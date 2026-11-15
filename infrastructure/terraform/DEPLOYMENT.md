@@ -4,20 +4,21 @@ Infrastructure-as-code for the **serverless** deployment mode of the Strands
 Agents RAG application (Lambda + AgentCore + Bedrock + OpenSearch Serverless +
 API Gateway + DynamoDB + ElastiCache Redis + Cognito + CloudFront + S3).
 
-> This document is a pick-up-later guide. It explains the remote-state
-> bootstrap (the part that is **not** created automatically), the prerequisites,
-> and the full deploy/teardown workflow. Nothing here has been applied to AWS
-> yet — the Terraform has only been validated locally.
+> This document explains the remote-state bootstrap (the part that is **not**
+> created automatically), the prerequisites, and the deploy/teardown workflow.
+> The bootstrap is done; no stack resources have been applied yet.
 
 ---
 
 ## TL;DR — current status
 
 - All seven Terraform modules are written and **`terraform validate` passes**.
-- **Nothing has been deployed to AWS.** No `terraform plan`/`apply` has run.
-- No AWS credentials are configured in this environment.
-- The **Terraform remote-state backend does not exist yet** (see below). This is
-  the one manual bootstrap step you must do before the first real `init`.
+- The **remote-state backend exists** in us-east-1: bucket `strands-rag-tfstate`
+  (versioned, encrypted, public access blocked) and lock table
+  `strands-rag-tflock`. Created 2026-11-15 with the Option A steps in Step 1.
+- `terraform plan -var-file=environments/dev.tfvars` runs against the backend
+  and adds the full stack with no changes or destroys.
+- **Nothing has been applied to AWS.** Stack resources do not exist yet.
 
 > **Before deploying, review [docs/AWS_DEPLOYMENT_GAPS.md](../../docs/AWS_DEPLOYMENT_GAPS.md)**
 > — it tracks the known blockers (dead/gated Bedrock model, Lambda package
@@ -35,7 +36,7 @@ terraform validate
 
 ---
 
-## What "the backend bucket doesn't exist yet" means
+## What the remote-state backend is
 
 Terraform tracks every resource it manages in a **state file**
 (`terraform.tfstate`). For team/production use, that state is stored
@@ -66,9 +67,9 @@ must be created **once, by hand, as a bootstrap step**, before you ever run
 > Terraform during `apply` — see `modules/frontend`. The **backend** bucket
 > (`strands-rag-tfstate`) is Terraform's own bookkeeping and must pre-exist.
 
-That is why every validation so far used `terraform init -backend=false`: the
-`-backend=false` flag tells Terraform to skip connecting to the (nonexistent)
-remote state bucket and only validate the configuration locally.
+Local validation uses `terraform init -backend=false`, which skips the remote
+state bucket and checks only the configuration. Plan and apply use the real
+backend, so they require the bootstrap to exist first.
 
 ---
 
@@ -241,7 +242,9 @@ Per-environment variables live in `environments/{dev,staging,prod}.tfvars`
   OAuth callback and sign-out URL.)
 - The React app does not render a username/password form. Its **Sign in**
   button redirects to Cognito managed login; Cognito returns the browser to the
-  registered callback after sign-in or sign-up.
+  registered callback after sign-in.
+- Sign-up is invite-only. Create users with `aws cognito-idp admin-create-user`,
+  as described in [docs/AUTHENTICATION.md](../../docs/AUTHENTICATION.md#adding-users).
 - Upload source documents to `s3://<documents_bucket_id>/documents/` to trigger
   the indexing Lambda, which creates the OpenSearch `rag-kb` / `rag-cache`
   indexes on first use.
@@ -349,8 +352,8 @@ state bucket first).
   on the local `v1.5.7`. Design target is `>= 1.6.0` — bump in CI/prod.
 - **AWS provider pin**: `~> 5.95` (design mentioned `~> 5.60`), raised to satisfy
   the registry VPC module's floor. Still within the 5.x line.
-- **Remote-state bootstrap**: Option B (`bootstrap/` config) is not yet written;
-  Option A (CLI) is the current path.
+- **Remote-state bootstrap**: Option B (`bootstrap/` config) is not yet written.
+  The `dev` backend was created with Option A (CLI, us-east-1).
 - **Lambda packaging**: real artifact build/`source_code_hash` wiring is a
   CI responsibility; the module validates with a placeholder zip.
 

@@ -45,10 +45,9 @@ To exercise serverless mode **locally** (real Bedrock + local OpenSearch/Redis,
 no AWS deploy), see [docs/SERVERLESS_LOCAL.md](docs/SERVERLESS_LOCAL.md).
 
 The AWS infrastructure is defined as Terraform under
-[`infrastructure/terraform/`](infrastructure/terraform/). It has been written and
-validated but **not yet deployed** — a one-time remote-state backend bootstrap
-(an S3 state bucket + DynamoDB lock table) is required before the first
-`terraform init`. The full prerequisites, backend bootstrap, and
+[`infrastructure/terraform/`](infrastructure/terraform/). It is validated and
+planned for `dev`, and the remote-state backend (S3 + DynamoDB) is bootstrapped.
+It is **not yet applied**. The prerequisites, backend bootstrap, and
 deploy/teardown workflow are documented in
 [infrastructure/terraform/DEPLOYMENT.md](infrastructure/terraform/DEPLOYMENT.md).
 

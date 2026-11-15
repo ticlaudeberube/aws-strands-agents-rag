@@ -1,12 +1,14 @@
 # Serverless Deployment Guide (AWS, Terraform)
 
-Status: **infrastructure code complete and validated, NOT yet deployed.**
+Status: **infrastructure code complete, validated, and planned for `dev`; NOT yet applied.**
 
 This guide is the pick-up point for deploying the serverless (AWS) mode of the
-Strands Agents RAG application. All Terraform has been written and passes
-`terraform validate` / `terraform fmt`, but nothing has been applied to AWS yet
-because this environment has no AWS credentials and the Terraform remote-state
-backend has not been bootstrapped.
+Strands Agents RAG application. The Terraform passes `terraform validate` and
+`terraform fmt`. The remote-state backend (S3 bucket `strands-rag-tfstate` and
+DynamoDB lock table `strands-rag-tflock`, us-east-1) exists. `terraform plan`
+for `dev` adds the full stack and changes or destroys nothing. Nothing has been
+applied, so no stack resources exist yet. Next steps: apply, then add users as
+described in [AUTHENTICATION.md](AUTHENTICATION.md#adding-users).
 
 Read this top-to-bottom before your first deploy. The ordering matters.
 
@@ -62,8 +64,9 @@ and lock table are a **one-time bootstrap** you create first.
 > Terraform during `apply`. The *backend* bucket (`strands-rag-tfstate`) must
 > pre-exist and only stores Terraform's own state.
 
-All validation so far used `terraform init -backend=false`, which skips the
-remote backend entirely and just checks the config locally.
+Local validation uses `terraform init -backend=false`, which skips the remote
+backend and checks only the configuration. Plan and apply need the real backend,
+so run `terraform init` without that flag.
 
 ---
 
@@ -251,14 +254,9 @@ aws cloudfront create-invalidation --distribution-id "$DIST_ID" --paths '/*'
 ```
 
 ### 6e. Sign in
-The app does not provide its own username/password form. Selecting **Sign in**
-redirects the browser to the Cognito managed-login page, which supports
-Cognito-hosted sign-up and sign-in. Terraform registers the CloudFront origin as
-the app client's OAuth callback and sign-out URL. The public app client uses
-the authorization code flow with PKCE and has no client secret. After
-authentication, Cognito redirects back to that same CloudFront origin; do not
-change the frontend hostname without updating the app client's callback and
-sign-out URLs.
+Sign-in uses Cognito managed login with invite-only sign-up. Admins create users
+with `aws cognito-idp admin-create-user`. The full flow, user management and
+troubleshooting are in [AUTHENTICATION.md](AUTHENTICATION.md).
 
 ---
 

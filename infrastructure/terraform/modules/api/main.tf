@@ -28,6 +28,18 @@ resource "aws_cognito_user_pool" "this" {
   username_attributes      = ["email"]
   auto_verified_attributes = ["email"]
 
+  # Invite-only: users cannot self-register. An administrator creates each
+  # account with `aws cognito-idp admin-create-user`, and Cognito emails a
+  # temporary password.
+  admin_create_user_config {
+    allow_admin_create_user_only = true
+  }
+
+  # Cognito default email delivery (limited daily send quota, no SES setup).
+  email_configuration {
+    email_sending_account = "COGNITO_DEFAULT"
+  }
+
   # Req 7.1: minimum length 12, require uppercase, require numbers (digits),
   # and require symbols (special characters).
   password_policy {

@@ -16,7 +16,7 @@ Consolidated checklist of everything still open (details in the sections below).
 Resolved items (#1, #2, #9b) are omitted.
 
 **Deploy blockers**
-- [ ] #3 Bootstrap the Terraform remote-state backend (S3 bucket + DynamoDB lock) by hand.
+- [x] #3 Bootstrap the Terraform remote-state backend (S3 bucket + DynamoDB lock) by hand. Done for us-east-1 on 2026-11-15.
 - [ ] #4 Run `terraform plan` / `apply` (nothing is deployed yet).
 - [ ] #2 (follow-up) Wire the CI-built `lambda-package` artifact into the actual apply.
 
@@ -84,16 +84,15 @@ Terraform via `lambda_package_path` / `lambda_source_code_hash` on apply (see
 DEPLOYMENT.md Step 2). Remaining manual step: wire the artifact into the actual
 deploy pipeline/apply.
 
-### 3. ❌ Terraform remote-state backend not bootstrapped
-`backend.tf` points at an S3 bucket (`strands-rag-tfstate`) + DynamoDB lock
-table (`strands-rag-tflock`) that must be **created by hand once** before the
-first `terraform init` (chicken-and-egg; Terraform can't create its own state
-store). See DEPLOYMENT.md Step 1.
+### 3. ✅ Terraform remote-state backend bootstrapped
+`backend.tf` points at S3 bucket `strands-rag-tfstate` and DynamoDB lock table
+`strands-rag-tflock`. Both were created by hand in us-east-1 on 2026-11-15
+(Terraform cannot create its own state store). See DEPLOYMENT.md Step 1.
 
 ### 4. ❌ Nothing has been deployed
-No `terraform plan`/`apply` has run. The whole stack (VPC, OpenSearch
-Serverless, ElastiCache, Lambda, API Gateway, Cognito, CloudFront, S3, WAF) is
-unprovisioned.
+`terraform plan` for `dev` has run and adds the whole stack with no changes. No
+`apply` has run. The stack (VPC, OpenSearch Serverless, ElastiCache, Lambda, API
+Gateway, Cognito, CloudFront, S3, WAF) is unprovisioned.
 
 ---
 
@@ -200,6 +199,6 @@ target is `>= 1.6.0`. Bump in CI/prod.
    if switching to Claude.
 3. ~~Wire CI to build the real Lambda zip (#2)~~ — ✅ done; still wire the
    artifact into the actual apply.
-4. **Bootstrap the state backend** (#3), then `plan`/`apply` (#4).
+4. **Apply the planned `dev` stack** (#4), since the state backend (#3) is bootstrapped.
 5. Populate **secrets** (#7), confirm the **AOSS data-access policy** (#9), then
    **upload documents** to populate the KB (#10).

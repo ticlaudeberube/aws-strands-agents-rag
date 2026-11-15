@@ -20,6 +20,7 @@ This is the current, active documentation set for the project.
 ## Deployment
 
 - [DEPLOYMENT.md](DEPLOYMENT.md) — serverless/AWS deployment overview
+- [AUTHENTICATION.md](AUTHENTICATION.md) — Cognito sign-in, invite-only user management, API JWT authorization
 - [infrastructure/terraform/DEPLOYMENT.md](../infrastructure/terraform/DEPLOYMENT.md) — Terraform deployment runbook (prerequisites, state bootstrap, deploy and teardown)
 - [docker/README.md](../docker/README.md) — the local Docker stack (OpenSearch, Redis, DynamoDB Local)
 - [SERVERLESS_LOCAL.md](SERVERLESS_LOCAL.md) — run serverless mode locally (real Bedrock + local OpenSearch/Redis)
@@ -27,6 +28,7 @@ This is the current, active documentation set for the project.
 
 ## Interfaces and tooling
 
+- [MCP_USAGE.md](MCP_USAGE.md) — the MCP servers Kiro uses on this project, and when to enable each
 - MCP server: the `/api/mcp/*` REST surface (see [API_SERVER.md](API_SERVER.md)) exposes the agent's tools (`src/mcp/mcp_server.py`)
 - Document ingestion (corpus seed): `uv run python document_loaders/load_docs_opensearch.py` (see [HOW_TO.md](HOW_TO.md))
 - Document ingestion (local OpenSearch): `uv run python scripts/ingest_local_opensearch.py` (see [GETTING_STARTED.md](GETTING_STARTED.md))

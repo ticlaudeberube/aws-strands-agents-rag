@@ -128,7 +128,7 @@ flowchart LR
     cf -->|"OAC · frontend/ only"| frontendbucket
     user -->|"HTTPS · SPA"| cf
     user -->|"Sign in button · redirect"| cognito
-    cognito -->|"Hosted sign-in / sign-up · OAuth callback + tokens"| cf
+    cognito -->|"Hosted sign-in · OAuth callback + tokens"| cf
     user -->|"HTTPS API request"| apiwaf
     apiwaf -->|"WAF-associated API stage"| apigw
     apigw -->|"GET /health"| health
@@ -180,8 +180,9 @@ Bedrock, OpenSearch Serverless, Secrets Manager, S3, and DynamoDB uses the VPC
 endpoints shown; Redis is reached directly inside the VPC. Redis and
 OpenSearch are not publicly reachable. The frontend has no username/password
 form: its sign-in button redirects to Cognito managed login, which returns to
-the registered frontend callback. Local development remains unauthenticated by
-default and does not include Cognito sign-in.
+the registered frontend callback. Sign-up is invite-only. See [AUTHENTICATION.md](AUTHENTICATION.md) for the
+sign-in flow, user management and token handling. Local development bypasses auth entirely, with no Cognito
+sign-in and no JWT check.
 
 ### Bedrock Guardrails
 

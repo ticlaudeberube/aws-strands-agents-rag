@@ -17,6 +17,7 @@ through `uv` from the project root, e.g. `uv run python scripts/check_setup.py`.
 | Script | Purpose |
 |--------|---------|
 | `ingest_local_opensearch.py` | Chunk + embed (Ollama) + index documents into the local OpenSearch `rag-kb` index. Supports a demo seed and an arbitrary `--docs <dir>` directory. |
+| `ingest_serverless_opensearch.py` | Chunk + embed (Bedrock Titan + projection) + index documents into the OpenSearch Serverless `rag-kb` index. Refuses any endpoint that is not an `*.aoss.amazonaws.com` host. Uses the same embedding space as the Lambda. See [VECTORIZATION.md](../docs/VECTORIZATION.md#21a-serverless-direct-script-scriptsingest_serverless_opensearchpy). |
 
 See also the standalone corpus loader
 `document_loaders/load_docs_opensearch.py` (seeds the `milvus_docs` knowledge-base

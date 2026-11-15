@@ -135,6 +135,14 @@ uv run python scripts/ingest_local_opensearch.py --docs ./data/docs
 uv run python api_server.py
 ```
 
+To ingest into OpenSearch Serverless instead, use the serverless script. It uses
+Bedrock Titan and refuses any endpoint that is not a serverless collection. Local
+and serverless vectors are not interchangeable, so use one script per target:
+```bash
+export OPENSEARCH_ENDPOINT=https://<collection-id>.<region>.aoss.amazonaws.com
+uv run python scripts/ingest_serverless_opensearch.py --docs ./data/docs
+```
+
 The Layer 2/3 cache defaults to in-process (`InMemoryCache`); set
 `REDIS_CACHE_ENABLED=true` (with a local Redis on `REDIS_ENDPOINT`, default
 `localhost:6379`) to use Redis instead for a fuller prod-parity backend set.

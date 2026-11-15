@@ -268,10 +268,11 @@ troubleshooting are in [AUTHENTICATION.md](AUTHENTICATION.md).
 2. **AWS provider pin**: pinned `~> 5.95` (design mentioned `~> 5.60`) to satisfy
    the registry VPC module's `>= 5.79` floor. Still the 5.x line.
 3. **Bedrock embedding dimension**: Titan returns 1536-dim; the OpenSearch index
-   is 768-dim to match the local `nomic-embed-text:v1.5` dimension. A
-   deterministic PCA projection (built-in, or a matrix from
-   `BEDROCK_PCA_MATRIX_URI`) reduces 1536→768. If you change embedding models,
-   revisit this.
+   is 768-dim. A fixed projection (built-in, or a matrix from
+   `BEDROCK_PCA_MATRIX_URI`) reduces 1536→768. The built-in projection is a
+   random orthogonal matrix, not PCA. See [VECTORIZATION.md](VECTORIZATION.md)
+   for the full pipeline and the embedding-space constraints. If you change
+   embedding models, revisit this.
 4. **WAF rate limit**: Req 6.4 says "100 rps". API Gateway stage throttling is
    the primary 100-rps enforcement; the WAF rate-based rule is defense-in-depth
    over a 60s window (~6000 req/IP/min). Tune to taste.

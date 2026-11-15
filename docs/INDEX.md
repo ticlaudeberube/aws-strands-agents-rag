@@ -8,6 +8,7 @@ This is the current, active documentation set for the project.
 - [HOW_TO.md](HOW_TO.md) — practical setup and usage guide
 - [GETTING_STARTED.md](GETTING_STARTED.md) — installation and environment setup
 - [ARCHITECTURE.md](ARCHITECTURE.md) — mode selection, runtime flow, and AWS serverless architecture graph
+- [VECTORIZATION.md](VECTORIZATION.md) — embedding pipeline in both modes, embedding-space constraints, S3-free import options, and optimization notes
 - [API_SERVER.md](API_SERVER.md) — API contract and sample requests
 - [CHATBOT_GUI_FEATURES.md](CHATBOT_GUI_FEATURES.md) — chatbot UI behavior and feature reference
 
@@ -33,6 +34,7 @@ This is the current, active documentation set for the project.
 - MCP server: the `/api/mcp/*` REST surface (see [API_SERVER.md](API_SERVER.md)) exposes the agent's tools (`src/mcp/mcp_server.py`)
 - Document ingestion (corpus seed): `uv run python document_loaders/load_docs_opensearch.py` (see [HOW_TO.md](HOW_TO.md))
 - Document ingestion (local OpenSearch): `uv run python scripts/ingest_local_opensearch.py` (see [GETTING_STARTED.md](GETTING_STARTED.md))
+- Document ingestion (OpenSearch Serverless, Bedrock Titan): `uv run python scripts/ingest_serverless_opensearch.py` (see [GETTING_STARTED.md](GETTING_STARTED.md) and [VECTORIZATION.md](VECTORIZATION.md))
 - Tests: [tests/README.md](../tests/README.md) — test layout, markers, and commands; E2E setup in [chatbots/react-chatbot/e2e/README.md](../chatbots/react-chatbot/e2e/README.md)
 
 ## Quick decisions

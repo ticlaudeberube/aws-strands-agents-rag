@@ -367,20 +367,60 @@ rejected, and nothing reports it.
 
 **Acceptance:** A forced embedding failure raises the alarm.
 
-## 21. Recalibrate when the PCA matrix changes
+## 21. Evaluate a fitted PCA projection (candidate)
 
-**Status:** Waiting on a decision.
+**Status:** Candidate, not adopted. The evaluation scripts and the fitted matrix
+were removed from the repo. The raw Titan vectors remain in `data/pca/`
+(gitignored, 4.9 MB, including `titan_raw_chunks.npz`), so the evaluation can be
+rebuilt without re-calling Bedrock for the chunks.
 
-The serverless thresholds were measured with the built-in deterministic PCA
-projection, because no matrix file is committed. If `BEDROCK_PCA_MATRIX_URI` is
-set to a real matrix, the Titan vectors change.
+The serverless projection is a random orthogonal matrix. A matrix fitted by
+SVD on the corpus (the top 768 right singular vectors of 636 Titan chunk vectors
+from `document_loaders/milvus_docs/en`) measured as follows:
 
-- Re-run the Titan rows of `scripts/eval_scope.py` on both sets.
-- Update the serverless threshold default in `Settings.resolved_scope_threshold`
-  if the best value moves.
+- Neighbour recall@10 against full 1536-dim cosine, on held-out chunks: random
+  0.918 and 0.921; fitted PCA 0.994 and 0.996. The two splits were a random chunk
+  split (159 queries) and a split by source document (152 chunks, 56 files).
+- Retrieval recall@5 over 8 in-scope questions, in a local test index: random
+  0.875, fitted PCA 1.000. The sample is small.
+- Scope gate accuracy at threshold 0.35 over 76 labeled questions: random 0.868,
+  fitted PCA 0.855, a difference of one question out of 76. The best accuracy for either projection was 0.934, at thresholds 0.24 (random) and
+  0.25 (PCA).
 
-**Acceptance:** The Titan rows in [EVAL_LOCAL.md](EVAL_LOCAL.md) match the matrix in
-use.
+The fitted matrix has rank 635 on 636 chunks. The earlier held-out fit reached
+rank 476 and left 292 of 768 output columns as random completion. A larger corpus
+would give the fit a fuller basis.
+
+**Why it is not in use:** The fitted projection improved retrieval recall, but the
+gain was measured on a small sample of 8 questions. The scope gate, the
+production control for out-of-scope queries, did not improve (0.855 against 0.868).
+Adopting the fit changes every stored vector and forces a full re-index. The fit
+also depends on the corpus, so each document change would require a refit and
+another re-index. The random projection already meets the current scope-gate
+calibration, so the gain did not justify that cost. Revisit when the evaluation
+shows a clear improvement on the scope gate, or when the corpus grows enough to
+make the fit stable.
+
+**Adopting it requires:**
+- Re-indexing every document in `rag-kb` and `rag-cache`, because every stored
+  vector changes.
+- Loading the same matrix file in local and serverless through
+  `BEDROCK_PCA_MATRIX_URI`, and bundling it in the Lambda package.
+- Refitting and re-indexing whenever the corpus changes, since the fit depends on
+  the documents.
+- Re-running the scope-gate evaluation (`eval/scope_labels.jsonl` and
+  `eval/scope_heldout.jsonl`) and updating the serverless threshold in
+  `Settings.resolved_scope_threshold` if the best value moves.
+
+**Acceptance:** Scope gate accuracy and retrieval recall on the labeled sets are
+at least as good as the random projection, measured with the same harness on the
+same chunks, before any production index is rebuilt. The Titan rows in
+[EVAL_LOCAL.md](EVAL_LOCAL.md) match the matrix in use.
+
+**Note:** The fit and evaluation scripts were deleted, so the harness must be
+rewritten before this candidate can be measured again. Drop the leftover local test
+indexes with `curl -X DELETE localhost:9200/rag-kb-ctl-rand,rag-kb-ctl-pca` if
+they still exist.
 
 ## Operational notes
 

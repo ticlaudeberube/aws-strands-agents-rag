@@ -9,11 +9,12 @@ an exception blocks the query instead of letting it through.
 from __future__ import annotations
 
 import logging
-import re
 import math
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from src.agents.history import last_user_turn
 from src.agents.topic_scope import OUT_OF_SCOPE_ANSWER, is_question_in_scope
 
 logger = logging.getLogger(__name__)
@@ -187,20 +188,7 @@ def _cosine(a: list[float], b: list[float]) -> float:
     return dot / (norm_a * norm_b)
 
 
-def _last_user_turn(history: list[dict] | None) -> str | None:
-    """Return the most recent user question from history, or None.
-
-    Accepts both ``{"question": ..., "answer": ...}`` rows (serverless DynamoDB)
-    and ``{"role": ..., "content": ...}`` messages.
-    """
-    for turn in reversed(history or []):
-        question = turn.get("question")
-        if isinstance(question, str) and question.strip():
-            return question
-        content = turn.get("content")
-        if turn.get("role") == "user" and isinstance(content, str) and content.strip():
-            return content
-    return None
+_last_user_turn = last_user_turn
 
 
 class ScopeGate:

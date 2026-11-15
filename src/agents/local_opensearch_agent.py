@@ -30,6 +30,14 @@ logger = logging.getLogger(__name__)
 __all__ = ["LocalOpenSearchAgent"]
 
 
+def _history_kwargs(history: list[dict] | None) -> dict[str, list[dict]]:
+    """Return ``{"history": ...}`` only when prior turns were supplied.
+
+    Callers without history keep the exact keyword set they sent before.
+    """
+    return {"history": history} if history else {}
+
+
 class _OpenSearchCacheQueryClient:
     """``client``-shaped shim exposing ``query(...)`` over rag-cache.
 
@@ -186,12 +194,14 @@ class LocalOpenSearchAgent:
         top_k: int,
         temperature: float | None,
         max_tokens: int | None,
+        history: list[dict] | None = None,
     ) -> Any:
         result = self._shared_route(
             question,
             top_k=top_k,
             temperature=temperature,
             max_tokens=max_tokens,
+            **_history_kwargs(history),
         )
         self._last_stream_tier = result.tier_used
         return result
@@ -203,9 +213,10 @@ class LocalOpenSearchAgent:
         top_k: int = 5,
         temperature: float | None = None,
         max_tokens: int | None = None,
+        history: list[dict] | None = None,
         **_kwargs: Any,
     ) -> dict:
-        result = self._run(question, top_k, temperature, max_tokens)
+        result = self._run(question, top_k, temperature, max_tokens, history)
         return {"answer": result.answer, "sources": result.sources}
 
     async def answer_question_no_cache(
@@ -215,9 +226,10 @@ class LocalOpenSearchAgent:
         top_k: int = 5,
         temperature: float | None = None,
         max_tokens: int | None = None,
+        history: list[dict] | None = None,
         **_kwargs: Any,
     ) -> tuple[str, list[dict]]:
-        result = self._run(question, top_k, temperature, max_tokens)
+        result = self._run(question, top_k, temperature, max_tokens, history)
         return result.answer, result.sources
 
     async def stream_answer(
@@ -227,9 +239,10 @@ class LocalOpenSearchAgent:
         top_k: int = 5,
         temperature: float | None = None,
         max_tokens: int | None = None,
+        history: list[dict] | None = None,
         **_kwargs: Any,
     ):  # noqa: ANN201
-        result = self._run(question, top_k, temperature, max_tokens)
+        result = self._run(question, top_k, temperature, max_tokens, history)
         sources = list(result.sources)
         if result.cache_hit:
             for s in sources:
@@ -244,9 +257,10 @@ class LocalOpenSearchAgent:
         top_k: int = 5,
         temperature: float | None = None,
         max_tokens: int | None = None,
+        history: list[dict] | None = None,
         **_kwargs: Any,
     ):  # noqa: ANN201
-        result = self._run(question, top_k, temperature, max_tokens)
+        result = self._run(question, top_k, temperature, max_tokens, history)
         self._last_stream_sources = list(result.sources)
         yield result.answer
 
@@ -258,6 +272,7 @@ class LocalOpenSearchAgent:
         question: str,
         temperature: float | None = None,  # noqa: ARG002
         max_tokens: int | None = None,  # noqa: ARG002
+        history: list[dict] | None = None,
         **_kwargs: Any,
     ):  # noqa: ANN201
         """Force-web path. Delegates to the graph's force_web_search route."""
@@ -269,7 +284,7 @@ class LocalOpenSearchAgent:
             self._last_stream_tier = block.tier
             yield block.answer
             return
-        if self._scope_gate is not None and not self._scope_gate.allows(question):
+        if self._scope_gate is not None and not self._scope_gate.allows(question, None, history):
             self._last_stream_tier = "topic"
             yield OUT_OF_SCOPE_ANSWER
             return
@@ -280,7 +295,7 @@ class LocalOpenSearchAgent:
                 "and TAVILY_API_KEY, then restart."
             )
             return
-        result = self._shared_route(question, force_web_search=True)
+        result = self._shared_route(question, force_web_search=True, **_history_kwargs(history))
         self._last_stream_sources = list(result.sources)
         yield result.answer
 
@@ -289,6 +304,7 @@ class LocalOpenSearchAgent:
         question: str,
         temperature: float | None = None,  # noqa: ARG002
         max_tokens: int | None = None,  # noqa: ARG002
+        history: list[dict] | None = None,
     ) -> tuple[str, list[dict]]:
         """Sync force-web answer (non-streaming chat path). Returns (answer, sources)."""
         from src.agents.guardrails import OUT_OF_SCOPE_ANSWER, screen_security
@@ -297,7 +313,7 @@ class LocalOpenSearchAgent:
         if block is not None:
             self._last_stream_tier = block.tier
             return block.answer, []
-        if self._scope_gate is not None and not self._scope_gate.allows(question):
+        if self._scope_gate is not None and not self._scope_gate.allows(question, None, history):
             self._last_stream_tier = "topic"
             return OUT_OF_SCOPE_ANSWER, []
         if self.web_search is None:
@@ -307,7 +323,7 @@ class LocalOpenSearchAgent:
                 "and TAVILY_API_KEY, then restart.",
                 [],
             )
-        result = self._shared_route(question, force_web_search=True)
+        result = self._shared_route(question, force_web_search=True, **_history_kwargs(history))
         self._last_stream_tier = result.tier_used
         return result.answer, list(result.sources)
 

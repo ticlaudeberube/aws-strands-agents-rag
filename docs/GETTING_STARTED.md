@@ -98,6 +98,15 @@ Set `SCOPE_SIMILARITY_THRESHOLD` to override the mode default: `0.50` for local
 (`nomic-embed-text`) and `0.35` for serverless (Titan). Change it only after
 re-running `scripts/eval_scope.py` on both labeled sets.
 
+### Follow-up history depth
+
+`FOLLOWUP_USER_TURNS` (code default `3`, range 1-20) sets how many recent user
+questions are joined into the search text for a follow-up. The same value applies
+in local and serverless mode. The project `.env` and `.env.serverless-local` set it
+to `10`, the value measured in [EVAL_LOCAL.md](EVAL_LOCAL.md#long-history-cases-depth-3-vs-depth-10).
+Deployments that do not read those files (for example Lambda) use the code default
+unless the variable is set in their environment.
+
 ### Local vector backend (OpenSearch)
 
 In local mode the vector store is a local OpenSearch container, matching the

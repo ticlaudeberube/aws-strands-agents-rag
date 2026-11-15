@@ -437,6 +437,16 @@ class Settings(BaseSettings):
         validation_alias="TAVILY_API_KEY",
     )  # Tavily API key for web search (reads TAVILY_API_KEY from .env)
 
+    # Follow-ups: how many recent user questions are joined into the standalone
+    # search text (scope check, embedding, KB search) when no condenser is used.
+    followup_user_turns: int = Field(
+        default=3,
+        ge=1,
+        le=20,
+        validation_alias="FOLLOWUP_USER_TURNS",
+        description="Recent user questions joined for follow-up retrieval and scope (1-20).",
+    )
+
     # Scope gate: minimum cosine similarity between the query embedding and the
     # in-scope anchor descriptions (src/agents/guardrails.py). Unset uses the
     # mode default, calibrated on eval/scope_labels.jsonl and eval/scope_heldout.jsonl.

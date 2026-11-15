@@ -51,6 +51,22 @@ The `POST /v1/chat/completions` endpoint also accepts a `bypass_cache` query
 parameter (default `false`); set it to `true` to skip all caches and query the
 LLM directly, e.g. `POST /v1/chat/completions?bypass_cache=true`.
 
+### Follow-up questions
+
+Send the whole conversation in `messages`. Every turn before the final user
+message is treated as prior context, so a follow-up such as "What can I do with
+it?" after "What is a vector database?" is answered in context.
+
+- The final user message is the current question and is never counted as history.
+- For a follow-up, the scope check, embedding, and KB search use the most recent
+  `FOLLOWUP_USER_TURNS` user questions (default 3) joined to the current question.
+  Generation also sees a transcript of recent turns.
+- Follow-ups skip every cache layer, for both lookup and write. Their answers
+  depend on the conversation, so they are not shared with other requests.
+- Applies to `POST /v1/chat/completions`, `POST /v1/chat/completions/stream`, and
+  `force_web_search` requests. Serverless (`POST /chat`) uses DynamoDB session
+  history instead of `messages`; see [ARCHITECTURE.md](ARCHITECTURE.md).
+
 ## Request fields
 
 The live request model in `api_server.py` includes:

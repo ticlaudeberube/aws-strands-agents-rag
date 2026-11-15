@@ -34,7 +34,7 @@ npm start  # or: ./build.sh dev
 - 📱 Responsive design
 - 🔌 Automatic API health checks
 
-**Documentation**: See [react-chatbot/README.md](react-chatbot/README.md) and [docs/REACT_DEPLOYMENT.md](../docs/REACT_DEPLOYMENT.md)
+**Documentation**: See [react-chatbot/README.md](react-chatbot/README.md) and [REACT_CHATBOT_BUILD_SCRIPT.md](REACT_CHATBOT_BUILD_SCRIPT.md)
 
 ### Deployment Options
 - **Local**: `npm start`
@@ -44,7 +44,7 @@ npm start  # or: ./build.sh dev
 ## Interactive Python CLI Chatbot
 
 ```bash
-python chatbot/interactive_chat.py
+uv run python chatbots/interactive_chat.py
 ```
 
 ### Requirements

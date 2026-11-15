@@ -17,8 +17,8 @@ Read this top-to-bottom before your first deploy. The ordering matters.
 Done:
 - Application code for both modes (local Ollama/vector DB/FastAPI + serverless
   Bedrock/OpenSearch/Lambda), selected by `DEPLOYMENT_MODE`.
-- Full Terraform stack under `infrastructure/terraform/` (six modules:
-  networking, data, compute, api, frontend, observability).
+- Full Terraform stack under `infrastructure/terraform/` (seven modules:
+  networking, data, guardrails, compute, api, frontend, observability).
 - `terraform validate` + `terraform fmt -check` pass for the whole root module.
 
 Left to do before the app runs in AWS (all covered below):
@@ -77,7 +77,7 @@ remote backend entirely and just checks the config locally.
 - **Node.js + npm** (to build the React frontend).
 - **Python 3.12** + the project deps (to package the Lambdas).
 - **Amazon Bedrock model access** enabled in your target region for
-  `anthropic.claude-3-haiku-20240307-v1:0` and `amazon.titan-embed-text-v1`
+  `amazon.nova-lite-v1:0` (default) and `amazon.titan-embed-text-v1`
   (request access in the Bedrock console — this is per-account/per-region and
   easy to forget).
 
@@ -147,7 +147,7 @@ Rough shape (adjust to your packaging tooling):
 ```bash
 # From the repo root. Produces a zip containing src/ + installed deps.
 mkdir -p build/lambda
-pip install -r requirements.txt -t build/lambda        # or use a Lambda layer
+pip install -r infrastructure/lambda/requirements-lambda.txt -t build/lambda   # or use infrastructure/lambda/build_lambda_package.sh
 cp -r src build/lambda/
 ( cd build/lambda && zip -r ../lambda.zip . )
 ```
@@ -246,7 +246,8 @@ REACT_APP_AUTH_ENABLED="true" \
 npm run build
 
 aws s3 sync build/ s3://<documents_bucket_id>/frontend/ --delete
-aws cloudfront create-invalidation --distribution-id <cloudfront_distribution_id> --paths '/*'
+DIST_ID=$(aws cloudfront list-distributions --query "DistributionList.Items[?DomainName=='<cloudfront_domain>'].Id" --output text)
+aws cloudfront create-invalidation --distribution-id "$DIST_ID" --paths '/*'
 ```
 
 ### 6e. Sign in
@@ -304,7 +305,7 @@ infrastructure/terraform/
 ├── backend.tf          # S3 remote state + DynamoDB lock (bootstrap required)
 ├── versions.tf         # terraform + aws provider pins
 ├── variables.tf        # root inputs (stage, region, models, node types, ...)
-├── main.tf             # composes the six modules
+├── main.tf             # composes the seven modules
 ├── outputs.tf          # api_endpoint, cloudfront_domain, user_pool_*, ...
 ├── environments/       # dev.tfvars, staging.tfvars, prod.tfvars
 └── modules/

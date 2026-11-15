@@ -300,7 +300,7 @@ complete.
   `shared_route`, which still consults the semantic cache.
 - **Non-stream force-web / bypass-cache chat paths** aren't backed (the GUI uses
   streaming, so these aren't exercised).
-- **Multi-turn memory IS implemented — on the serverless path only.**
+- **Multi-turn memory IS implemented in both modes.**
   `route_rag_query` / `shared_route` accept an optional `history`, and a compact
   transcript of recent turns is prepended to the generation prompt so
   pronouns/references resolve (e.g. "what are *its* parameters?" after asking
@@ -314,9 +314,9 @@ complete.
   own; it relies on the request's `conversation_history`.
 - **DynamoDB session persistence IS wired** — the shim builds a local
   `DynamoDBClient` and, when a `session_id` is supplied, loads history before
-  and persists the Q/A turn after answering, matching the Lambda. Note the GUI's
-  chat handler does not currently pass a `session_id`, so history-aware answers
-  are exercised by the Lambda-handler harness (Option C) rather than the browser.
+  and persists the Q/A turn after answering, matching the Lambda. The GUI sends
+  its message list, which the shim uses in place of the stored session when the
+  request carries prior turns. Follow-ups are therefore checkable in the browser.
 - **MCP endpoints, `/health/detailed`, cache stats, competitor-query handling**
   — not implemented; those endpoints return empty or error if called.
 

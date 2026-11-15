@@ -9,9 +9,9 @@ The current codebase supports two deployment modes with the same core Strands wo
 
 ```text
 User query
-  -> security screen, then scope gate (embedding anchors)
-  -> RAGWorker (shared_route: cache -> KB -> web)
-     -> [hard-block hook: cancels tool calls on a security/injection attempt]
+  -> topic check and security check (graph nodes, keyword and pattern checks)
+  -> route_rag_query: follow-up search text, embedding scope gate (embedding anchors)
+  -> cache -> KB -> web (shared_route)
      -> retrieval backend (hybrid BM25 + vector k-NN by default; HYBRID_SEARCH_ENABLED)
      -> answer generation
      -> grounding check
@@ -19,10 +19,18 @@ User query
      -> source output
 ```
 
-The Strands graph is the shared application flow. The hard-block hook and the
-grounding retry are anti-hallucination defenses; see
-[docs/ANTI_HALLUCINATION.md](ANTI_HALLUCINATION.md) (Layers 3 and 4b) for the
-full design. The difference between modes is the backend wiring, not the agent logic itself.
+The Strands graph is the shared application flow. The grounding retry and the
+scope and security checks are anti-hallucination defenses; see
+[docs/ANTI_HALLUCINATION.md](ANTI_HALLUCINATION.md) (Layers 3 and 4) for the
+full design.
+
+Follow-up questions (requests with prior turns) are handled in the shared router.
+The router builds one standalone search text from the most recent
+`FOLLOWUP_USER_TURNS` user questions (default 3) and the current question. That
+text drives the scope check, embedding, and KB search. Follow-ups skip every cache
+layer. Generation sees a transcript of recent turns. A condenser that rewrites
+the follow-up with a model exists but is off by default (`CONDENSE_FOLLOWUPS`);
+see [EVAL_LOCAL.md](EVAL_LOCAL.md#multi-hop-condenser-evaluation). The difference between modes is the backend wiring, not the agent logic itself.
 The graph uses a vector-store role rather than requiring one vendor's product.
 OpenSearch is the vector engine in both modes — a local OpenSearch container for
 local mode and OpenSearch Serverless for AWS mode; another provider needs a
@@ -63,8 +71,8 @@ Local mode is the default path for development and debugging.
 ## Serverless AWS mode
 
 Serverless mode is the cloud deployment path. The graph below reflects the
-Terraform-defined stack; [ADR-001](../ADR/ADR-001) records that the initial
-cloud deployment is still pending.
+Terraform-defined stack. The initial cloud deployment is still pending; see
+[AWS_DEPLOYMENT_GAPS.md](AWS_DEPLOYMENT_GAPS.md).
 
 - API Gateway HTTP API, with Cognito JWT authorization for chat requests
 - VPC-attached chat and document-indexing Lambda functions

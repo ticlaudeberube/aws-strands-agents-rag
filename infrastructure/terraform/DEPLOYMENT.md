@@ -13,7 +13,7 @@ API Gateway + DynamoDB + ElastiCache Redis + Cognito + CloudFront + S3).
 
 ## TL;DR — current status
 
-- All six Terraform modules are written and **`terraform validate` passes**.
+- All seven Terraform modules are written and **`terraform validate` passes**.
 - **Nothing has been deployed to AWS.** No `terraform plan`/`apply` has run.
 - No AWS credentials are configured in this environment.
 - The **Terraform remote-state backend does not exist yet** (see below). This is
@@ -87,8 +87,8 @@ remote state bucket and only validate the configuration locally.
    to `required_version >= 1.5.0`. The design target is `>= 1.6.0` — bump this in
    CI/prod. The aws provider is pinned `~> 5.95`.
 3. **Amazon Bedrock model access** enabled in the target region for
-   `anthropic.claude-3-haiku-20240307-v1:0` and `amazon.titan-embed-text-v1`
-   (and Claude 3 Sonnet if `bedrock_model_override` is used in prod).
+   `amazon.nova-lite-v1:0` (the default; `environments/prod.tfvars` overrides it with
+   `amazon.nova-pro-v1:0`) and `amazon.titan-embed-text-v1`.
 4. The **Lambda deployment package(s)** built. The compute module uses a
    placeholder zip for `validate`; a real deploy supplies the built artifact via
    the `lambda_package_path` / `lambda_source_code_hash` variables (see
@@ -335,6 +335,7 @@ state bucket first).
 | `environments/*.tfvars` | Per-environment values (dev/staging/prod) |
 | `modules/networking` | VPC, private subnets, VPC endpoints, security groups |
 | `modules/data` | DynamoDB tables (session, analytics, **thresholds**), OpenSearch Serverless collection, ElastiCache Redis |
+| `modules/guardrails` | Bedrock Guardrail and its immutable version (content, PII, and grounding filters) |
 | `modules/compute` | Lambda chat + indexing functions, least-privilege IAM |
 | `modules/api` | API Gateway (HTTP API), Cognito user pool + JWT authorizer, WAF |
 | `modules/frontend` | S3 bucket (documents + frontend), CloudFront distribution |

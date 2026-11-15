@@ -160,7 +160,7 @@ route. Live serverless behavior is not validated; it waits on item 8.
 
 - A follow-up such as "What can I do with it?" after "What is a vector database?"
   is answered in context, not refused as off topic.
-- Retrieval embeds the last user question joined to the current one. Every cache
+- Retrieval embeds the most recent `FOLLOWUP_USER_TURNS` user questions joined to the current one. Every cache
   layer is skipped for follow-ups.
 - Generation sees a transcript of recent turns in both modes.
 - The local API forwards prior `messages` turns, the CLI keeps its own turns, and
@@ -171,7 +171,7 @@ route. Live serverless behavior is not validated; it waits on item 8.
 
 **Acceptance results:**
 
-- Unit tests (369 passing) cover the history helpers, the routing cache skip and
+- Unit tests (406 at the time of this change) cover the history helpers, the routing cache skip and
   joined retrieval, facade and endpoint forwarding, the serverless handler and
   shim, and the CLI turn helper.
 - Retrieval eval (local Ollama and OpenSearch, top 5): follow-up hit rate went
@@ -203,7 +203,8 @@ The local MLflow harness ([EVAL_LOCAL.md](EVAL_LOCAL.md)) works, but the judge
 defaults to a weak model and nothing runs the eval automatically.
 
 - **Stronger default judge.** `--judge-model` currently falls back to
-  `settings.ollama_model` (`qwen2.5:0.5b`), which is too small to grade
+  `settings.ollama_model` (`llama3.2:3b` in code; the local `.env` sets
+  `qwen2.5:0.5b`), which is too small to grade
   faithfulness reliably; the script only warns about it. Default the judge to a
   larger model (e.g. `llama3.1:8b`), configurable through a setting or env var
   so the pipeline's generation model can stay small. Document that the default
@@ -236,32 +237,23 @@ and the dashboard shows the block rate next to `answer/low_grounding`.
 
 ## 12. Commit and review the scope-gate change
 
-**Status:** Partly committed. Commit `659a08b` covers the guardrail hook removal
-and an early topic-scope change. The embedding scope gate, the security screen
-in `shared_route`, the eval scripts, and the eval data are still staged or
-modified.
+**Status:** Done. The scope gate and the security screen are committed in
+`9a9703a`. The follow-up history work and the eval scripts are committed in
+`69588c8`. Still modified and not committed: `.kiro/settings/mcp.json` (not part
+of this work) and `.env.serverless-local` (local settings). That file is tracked by git and holds a
+Tavily key: rotate the key and remove the file from git (`git rm --cached`) before
+committing changes to it.
 
-- Stage only the scope-gate files: `src/agents/guardrails.py`,
-  `src/agents/rag_routing.py`, `src/agents/strands_graph_agent.py`,
-  `src/agents/local_opensearch_agent.py`, `src/config/settings.py`,
-  `scripts/eval_scope.py`, `scripts/serverless_api_server.py`, `eval/`, the
-  related tests, and the docs.
-- Leave out files that are not part of this change unless they are reviewed:
-  `.kiro/settings/mcp.json`, `.env.serverless-local`,
-  `infrastructure/terraform/modules/guardrails/main.tf`,
-  `src/agents/bedrock_guardrails.py`, and `src/tools/bedrock_client.py`.
-- Restart the serverless server on port 8000 after the change so it loads the
-  updated startup log message.
-
-**Acceptance:** `git log` shows the scope-gate change as one or more commits, and
-`git status` lists only the files left out on purpose.
+**Acceptance:** `git log` shows the scope-gate and history commits, and `git status`
+lists only the files left out on purpose.
 
 ## 13. Local guardrail parity
 
 **Status:** Proposed; not approved.
 
-Local mode has no input screen for PII or prompt attacks, and no output screen
-beyond the grounding check. Serverless has both through Bedrock Guardrails.
+Local mode has no PII screen on input or output, and no equivalent of the Bedrock
+content filters. It runs the same regex prompt-attack check as serverless, and the
+grounding check on output. Serverless adds Bedrock Guardrails.
 
 - Add a `GUARDRAIL_PROVIDER` setting (`auto`, `bedrock`, or `local`).
 - Implement a local provider on the Ollama client that exposes the same
@@ -299,7 +291,8 @@ contain `hack` or `disregard` as part of another word are not blocked.
 
 **Status:** Not decided.
 
-The local stack uses `qwen2.5:0.5b` for both fast and RAG generation. In the
+The local `.env` uses `qwen2.5:0.5b` for both fast and RAG generation (the code
+default is `llama3.2:3b`). In the
 end-to-end check, answers were weak: some rambled, and some repeated a citation
 preamble.
 
@@ -328,9 +321,9 @@ flagged before generation, and tests cover it.
 
 **Status:** Not implemented.
 
-`src/agents/topic_scope.py` is used only by the offline baseline in
-`scripts/eval_scope.py`, and by the `topic_check` graph node. The runtime
-does not execute that node.
+`src/agents/topic_scope.py` is used by the offline baseline in `scripts/eval_scope.py`,
+by `guardrails.keyword_in_scope` (called only from the `topic_check` graph node, which
+the runtime does not execute), and for `OUT_OF_SCOPE_ANSWER` in `rag_routing.py`.
 
 - Decide whether to delete the node and its tests, or keep the keyword module as
   baseline-only with a clear label.

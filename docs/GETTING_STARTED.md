@@ -21,12 +21,14 @@ cp .env.example .env
 DEPLOYMENT_MODE=local
 ```
 
-3. Start required services:
+3. Start required services. Pull the Ollama models the defaults use, then start
+   only OpenSearch. The compose file's `rag-api` service also publishes port 8000,
+   which conflicts with `api_server.py`:
 
 ```bash
-cd docker
-docker-compose up -d
-cd ..
+ollama pull llama3.2:3b
+ollama pull nomic-embed-text:v1.5
+docker compose -f docker/docker-compose.yml up -d opensearch
 ```
 
 4. Start the API:
@@ -59,7 +61,7 @@ DEPLOYMENT_MODE=serverless
 
 ```env
 AWS_REGION=us-east-1
-BEDROCK_INFERENCE_MODEL_ID=anthropic.claude-3-haiku-20240307-v1:0
+BEDROCK_INFERENCE_MODEL_ID=amazon.nova-lite-v1:0
 BEDROCK_EMBEDDING_MODEL_ID=amazon.titan-embed-text-v1
 OPENSEARCH_ENDPOINT=https://...
 REDIS_ENDPOINT=...
@@ -81,12 +83,16 @@ uv run python chatbots/interactive_chat.py
 curl http://localhost:8000/health
 ```
 
-## Configuration notes
+## Configuration
 
 The settings file is the live source of truth for runtime selection:
 
 - `src/config/settings.py`
-- `.env.example`
+- `.env.example` (every runtime variable is listed here with its default)
+
+Key defaults in code: `llama3.2:3b` for Ollama generation, `nomic-embed-text:v1.5`
+for Ollama embeddings, `amazon.nova-lite-v1:0` for Bedrock generation, and
+`FOLLOWUP_USER_TURNS=3`. Local `.env` files may override them.
 
 The app does not rely on a legacy `use_agentcore` flag. The supported switch is `DEPLOYMENT_MODE`.
 

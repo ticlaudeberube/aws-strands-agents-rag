@@ -36,7 +36,7 @@ Resolved items (#1, #2, #9b) are omitted.
 - [ ] #8 Keep PCA embedding projection consistent (re-index if `bedrock_pca_matrix_uri` changes).
 - [ ] #9 Confirm the AOSS data-access policy maps the Lambda execution role.
 - [ ] #10 Upload documents to the S3 `documents/` prefix to populate the KB.
-- [ ] #11 Note: compute module `count` depends on an apply-time value (can't `-target` it in isolation).
+- [x] #11 Resolved: `enable_s3_trigger` is the literal `true` in `infrastructure/terraform/main.tf`, so the compute module's `count` no longer depends on an apply-time value.
 - [ ] #12 Bump Terraform `required_version` to `>= 1.6.0` for CI/prod.
 
 **Testing / hardening (not deploy blockers)**
@@ -45,7 +45,8 @@ Resolved items (#1, #2, #9b) are omitted.
 
 **Feature polish (optional, lower priority)**
 - [ ] True token streaming via Bedrock `converse_stream` (currently single-chunk).
-- [ ] Multi-turn memory in **Local Mode** (currently serverless-path only; see SERVERLESS_LOCAL.md TODO).
+- [x] Multi-turn memory in **Local Mode**: done. Local requests send prior turns in `messages`
+      (see SERVERLESS_LOCAL.md). A local session store is still not built.
 - [ ] Serverless-mode nuance: `bypass_cache` has no effect on the Lambda path; force-web passes through.
 
 ---
@@ -160,11 +161,10 @@ pipeline runs. Post-deploy, upload documents to the S3 `documents/` prefix to
 trigger the indexing Lambda (S3 `ObjectCreated`). Until then, KB retrieval is
 empty.
 
-### 11. ⚠️ Terraform `count` depends on apply-time value
-The compute module's S3-trigger `count = local.enable_s3_trigger` depends on
-`module.frontend.documents_bucket_id` (known only at apply). A full `apply`
-resolves it, but you can't cleanly `-target` the compute module in isolation,
-and `sam local --hook-name terraform` can't plan it (see SERVERLESS_LOCAL.md).
+### 11. ✅ Terraform `count` no longer depends on an apply-time value
+`enable_s3_trigger` is the literal `true` in `infrastructure/terraform/main.tf`, so the
+compute module's S3-trigger `count` is known at plan time. The earlier dependency on
+`module.frontend.documents_bucket_id` is gone.
 
 ### 12. ⚠️ Terraform version drift
 `versions.tf` is relaxed to `>= 1.5.0` to validate on the local `v1.5.7`; design
@@ -177,7 +177,7 @@ target is `>= 1.6.0`. Bump in CI/prod.
 - ✅ Serverless **code path** runs end-to-end locally (shared route → Bedrock via
   Converse → OpenSearch k-NN → Redis cache).
 - ✅ Titan embeddings invoke successfully (account `996428372683`, `us-east-1`).
-- ✅ Terraform `validate` passes for all six modules.
+- ✅ Terraform `validate` passes for all seven modules.
 - ✅ `BedrockClient` Converse migration verified against real Bedrock (Nova).
 - ✅ The **real Lambda handler** (`agentcore_handler.lambda_handler`) runs
   end-to-end locally with injected local backends (OpenSearch/Redis/DynamoDB +

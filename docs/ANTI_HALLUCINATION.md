@@ -118,9 +118,11 @@ the serverless Lambda handler, and the web-only streams.
    - Serverless: Titan v1 (Bedrock, 768-dim PCA output as used by the runtime),
      threshold **0.35**.
 
-   The threshold can be overridden with `SCOPE_SIMILARITY_THRESHOLD`. Follow-ups
-   are embedded as the last user turn plus the question, so references such as
-   "what about its cost?" resolve. A first-turn query reuses the vector the
+   The threshold can be overridden with `SCOPE_SIMILARITY_THRESHOLD`. For a
+   follow-up, the gate judges the standalone search text: the most recent
+   `FOLLOWUP_USER_TURNS` user questions joined to the current question (see
+   [API_SERVER.md](API_SERVER.md#follow-up-questions)). References such as "what
+   about its cost?" then resolve. A first-turn query reuses the vector the
    routing already computed, so it costs no extra embedding call.
 
 Both checks **fail closed**. If the security detector or the embedding call
@@ -344,7 +346,7 @@ thing being graded should not also be the grader.
 | Technique | Status here | Layer |
 |---|---|---|
 | Honest retrieval / no-results | Implemented | Layers 1–3 |
-| Neurosymbolic guardrails | Implemented (heuristic checks + tool-call cancellation; not a comprehensive security boundary) | Layers 4, 4b |
+| Neurosymbolic guardrails | Implemented (heuristic checks; not a comprehensive security boundary) | Layer 4 |
 | Managed Bedrock Guardrails | Implemented for configured serverless calls | Layer 4c |
 | Agent steering (self-correct) | Implemented — one-shot widened-retrieval retry, then caveat if needed (not a full reflection loop) | Layer 3 |
 | Semantic tool selection | Not implemented (2-tool pipeline; low value) | — |

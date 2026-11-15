@@ -33,6 +33,9 @@ The React chat UI is a frontend for the Strands RAG API. It supports:
 
 - The app displays a welcome message on first load.
 - Multiple exchanges are supported in the same conversation.
+- Follow-up questions use earlier turns. In local mode the app sends the whole
+  message list with each request. In serverless mode the session is stored and
+  identified by `session_id`. See [API_SERVER.md](API_SERVER.md#follow-up-questions).
 - Chat reset is available through the clear action.
 
 ## Response indicators
@@ -44,6 +47,8 @@ The UI reflects the response source type:
 - `cached` — response came from the cache
 - `web_search` — response used web search results
 - `rag` — response came from the knowledge base flow
+- `out_of_scope` — the question was outside the vector database and RAG topics,
+  so the app returned a fixed scope message without searching
 
 ### UI metadata
 

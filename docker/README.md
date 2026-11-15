@@ -10,8 +10,8 @@ the sole vector store in both local and serverless modes.
 | Service | Container | Image | Port(s) | Purpose |
 |---|---|---|---|---|
 | opensearch | `agentcore-rag-opensearch` | `opensearchproject/opensearch:2.17.1` | 9200 | Vector store (`rag-kb`) + Layer 4 semantic cache (`rag-cache`). Security plugin disabled — local-only, plain HTTP, no TLS/auth. |
-| redis | `agentcore-rag-redis` | `redis:7.4-alpine` | 6379 | Layer 2/3 cache (plain TCP, no TLS). |
-| dynamodb | `agentcore-rag-dynamodb` | `amazon/dynamodb-local:2.5.2` | 8001 | Session/analytics store (DynamoDB Local, in-memory). |
+| redis | `agentcore-rag-redis` | `redis:7.4-alpine` | 6379 | Optional L2/L3 cache, used only when `REDIS_CACHE_ENABLED=true` (plain TCP, no TLS). Otherwise the app uses an in-memory cache. |
+| dynamodb | `agentcore-rag-dynamodb` | `amazon/dynamodb-local:2.5.2` | 8001 | Stand-in for the serverless session and analytics tables (DynamoDB Local, in-memory). Used only by the serverless-local scripts. |
 | rag-api | `agentcore-rag-api` | built from `docker/Dockerfile` | 8000 | FastAPI app, Local Mode on OpenSearch. |
 | react-chatbot | `agentcore-rag-react` | built from `docker/Dockerfile.react` | 3000 | React chatbot UI. |
 

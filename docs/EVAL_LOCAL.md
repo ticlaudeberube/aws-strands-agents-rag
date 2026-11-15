@@ -357,9 +357,10 @@ Caveats:
 ## Follow-up retrieval (`scripts/eval_followup.py`)
 
 `scripts/eval_followup.py` checks whether joining the prior user question to a
-follow-up improves KB retrieval. Each case in `eval/followup_pairs.jsonl` runs
-two KB searches (top 5, local OpenSearch `rag-kb`, Ollama `nomic-embed-text`):
-one with the raw question and one with the retrieval text that the router uses.
+follow-up improves KB retrieval. Each case in `eval/followup_pairs.jsonl` runs one
+KB search per strategy (raw, join_last_turn, join_recent_turns, condensed; top 5,
+local OpenSearch `rag-kb`, Ollama `nomic-embed-text`). The first two-strategy
+comparison is recorded below; the script now reports all four.
 A case is a hit when a returned chunk contains one of the case's expected terms.
 
 ```bash
@@ -367,7 +368,8 @@ uv run python scripts/eval_followup.py
 uv run python scripts/eval_followup.py --json
 ```
 
-Baseline (18 cases: 12 follow-ups, 6 topic switches):
+Baseline recorded when the set had 18 cases (12 follow-ups, 6 topic switches).
+The set now has 34 cases; see the sections below for current numbers.
 
 | category | cases | raw hit rate | joined hit rate |
 |---|---|---|---|
@@ -391,11 +393,13 @@ Caveats:
 
 - `raw`: the question alone.
 - `join_last_turn`: last user question joined to the question (one hop).
-- `join_recent_turns`: last three user questions joined.
+- `join_recent_turns`: the last N user questions joined, where N is `--join-turns`
+  or `FOLLOWUP_USER_TURNS` (code default 3; the local `.env` sets 10).
 - `condensed`: the standalone question from `llama3.2:3b` (the router's condenser).
 
-The set has 26 cases: 12 one-hop follow-ups, 5 multi-hop follow-ups (two or more
-prior user turns), and 9 topic switches. Local Ollama and OpenSearch, top 5.
+This run used the 26 cases that existed then: 12 one-hop follow-ups, 5 multi-hop
+follow-ups (two or more prior user turns), and 9 topic switches. Local Ollama and
+OpenSearch, top 5. The set has since grown to 34 cases (see the long-history section).
 
 | strategy | one-hop follow-up | multi-hop follow-up | topic switch |
 |---|---|---|---|
@@ -414,13 +418,11 @@ Decision: the condenser is not adopted yet. Under the adoption rule in
 `decide_condensed` (beat the last-turn join on multi-hop, no one-hop regression,
 no topic-switch regression against raw), neither prompt version qualifies.
 
-Options for the next step:
-
-- `join_recent_turns` (no model call): 100% on follow-ups, both hop counts, at
-  the cost of one topic switch (`sw-07`).
-- A stronger condenser model (for example `llama3.1:8b`). Needs approval, and
-  adds latency to every follow-up.
-- Keep the condenser with `llama3.2:3b` and accept the measured regressions.
+Outcome: the router uses `join_recent_turns` (no model call), with the depth set by
+`FOLLOWUP_USER_TURNS`. The condenser stays off (`CONDENSE_FOLLOWUPS = False`). A
+stronger condenser model, `llama3.1:8b`, was also run on the 26-case set. It scored
+below the join on one-hop follow-ups (83.3%) and on multi-hop follow-ups (80%), so it
+was not adopted either.
 
 Caveats: the cases are hand-written and small. One case moves a rate by 4 to 11
 points. Results come from one run per prompt version.

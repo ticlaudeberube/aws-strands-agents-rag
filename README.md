@@ -24,11 +24,15 @@ A dual-mode RAG system that currently supports both local development and AWS se
 ### Local mode
 
 ```bash
-cd docker
-docker-compose up -d
-cd ..
+ollama pull llama3.2:3b
+ollama pull nomic-embed-text:v1.5
+docker compose -f docker/docker-compose.yml up -d opensearch
 uv run python api_server.py
 ```
+
+Start only the OpenSearch service. The compose file's `rag-api` service also
+publishes port 8000, which conflicts with `api_server.py`. See
+[docs/GETTING_STARTED.md](docs/GETTING_STARTED.md) for the full setup.
 
 ### Serverless mode
 
@@ -52,8 +56,9 @@ deploy/teardown workflow are documented in
 
 ```text
 User query
-  -> security screen, then scope gate (embedding anchors)
-  -> RAGWorker (shared_route: cache -> KB -> web)
+  -> topic check and security check (graph nodes)
+  -> route_rag_query: follow-up search text, then embedding scope gate
+  -> cache -> KB -> web (shared_route)
      -> retrieval backend
      -> answer + sources
 ```

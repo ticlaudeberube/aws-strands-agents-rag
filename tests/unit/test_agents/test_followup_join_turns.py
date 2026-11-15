@@ -66,7 +66,8 @@ def _embedded_for(history: list[dict[str, str]], join_turns: int | None) -> str:
 
 
 def test_default_join_depth_is_three() -> None:
-    assert Settings().followup_user_turns == 3
+    # Check the field default, not Settings(): the local .env may override it.
+    assert Settings.model_fields["followup_user_turns"].default == 3
 
 
 def test_env_var_sets_join_depth(monkeypatch: pytest.MonkeyPatch) -> None:

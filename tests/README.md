@@ -2,8 +2,8 @@
 
 This directory contains the test suite for the AWS Strands Agents RAG system.
 
-**Status**: ✅ All 77 tests passing (100% pass rate)
-**Coverage**: 48% (619/1303 statements)
+**Status**: 487 tests collected (406 unit tests in `tests/unit/`, the rest in `tests/integration/`). Pass rate and coverage are not re-measured here; run `uv run pytest tests/unit` and `uv run pytest --cov`.
+**Coverage**: not re-measured (last recorded figure was 48%)
 **Target**: 80% coverage
 **Roadmap**: See [Coverage Roadmap](#coverage-roadmap) below
 **Last Updated**: March 5, 2026
@@ -19,11 +19,11 @@ pytest
 # Run with coverage
 pytest --cov=src --cov-report=html
 
-# Run only unit tests (fast)
-pytest -m unit
+# Run only unit tests (fast, no services)
+uv run pytest tests/unit
 
 # Run only integration tests (requires services)
-pytest -m integration
+uv run pytest tests/integration
 
 # Run with verbose output
 pytest -vv
@@ -34,24 +34,20 @@ pytest --durations=10
 
 ## Test Suite Overview
 
-| File | Tests | Purpose |
-|------|-------|---------|
-| **test_strands_graph_agent.py** | 41 | Core graph agent (security, scope, RAG) |
-| **test_api_server.py** | 11 | FastAPI server endpoints |
-| **test_configuration_consistency.py** | 14 | Configuration and settings validation |
-| **test_ollama_client.py** | 10 | Ollama LLM client operations |
-| **test_web_search_streaming.py** | 1 | Web search integration |
+| Directory | Purpose |
+|-----------|---------|
+| `tests/unit/` | Fast, mocked tests for agents, API, config, tools, and eval scripts. Run `uv run pytest tests/unit`. |
+| `tests/integration/` | Tests against live services (Ollama, OpenSearch). Skipped when a service is down. |
+
+List the current files and counts with `uv run pytest --collect-only -q`.
 
 ## Setup
 
 ### Install Test Dependencies
 
 ```bash
-# Install test dependencies
-pip install -r requirements-test.txt
-
-# Or using uv
-uv pip install -r requirements-test.txt
+# Install the project and dev dependencies (declared in pyproject.toml)
+uv sync --extra dev
 ```
 
 ## Running Tests
@@ -96,9 +92,6 @@ pytest -m asyncio
 
 # Run only slow tests (>1 second)
 pytest -m slow
-
-# Run only health check tests
-pytest -m health
 
 # Combine markers (AND logic)
 pytest -m "unit and not slow"
@@ -146,13 +139,13 @@ pytest --timeout=10
 pytest -k "security"  # Runs tests with "security" in name
 
 # Run specific test file
-pytest tests/test_strands_graph_agent.py
+pytest tests/unit/test_agents/test_strands_graph_agent.py
 
 # Run specific test class
-pytest tests/test_strands_graph_agent.py::TestSecurityDetection
+pytest tests/unit/test_agents/test_strands_graph_agent.py::TestSecurityDetection
 
 # Run specific test function
-pytest tests/test_strands_graph_agent.py::TestSecurityDetection::test_jailbreak_detection
+pytest tests/unit/test_agents/test_strands_graph_agent.py::TestSecurityDetection::test_jailbreak_detection
 
 # Re-run last failed test
 pytest --lf
@@ -177,7 +170,7 @@ pytest -m unit -vv -s
 pytest -m "not slow" --cov=src --cov-report=term-missing
 
 # Debug a specific test (verbose + show prints + drop to debugger)
-pytest tests/test_strands_graph_agent.py::test_security_jailbreak -vv -s --pdb
+pytest tests/unit/test_agents/test_strands_graph_agent.py::test_security_jailbreak -vv -s --pdb
 
 # Find slowest tests (identify performance issues)
 pytest --durations=10
@@ -190,11 +183,13 @@ tests/
 ├── __init__.py                           # Package marker
 ├── conftest.py                           # Shared fixtures and configuration
 ├── README.md                             # This file
-├── test_strands_graph_agent.py          # Graph agent core tests (41 tests)
-├── test_api_server.py                   # API server endpoint tests (11 tests)
-├── test_configuration_consistency.py    # Configuration validation tests (14 tests)
-├── test_ollama_client.py               # OllamaClient tests (10 tests)
-└── test_web_search_streaming.py        # Web search integration test (1 test)
+├── unit/                                # Fast, mocked tests
+│   ├── test_agents/                     # Graph, routing, guardrails, history, condenser
+│   ├── test_api/                        # FastAPI endpoints and chat history
+│   ├── test_config/                     # Settings validation
+│   ├── test_indexing/                   # Indexing pipeline
+│   └── test_tools/                      # Clients, caches, Bedrock Guardrails
+└── integration/                         # Tests against live services (skipped when down)
 ```
 
 **Removed Files (Deprecated)**:
@@ -461,7 +456,7 @@ def test_security_check_detects_injection():
 
 **Run**:
 ```bash
-pytest -m unit  # Every unit test, no services needed
+uv run pytest tests/unit  # Every unit test, no services needed
 ```
 
 ---
@@ -573,11 +568,10 @@ pytest -m health  # Quick smoke tests
 
 | Marker | Speed | Needs Services | When to Use | Example Command |
 |--------|-------|---|---|---|
-| `@pytest.mark.unit` | ⚡ Fast | No | Default for most tests | `pytest -m unit` |
+| `@pytest.mark.unit` | ⚡ Fast | No | Applied to only a few tests; select the unit suite by path (`tests/unit`) | `pytest -m unit` |
 | `@pytest.mark.integration` | 🐢 Slow | Yes | Test workflows | `pytest -m integration` |
 | `@pytest.mark.asyncio` | Varies | Depends | Async code | `pytest -m asyncio` |
 | `@pytest.mark.slow` | 🐢 Slow | Maybe | Edge cases, batch ops | `pytest -m "not slow"` |
-| `@pytest.mark.health` | ⚡ Fast | Yes | Quick smoke test | `pytest -m health` |
 
 ---
 
@@ -609,7 +603,7 @@ pytest
 
 ## Existing Test Suite Overview
 
-### Graph Agent Tests (41 tests in test_strands_graph_agent.py)
+### Graph Agent Tests (`tests/unit/test_agents/test_strands_graph_agent.py`)
 Core functionality tests for the 3-node graph architecture:
 - **Security Detection** (10 tests): Jailbreak, injection, command detection
   Markers: `@pytest.mark.unit`

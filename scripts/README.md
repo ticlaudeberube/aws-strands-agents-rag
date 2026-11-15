@@ -37,6 +37,8 @@ See [docs/SERVERLESS_LOCAL.md](../docs/SERVERLESS_LOCAL.md) for the full workflo
 | Script | Purpose |
 |--------|---------|
 | `eval_local.py` | Run the tagged question set through Local Mode and log anti-hallucination signals to MLflow. Supports `--sweep-ef` for an HNSW recall sweep. See [docs/EVAL_LOCAL.md](../docs/EVAL_LOCAL.md). |
+| `eval_scope.py` | Score the scope gate on `eval/scope_labels.jsonl` (or `--labels`): keyword, embedding, or LLM classifiers, with threshold sweeps. |
+| `eval_followup.py` | Measure KB retrieval for follow-up questions on `eval/followup_pairs.jsonl`, comparing raw, last-turn, recent-turns (`--join-turns`, default `FOLLOWUP_USER_TURNS`), and condensed queries. Supports `--json`. See [docs/EVAL_LOCAL.md](../docs/EVAL_LOCAL.md). |
 
 ## Operations
 

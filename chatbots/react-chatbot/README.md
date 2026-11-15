@@ -29,7 +29,7 @@ A self-contained React chatbot interface for the vector database RAG system with
 🔌 **Integration**
 - OpenAI-compatible API (`/v1/chat/completions`)
 - Server-Sent Events (SSE) for streaming
-- Automatic API health checks every 5 seconds
+- Automatic API health checks every 10 seconds
 - Connects to `http://localhost:8000` by default
 
 ## Streaming Implementation
@@ -178,7 +178,7 @@ This React app can be deployed in multiple ways:
 - **Docker**: Multi-stage build to production-ready image
 - **Serverless**: AWS Lambda + CloudFront with AgentCore
 
-For complete deployment instructions, see **[REACT_DEPLOYMENT.md](../../docs/REACT_DEPLOYMENT.md)**
+For build and deployment commands, see **[REACT_CHATBOT_BUILD_SCRIPT.md](../REACT_CHATBOT_BUILD_SCRIPT.md)**
 
 Quick deployment commands:
 ```bash
@@ -221,7 +221,8 @@ POST http://localhost:8000/v1/chat/completions
     {"role": "user", "content": "Your question here"}
   ],
   "model": "rag-agent",
-  "temperature": 0.7,
+  "temperature": 0.1,
+  "stream": true,
   "top_p": 0.9
 }
 ```
@@ -253,7 +254,7 @@ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 ```
 
 ### Change API Endpoint
-Edit `src/App.js` fetch URL:
+Set `REACT_APP_API_HOST` and `REACT_APP_API_PORT` in `.env`, or change `getApiBaseUrl` in `src/config/api.js`. The chat request is built from that base URL:
 ```javascript
 const response = await fetch('http://your-api:port/v1/chat/completions');
 ```

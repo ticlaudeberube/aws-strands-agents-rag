@@ -14,9 +14,8 @@ the configured vector DB cannot be reached. The API remains available for health
 knowledge-base search and persistent cached questions are unavailable. The
 React client displays this warning without treating the API as offline.
 The client also rechecks API health every 10 seconds so it can recover from
-an API server that was unavailable when the page loaded. The API limits its
-vector DB health probe to two seconds, so an unresponsive database is reported
-as a warning rather than leaving the GUI on a stale connected status.
+an API server that was unavailable when the page loaded. The health response's `warning` field
+reports a vector DB problem, so the GUI does not show a stale connected status.
 
 The health response's `vector_db` and `vector_db_available` fields are provider-neutral.
 `web_search_enabled` is true only when web search is enabled in settings and a

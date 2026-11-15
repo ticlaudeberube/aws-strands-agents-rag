@@ -4,7 +4,7 @@ End-to-end tests for the React chatbot using [Playwright](https://playwright.dev
 
 ## Overview
 
-Tests are organized into **8 comprehensive suites** covering all GUI features:
+Tests are organized into suites by GUI feature:
 
 ### Core Functionality (Existing)
 | Suite | Purpose | Test Count |
@@ -23,7 +23,7 @@ Tests are organized into **8 comprehensive suites** covering all GUI features:
 | **chatbot-mobile.spec.ts** ✨ | Mobile responsive design | 24 | iPhone/Android viewports, touch, keyboard, orientation |
 | **chatbot-performance.spec.ts** ✨ | Performance, stress testing | 18 | Response times, streaming, memory, rapid queries |
 
-**Total: 112+ test cases** covering all documented GUI features
+Run `npx playwright test --list` for the current test count. Each test runs once per configured browser project.
 
 ### Feature Coverage by Test Suite
 
@@ -126,7 +126,7 @@ npx playwright test --debug e2e/chatbot-basic.spec.ts
 ### Watch mode (re-run on file changes)
 
 ```bash
-npx playwright test --watch
+npm run test:e2e:ui   # interactive UI mode (Playwright has no --watch flag)
 ```
 
 ### Generate test report
@@ -142,11 +142,8 @@ npx playwright show-report
 Configure via `.env` or command line:
 
 ```bash
-# Custom API base URL (default: http://localhost:8000)
-export API_BASE_URL=http://my-api.com
-
-# Custom chatbot URL (default: http://localhost:3000)
-# Set in playwright.config.ts baseURL
+# The chatbot URL is set in playwright.config.ts (use.baseURL, default http://localhost:3000).
+# The API server URL is set by the webServer entry in playwright.config.ts (port 8000).
 
 # Run in CI mode (single worker, retries enabled)
 export CI=true
@@ -202,9 +199,10 @@ await page.locator('role=button[name=/Send/i]').click();
 ## Timeouts
 
 Tests have reasonable timeouts for:
-- API calls: **30 seconds** (configurable via `TEST_TIMEOUT`)
-- Page interactions: **5 seconds** (default)
-- Service startup: **5 seconds** (configured in `playwright.config.ts`)
+- Per-test limit: **120 seconds** (`timeout` in `playwright.config.ts`)
+- Assertions: **10 seconds** (`expect.timeout` in `playwright.config.ts`)
+- Some specs define their own 30-second constant `TEST_TIMEOUT` (for example `e2e/chatbot-qa.spec.ts`).
+- Service startup: up to **180 seconds** per server (`webServer.timeout` in `playwright.config.ts`)
 
 Adjust timeouts in individual tests if needed:
 
@@ -221,7 +219,7 @@ npx playwright test --reporter=list
 
 # Show full trace of failed tests
 npx playwright test --reporter=html
-npx npx playwright show-report
+npx playwright show-report
 ```
 
 ## New Test Suites (Phase 3) - Detailed Overview

@@ -84,10 +84,12 @@ DEPLOYMENT_MODE=serverless
 
 ```env
 AWS_REGION=us-east-1
-BEDROCK_INFERENCE_MODEL_ID=anthropic.claude-3-haiku-20240307-v1:0
+BEDROCK_INFERENCE_MODEL_ID=amazon.nova-lite-v1:0
 BEDROCK_EMBEDDING_MODEL_ID=amazon.titan-embed-text-v1
 OPENSEARCH_ENDPOINT=https://...
 REDIS_ENDPOINT=...
+# In AWS, TAVILY_API_KEY comes from Secrets Manager (SECRETS_TAVILY_API_KEY).
+# Set it here only for local runs.
 TAVILY_API_KEY=...
 ```
 

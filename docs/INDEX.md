@@ -20,6 +20,8 @@ This is the current, active documentation set for the project.
 ## Deployment
 
 - [DEPLOYMENT.md](DEPLOYMENT.md) — serverless/AWS deployment overview
+- [infrastructure/terraform/DEPLOYMENT.md](../infrastructure/terraform/DEPLOYMENT.md) — Terraform deployment runbook (prerequisites, state bootstrap, deploy and teardown)
+- [docker/README.md](../docker/README.md) — the local Docker stack (OpenSearch, Redis, DynamoDB Local)
 - [SERVERLESS_LOCAL.md](SERVERLESS_LOCAL.md) — run serverless mode locally (real Bedrock + local OpenSearch/Redis)
 - [AWS_DEPLOYMENT_GAPS.md](AWS_DEPLOYMENT_GAPS.md) — what stands between local serverless and a real AWS deploy
 
@@ -28,7 +30,7 @@ This is the current, active documentation set for the project.
 - MCP server: the `/api/mcp/*` REST surface (see [API_SERVER.md](API_SERVER.md)) exposes the agent's tools (`src/mcp/mcp_server.py`)
 - Document ingestion (corpus seed): `uv run python document_loaders/load_docs_opensearch.py` (see [HOW_TO.md](HOW_TO.md))
 - Document ingestion (local OpenSearch): `uv run python scripts/ingest_local_opensearch.py` (see [GETTING_STARTED.md](GETTING_STARTED.md))
-- Playwright E2E agents: three Kiro agents in `.kiro/agents/` (see [tests/README.md](../tests/README.md))
+- Tests: [tests/README.md](../tests/README.md) — test layout, markers, and commands; E2E setup in [chatbots/react-chatbot/e2e/README.md](../chatbots/react-chatbot/e2e/README.md)
 
 ## Quick decisions
 

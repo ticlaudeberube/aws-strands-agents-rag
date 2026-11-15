@@ -97,7 +97,8 @@ def _cosine(a: list[float], b: list[float]) -> float:
 def _embed_ollama(texts: list[str], model: str) -> list[list[float]]:
     import ollama
 
-    return ollama.Client().embed(model=model, input=texts)["embeddings"]
+    embeddings: list[list[float]] = ollama.Client().embed(model=model, input=texts)["embeddings"]
+    return embeddings
 
 
 def _embed_bedrock(texts: list[str], model: str) -> list[list[float]]:
@@ -145,7 +146,7 @@ def _embed_with_production_client(client):
 
 
 def build_embedding_scores(
-    examples: list[Example], embed_model: str, backend: str = "ollama"
+    examples: list[Example], embed_model: str | None, backend: str = "ollama"
 ) -> dict[str, float]:
     """Return ``{example.id: max cosine similarity to any anchor}``."""
     if backend == "bedrock-client":

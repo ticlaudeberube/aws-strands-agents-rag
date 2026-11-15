@@ -155,13 +155,45 @@ local development remains unauthenticated and has no Cognito sign-in controls.
 
 ## 9. Context engineering
 
-**Status:** Partly implemented. Scope checks for follow-ups use the prior user
-turn (`ScopeGate` in `src/agents/guardrails.py`). Answer generation for
-follow-ups is unchanged, so a follow-up can still get a generic answer when the
-knowledge base lacks the detail.
-- chatbot should be able to accept fuzzy contextuel question using it's context.
-- AKA: Are you able to continue chatting about the latest topic using context
-- Which responds off topic reponse: I can help with questions about vector databases, vector search, embeddings, and RAG.
+**Status:** Implemented for the local API, the CLI, and the shared serverless
+route. Live serverless behavior is not validated; it waits on item 8.
+
+- A follow-up such as "What can I do with it?" after "What is a vector database?"
+  is answered in context, not refused as off topic.
+- Retrieval embeds the last user question joined to the current one. Every cache
+  layer is skipped for follow-ups.
+- Generation sees a transcript of recent turns in both modes.
+- The local API forwards prior `messages` turns, the CLI keeps its own turns, and
+  serverless reads DynamoDB session history. All three feed the same shared route
+  (`src/agents/rag_routing.py`), with helpers in `src/agents/history.py`.
+- Eval: `eval/followup_pairs.jsonl` and `scripts/eval_followup.py`. Baseline in
+  [EVAL_LOCAL.md](EVAL_LOCAL.md#follow-up-retrieval-scriptseval_followuppy).
+
+**Acceptance results:**
+
+- Unit tests (369 passing) cover the history helpers, the routing cache skip and
+  joined retrieval, facade and endpoint forwarding, the serverless handler and
+  shim, and the CLI turn helper.
+- Retrieval eval (local Ollama and OpenSearch, top 5): follow-up hit rate went
+  from 41.67% raw to 100% joined over 12 cases. Topic-switch hit rate stayed at
+  83.33% in both modes over 6 cases. The join is kept.
+- Live integration test (`tests/integration/test_followup_conversation.py`)
+  passes: a two-turn request to the local API returns an in-scope answer.
+- Live CLI check: a piped two-question session answers the follow-up from the
+  knowledge base and stays on the vector database topic.
+- React UI: the first browser run failed. The streaming branch of
+  `/v1/chat/completions` (`stream: true`, used by the UI) did not pass history, so
+  "What is it used for?" was rejected as off topic. Fixed in `api_server.py`, with
+  regression tests for the stream flag. Re-run the UI check after the fix.
+- Known miss: `sw-01` ("What is HNSW?" after "What is Milvus?") fails in both
+  modes. The join does not cause it; the baseline raw query also misses.
+- Follow-up history depth: `FOLLOWUP_USER_TURNS` sets how many recent user
+  questions the router joins. Code default 3; local `.env` and
+  `.env.serverless-local` set 10, which measured 6 of 6 on long-history cases
+  against 2 of 6 at 3. The multi-hop condenser (`llama3.2:3b` local,
+  `amazon.nova-lite-v1:0` serverless) is off (`CONDENSE_FOLLOWUPS = False`). On the 26-case eval, neither prompt
+  version beat the simpler joins without a regression. Results and the decision
+  are in [EVAL_LOCAL.md](EVAL_LOCAL.md#multi-hop-condenser-evaluation).
 
 ## 10. Strengthen the local eval loop
 

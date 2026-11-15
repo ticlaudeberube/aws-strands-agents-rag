@@ -106,6 +106,29 @@ uv run python chatbots/interactive_chat.py
 curl http://localhost:8000/health
 ```
 
+### Ask a follow-up question
+
+The local API uses the `messages` array as context. Send prior turns, then the
+new question as the last user message:
+
+```bash
+curl -X POST http://localhost:8000/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "messages": [
+      {"role": "user", "content": [{"type": "text", "text": "What is a vector database?"}]},
+      {"role": "assistant", "content": [{"type": "text", "text": "A database that stores and searches embeddings."}]},
+      {"role": "user", "content": [{"type": "text", "text": "What can I do with it?"}]}
+    ]
+  }'
+```
+
+The CLI (`chatbots/interactive_chat.py`) keeps this history for the session, so
+you can ask "What can I do with it?" after any answer. The React UI sends its
+full message list in local mode. In serverless mode, the session is stored in
+DynamoDB and identified by `session_id`. See
+[API_SERVER.md](API_SERVER.md#follow-up-questions) for the rules.
+
 ## 5. Actual runtime flow
 
 The app uses the same core Strands pattern in both modes:

@@ -23,6 +23,22 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+class ConversationHistory:
+    """Question and answer turns for one interactive session."""
+
+    def __init__(self) -> None:
+        self._turns: list[dict[str, str]] = []
+
+    def as_messages(self) -> list[dict[str, str]]:
+        """Return the recorded turns as ``{"role", "content"}`` dicts."""
+        return list(self._turns)
+
+    def record_exchange(self, question: str, answer: str) -> None:
+        """Store one completed question and answer pair."""
+        self._turns.append({"role": "user", "content": question})
+        self._turns.append({"role": "assistant", "content": answer})
+
+
 def print_header():
     """Print welcome header."""
     print("\n" + "=" * 60)
@@ -66,6 +82,8 @@ def main():
 
     print_header()
 
+    conversation = ConversationHistory()
+
     # Chat loop
     try:
         while True:
@@ -98,11 +116,13 @@ def main():
                             collection_name=collection_name,
                             question=user_input,
                             top_k=5,
+                            history=conversation.as_messages(),
                         )
                     )
                     answer = result["answer"]
                     print(answer)
                     print()
+                    conversation.record_exchange(user_input, answer)
                 except Exception as e:
                     print(f"\n❌ Error answering question: {e}\n")
                     logger.error(f"Failed to answer: {e}")

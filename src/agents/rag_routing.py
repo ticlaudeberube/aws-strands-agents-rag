@@ -58,6 +58,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 
 from src.agents.bedrock_guardrails import OutputGuardrailBlocked
+from src.agents.history import FALLBACK_USER_TURNS, condense_question, retrieval_text
 from src.agents.topic_scope import OUT_OF_SCOPE_ANSWER
 
 logger = logging.getLogger(__name__)
@@ -661,6 +662,8 @@ def route_rag_query(
     metric_emitter: Callable[[str], None] | None = None,
     history: list[dict] | None = None,
     scope_gate: Callable[[str, list[float] | None, list[dict] | None], bool] | None = None,
+    condenser: Callable[[str], str] | None = None,
+    join_turns: int = FALLBACK_USER_TURNS,
 ) -> RoutingResult:
     """Route a (validated) query through Cache → KB → Web Search.
 
@@ -740,12 +743,19 @@ def route_rag_query(
                 metrics=result_metrics.metrics,
             )
 
+    # A follow-up carries prior turns. Its standalone search text (scope check,
+    # embedding, KB search, web search) resolves references such as "it" using
+    # the conversation, and every cache layer is skipped so answers never leak
+    # across conversations.
+    is_follow_up = bool(history)
+    search_question = _search_text(question, history, condenser, join_turns)
+
     # ---- Tier 0: force_web_search bypasses cache AND KB (Req 2.6) ----------
-    if force_web_search and scope_gate is not None and not scope_gate(question, None, history):
+    if force_web_search and scope_gate is not None and not scope_gate(search_question, None, None):
         return _scope_rejection(result_metrics)
     if force_web_search:
         logger.info("[ROUTING] force_web_search=True → bypassing cache and KB")
-        web_result = _build_web_result(question, web_search, kb_sources=[], confidence=0.0)
+        web_result = _build_web_result(search_question, web_search, kb_sources=[], confidence=0.0)
         web_result.metrics = result_metrics.metrics
         if not _has_usable_grounding(web_result.sources):
             web_result.answer = NO_GROUNDING_ANSWER
@@ -756,18 +766,23 @@ def route_rag_query(
         return web_result
 
     is_temporal = is_time_sensitive_query(question)
+    skip_cache = is_temporal or is_follow_up
 
     # ---- Compute (cache-aware) query embedding ----------------------------
-    query_vector, redis_up = _get_query_embedding(question, llm, cache, bypass_cache=is_temporal)
+    query_vector, redis_up = _get_query_embedding(
+        search_question, llm, cache, bypass_cache=skip_cache
+    )
     if cache is not None and not redis_up:
         _emit(CACHE_REDIS_UNAVAILABLE, result_metrics, metric_emitter)
 
     # ---- Scope gate: reuses the query vector, so no second embedding call ---
-    if scope_gate is not None and not scope_gate(question, query_vector, history):
+    # The vector is for the standalone search text, so the gate judges the same
+    # text that retrieval uses.
+    if scope_gate is not None and not scope_gate(search_question, query_vector, None):
         return _scope_rejection(result_metrics)
 
     # ---- Tier 1: cache check for non-temporal queries (Req 2.1, 2.2, 2.5) --
-    if not is_temporal:
+    if not skip_cache:
         cache_result = _check_semantic_cache(
             question,
             query_vector,
@@ -827,7 +842,9 @@ def route_rag_query(
                     )
                 # Req 2.5: entry exists but empty answer → web search.
                 logger.info("[ROUTING] Cached entry has empty answer → web search (Req 2.5)")
-                web_result = _build_web_result(question, web_search, kb_sources=[], confidence=0.0)
+                web_result = _build_web_result(
+                    search_question, web_search, kb_sources=[], confidence=0.0
+                )
                 web_result.metrics = result_metrics.metrics
                 if not _has_usable_grounding(web_result.sources):
                     web_result.answer = NO_GROUNDING_ANSWER
@@ -839,13 +856,13 @@ def route_rag_query(
 
     # ---- Tier 2: KB vector search (Req 2.1, 4.2) --------------------------
     kb_sources = _kb_search(
-        question,
+        search_question,
         query_vector,
         vector_store,
         cache,
         kb_index,
         top_k,
-        is_temporal,
+        skip_cache,
         result_metrics,
         metric_emitter,
     )
@@ -860,7 +877,9 @@ def route_rag_query(
     # ---- Tier 3: web-search fallback on low KB relevance (Req 2.4) --------
     if relevance < web_fallback_threshold:
         logger.info("[ROUTING] KB relevance below threshold → web search fallback (Req 2.4)")
-        web_result = _build_web_result(question, web_search, kb_sources, confidence=relevance)
+        web_result = _build_web_result(
+            search_question, web_search, kb_sources, confidence=relevance
+        )
         web_result.metrics = result_metrics.metrics
 
         # Anti-hallucination grounding gate: when the KB was not relevant enough
@@ -925,13 +944,13 @@ def route_rag_query(
             )
             _emit(ANSWER_GROUNDING_RETRY, result_metrics, metric_emitter)
             retry_sources = _kb_search(
-                question,
+                search_question,
                 query_vector,
                 vector_store,
                 cache,
                 kb_index,
                 widened_top_k,
-                is_temporal,
+                skip_cache,
                 result_metrics,
                 metric_emitter,
             )
@@ -972,7 +991,7 @@ def route_rag_query(
     # Cache the answer as generated (without the advisory caveat) so cache hits
     # stay clean; the caveat is a presentation-time signal, not part of the KB
     # answer. Only populate when grounding passed to avoid caching weak answers.
-    if kb_result.grounding_score >= grounding_threshold:
+    if not is_follow_up and kb_result.grounding_score >= grounding_threshold:
         _populate_caches(
             question,
             query_vector,
@@ -991,6 +1010,25 @@ def route_rag_query(
 # ---------------------------------------------------------------------------
 # Internal helpers (each operates only through the shared protocols)
 # ---------------------------------------------------------------------------
+
+
+def _search_text(
+    question: str,
+    history: list[dict] | None,
+    condenser: Callable[[str], str] | None,
+    join_turns: int,
+) -> str:
+    """Return the standalone text used for scope, embedding, and search.
+
+    Without history the question is used as-is. With a condenser, the LLM
+    rewrite is used (falling back to a join of ``join_turns`` questions). Without
+    one, the last ``join_turns`` user questions are joined.
+    """
+    if not history:
+        return question
+    if condenser is None:
+        return retrieval_text(question, history, turns=join_turns)
+    return condense_question(question, history, condenser, fallback_turns=join_turns)
 
 
 def _get_query_embedding(

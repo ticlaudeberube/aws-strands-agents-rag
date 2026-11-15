@@ -353,3 +353,102 @@ Caveats:
 - Serverless numbers come from Titan v1 through the Bedrock client in
   `us-east-1`. Any change to the PCA matrix (`BEDROCK_PCA_MATRIX_URI`) changes
   the vectors, so re-run the Titan rows after changing it.
+
+## Follow-up retrieval (`scripts/eval_followup.py`)
+
+`scripts/eval_followup.py` checks whether joining the prior user question to a
+follow-up improves KB retrieval. Each case in `eval/followup_pairs.jsonl` runs
+two KB searches (top 5, local OpenSearch `rag-kb`, Ollama `nomic-embed-text`):
+one with the raw question and one with the retrieval text that the router uses.
+A case is a hit when a returned chunk contains one of the case's expected terms.
+
+```bash
+uv run python scripts/eval_followup.py
+uv run python scripts/eval_followup.py --json
+```
+
+Baseline (18 cases: 12 follow-ups, 6 topic switches):
+
+| category | cases | raw hit rate | joined hit rate |
+|---|---|---|---|
+| follow_up | 12 | 41.67% | 100.00% |
+| topic_switch | 6 | 83.33% | 83.33% |
+
+Decision: keep the join. It improves follow-ups and does not lower topic-switch
+hits. One switch case (`sw-01`, "What is HNSW?" after "What is Milvus?") misses
+in both modes, so the join did not cause it.
+
+Caveats:
+
+- The cases were written by hand for this comparison, and the expected terms
+  are keyword checks, not judged relevance. The set is small, so one case moves
+  a rate by 5 to 17 points.
+- The check measures retrieval only. It does not measure generated answers.
+
+## Multi-hop condenser evaluation
+
+`scripts/eval_followup.py` also scores four query strategies per case:
+
+- `raw`: the question alone.
+- `join_last_turn`: last user question joined to the question (one hop).
+- `join_recent_turns`: last three user questions joined.
+- `condensed`: the standalone question from `llama3.2:3b` (the router's condenser).
+
+The set has 26 cases: 12 one-hop follow-ups, 5 multi-hop follow-ups (two or more
+prior user turns), and 9 topic switches. Local Ollama and OpenSearch, top 5.
+
+| strategy | one-hop follow-up | multi-hop follow-up | topic switch |
+|---|---|---|---|
+| raw | 41.67% | 60.00% | 88.89% |
+| join_last_turn | 100.00% | 80.00% | 88.89% |
+| join_recent_turns | 100.00% | 100.00% | 77.78% |
+| condensed, prompt v1 | 100.00% | 80.00% | 77.78% |
+| condensed, prompt v2 | 75.00% | 100.00% | 55.56% |
+
+Prompt v2 added two worked examples and a "new topic, drop the old one" rule.
+It fixed the topic-switch miss `sw-07` on the first run, but on the second run
+three one-hop cases and two topic-switch cases failed. Run-to-run variance is
+not measured, so the gap between v1 and v2 may partly be noise.
+
+Decision: the condenser is not adopted yet. Under the adoption rule in
+`decide_condensed` (beat the last-turn join on multi-hop, no one-hop regression,
+no topic-switch regression against raw), neither prompt version qualifies.
+
+Options for the next step:
+
+- `join_recent_turns` (no model call): 100% on follow-ups, both hop counts, at
+  the cost of one topic switch (`sw-07`).
+- A stronger condenser model (for example `llama3.1:8b`). Needs approval, and
+  adds latency to every follow-up.
+- Keep the condenser with `llama3.2:3b` and accept the measured regressions.
+
+Caveats: the cases are hand-written and small. One case moves a rate by 4 to 11
+points. Results come from one run per prompt version.
+
+### Join depth (`--join-turns`)
+
+`FOLLOWUP_USER_TURNS` sets how many recent user questions the router joins.
+`scripts/eval_followup.py --join-turns <n>` measures the `join_recent_turns`
+strategy at that depth. Run at depth 10, the 26-case set gives the same
+`join_recent_turns` numbers as depth 3 (100% one-hop, 100% multi-hop, 77.78% topic
+switch). No case in the set has more than three prior user turns, so this run
+cannot show whether a deeper join helps. The long-history cases below do.
+
+The `condensed` column moved between two runs with the same prompt and
+temperature 0 (`sw-01` and `fu-02` changed), so its rates carry run-to-run noise.
+
+### Long-history cases (depth 3 vs depth 10)
+
+`eval/followup_pairs.jsonl` now includes six follow-ups with 6 to 8 prior user
+turns (`lh-01` to `lh-06`) and two topic switches after long histories (`sw-10`,
+`sw-11`). In each follow-up, the subject appears early, unrelated turns follow,
+and the pronoun refers back to the early subject. The set has 34 cases.
+
+| depth | long-history follow-ups | all multi-hop follow-ups | one-hop follow-ups | topic switch |
+|---|---|---|---|---|
+| 3 | 2 of 6 | 64% | 100% | 73% |
+| 10 | 6 of 6 | 100% | 100% | 73% |
+
+Depth 10 costs no extra model call. The longer query text had no measured effect
+on topic switches. `sw-10` misses at both depths, so the join still pulls old
+topics into some switches.

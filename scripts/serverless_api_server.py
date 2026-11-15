@@ -258,17 +258,29 @@ class ServerlessAgentShim:
         except Exception as exc:  # noqa: BLE001 - persistence must not break the answer
             logger.warning("Session persist failed for %s: %s", session_id, exc)
 
-    def _run(self, question: str, top_k, temperature, max_tokens, session_id: str = ""):
+    def _run(
+        self,
+        question: str,
+        top_k,
+        temperature,
+        max_tokens,
+        session_id: str = "",
+        history: list[dict] | None = None,
+    ):
         """Load history → shared_route → persist turn. The session-aware core
-        shared by all answer paths, matching the Lambda handler's sequence."""
-        history = self._load_history(session_id)
-        logger.info("Loaded %d history turn(s) for session %s", len(history), session_id or "-")
+        shared by all answer paths, matching the Lambda handler's sequence.
+
+        Prior turns sent with the request (``history``) take precedence. The
+        DynamoDB session is read only when the request carries none.
+        """
+        prior_turns = history if history else self._load_history(session_id)
+        logger.info("Loaded %d history turn(s) for session %s", len(prior_turns), session_id or "-")
         result = self._shared_route(
             question,
             top_k=top_k,
             temperature=temperature,
             max_tokens=max_tokens,
-            history=history,
+            history=prior_turns,
         )
         self._last_stream_tier = result.tier_used
         self._persist_turn(session_id, question, result.answer)
@@ -282,9 +294,10 @@ class ServerlessAgentShim:
         temperature: float | None = None,
         max_tokens: int | None = None,
         session_id: str = "",
+        history: list[dict] | None = None,
     ) -> dict:
         """Answer via the serverless shared route."""
-        result = self._run(question, top_k, temperature, max_tokens, session_id)
+        result = self._run(question, top_k, temperature, max_tokens, session_id, history)
         return {
             "answer": result.answer,
             "sources": result.sources,
@@ -299,11 +312,12 @@ class ServerlessAgentShim:
         temperature: float | None = None,
         max_tokens: int | None = None,
         session_id: str = "",
+        history: list[dict] | None = None,
     ) -> tuple[str, list[dict]]:
         """Bypass-cache path. The serverless route always consults the semantic
         cache first; for a local GUI test this distinction is immaterial, so we
         reuse the same route and return the (answer, sources) tuple form."""
-        result = self._run(question, top_k, temperature, max_tokens, session_id)
+        result = self._run(question, top_k, temperature, max_tokens, session_id, history)
         self._last_stream_tier = result.tier_used
         return result.answer, result.sources
 
@@ -315,6 +329,7 @@ class ServerlessAgentShim:
         temperature: float | None = None,
         max_tokens: int | None = None,
         session_id: str = "",
+        history: list[dict] | None = None,
     ):
         """Streaming (SSE) path used by the GUI's default request.
 
@@ -324,7 +339,7 @@ class ServerlessAgentShim:
         emit the sources/response_type trailer after the text. Session history
         is loaded/persisted via DynamoDB, matching the Lambda handler.
         """
-        result = self._run(question, top_k, temperature, max_tokens, session_id)
+        result = self._run(question, top_k, temperature, max_tokens, session_id, history)
         self._last_stream_tier = result.tier_used
         # Tag sources so the endpoint's response_type logic (cached/web/rag)
         # classifies this correctly.
@@ -343,9 +358,10 @@ class ServerlessAgentShim:
         temperature: float | None = None,
         max_tokens: int | None = None,
         session_id: str = "",
+        history: list[dict] | None = None,
     ):
         """Bypass-cache streaming path; same route (see answer_question_no_cache)."""
-        result = self._run(question, top_k, temperature, max_tokens, session_id)
+        result = self._run(question, top_k, temperature, max_tokens, session_id, history)
         self._last_stream_tier = result.tier_used
         self._last_stream_sources = list(result.sources)
         yield result.answer
@@ -359,6 +375,7 @@ class ServerlessAgentShim:
         question: str,
         temperature: float | None = None,
         max_tokens: int | None = None,
+        history: list[dict] | None = None,
         **_kwargs,
     ):
         """Force-web-search path: answer from Tavily results only (no KB).
@@ -379,7 +396,7 @@ class ServerlessAgentShim:
             self._last_stream_tier = block.tier
             yield block.answer
             return
-        if self._scope_gate is not None and not self._scope_gate.allows(question):
+        if self._scope_gate is not None and not self._scope_gate.allows(question, None, history):
             self._last_stream_tier = "topic"
             yield OUT_OF_SCOPE_ANSWER
             return
@@ -419,12 +436,17 @@ class ServerlessAgentShim:
         ]
         self._last_stream_sources = web_sources
 
-        # Generate an answer grounded in the web results via Bedrock.
-        prompt = self._bedrock.format_rag_prompt(question, web_sources)
-        answer = self._bedrock.generate(
-            prompt=prompt,
-            temperature=temperature if temperature is not None else 0.3,
-            max_tokens=max_tokens,
+        # Generate an answer grounded in the web results via Bedrock. The shared
+        # generator adds prior turns to the prompt, matching the routed path.
+        from src.agents.rag_routing import _generate_from_sources
+
+        answer = _generate_from_sources(
+            self._bedrock,
+            question,
+            web_sources,
+            temperature if temperature is not None else 0.3,
+            max_tokens,
+            history,
         )
         yield answer
 

@@ -34,6 +34,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+from src.agents.history import prepare_history
 from src.agents.node_metrics import GraphMetrics
 from src.config.settings import Settings, get_settings
 from src.mcp.mcp_server import RAGAgentMCPServer
@@ -1124,6 +1125,10 @@ def _stream_chat_completions(
             temperature = request.temperature if request.temperature is not None else 0.1
             max_tokens = request.max_tokens or settings.max_tokens
             force_web_search = request.force_web_search or False
+            # Prior turns only: the final user message is the current question.
+            history = prepare_history(
+                [{"role": msg.role, "content": msg.content} for msg in request.messages]
+            )
 
             logger.info(f"💾 Streaming response: {user_message[:100]}...")
             logger.info(f"    force_web_search: {force_web_search}, bypass_cache: {bypass_cache}")
@@ -1139,6 +1144,7 @@ def _stream_chat_completions(
                     question=user_message,
                     temperature=temperature,
                     max_tokens=max_tokens,
+                    history=history,
                 ):
                     chunk_count += 1
                     # Ensure chunk is always a string to prevent frontend "[object Object]" errors
@@ -1155,6 +1161,7 @@ def _stream_chat_completions(
                     top_k=retrieval_top_k,
                     temperature=temperature,
                     max_tokens=max_tokens,
+                    history=history,
                 ):
                     chunk_count += 1
                     # Ensure chunk is always a string to prevent frontend "[object Object]" errors
@@ -1169,6 +1176,7 @@ def _stream_chat_completions(
                     top_k=retrieval_top_k,
                     temperature=temperature,
                     max_tokens=max_tokens,
+                    history=history,
                 ):
                     chunk_count += 1
                     # Ensure chunk is always a string to prevent frontend "[object Object]" errors
@@ -1318,6 +1326,8 @@ async def chat_completions(request: ChatCompletionRequest, bypass_cache: bool = 
         ]
 
         logger.info(f"Processing {len(conversation_history)} messages in conversation")
+        # Prior turns only: the final user message is the current question.
+        history = prepare_history(conversation_history)
         if bypass_cache:
             logger.info(f"Query (CACHE BYPASSED): {user_message[:100]}...")
         else:
@@ -1355,6 +1365,7 @@ async def chat_completions(request: ChatCompletionRequest, bypass_cache: bool = 
                     question=user_message,
                     temperature=temperature,
                     max_tokens=max_tokens,
+                    history=history,
                 ):
                     if chunk and chunk.strip():  # Only collect non-empty chunks
                         answer_chunks.append(str(chunk))
@@ -1377,6 +1388,7 @@ async def chat_completions(request: ChatCompletionRequest, bypass_cache: bool = 
                     top_k=retrieval_top_k,
                     temperature=temperature,
                     max_tokens=max_tokens,
+                    history=history,
                 )
             else:
                 # Use normal path with caching
@@ -1386,6 +1398,7 @@ async def chat_completions(request: ChatCompletionRequest, bypass_cache: bool = 
                     top_k=retrieval_top_k,
                     temperature=temperature,
                     max_tokens=max_tokens,
+                    history=history,
                 )
 
                 # Handle both tuple and dictionary return formats
@@ -1489,6 +1502,8 @@ async def chat_completions_stream(request: ChatCompletionRequest):
             for msg in request.messages
         ]
 
+        # Prior turns only: the final user message is the current question.
+        history = prepare_history(conversation_history)
         logger.info(
             f"Stream Query: {user_message[:100]}... (conversation history: {len(conversation_history)} messages)"
         )
@@ -1513,6 +1528,7 @@ async def chat_completions_stream(request: ChatCompletionRequest):
                         question=user_message,
                         temperature=temperature,
                         max_tokens=max_tokens,
+                        history=history,
                     ):
                         yield f"data: {json.dumps({'choices': [{'delta': {'content': chunk}}]})}\n\n"
                 elif bypass_cache:
@@ -1524,6 +1540,7 @@ async def chat_completions_stream(request: ChatCompletionRequest):
                         top_k=retrieval_top_k,
                         temperature=temperature,
                         max_tokens=max_tokens,
+                        history=history,
                     ):
                         yield f"data: {json.dumps({'choices': [{'delta': {'content': chunk}}]})}\n\n"
                 else:
@@ -1535,6 +1552,7 @@ async def chat_completions_stream(request: ChatCompletionRequest):
                         top_k=retrieval_top_k,
                         temperature=temperature,
                         max_tokens=max_tokens,
+                        history=history,
                     ):
                         yield f"data: {json.dumps({'choices': [{'delta': {'content': chunk}}]})}\n\n"
 

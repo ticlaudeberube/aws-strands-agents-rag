@@ -101,7 +101,7 @@ is not the bottleneck.
 - The `eval` extra installed:
 
   ```bash
-  uv pip install -e '.[eval]'     # or: pip install -e '.[eval]'
+  uv pip install -e '.[dev]'      # includes MLflow; or: uv pip install -e '.[eval]'
   ```
 
   This pulls in MLflow. The project pins `mlflow>=3.0,<4` (in the `eval` extra

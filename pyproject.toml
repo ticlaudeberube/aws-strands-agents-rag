@@ -51,6 +51,9 @@ dev = [
     "mypy>=1.0.0",
     "types-tqdm>=4.64.0",
     "pre-commit>=3.0.0",
+    # Eval harness (scripts/eval_local.py). Same pin as the `eval` extra below.
+    # Dev-only: MLflow must never be imported from a runtime or Lambda path.
+    "mlflow>=3.0,<4",
 ]
 # Offline RAG evaluation harness (scripts/eval_local.py). Strictly a local/CI
 # dev-loop tool — MLflow MUST NOT be imported from any runtime/serverless path.

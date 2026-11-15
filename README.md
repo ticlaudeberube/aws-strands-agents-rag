@@ -83,7 +83,7 @@ optional-dependency extra (pinned `mlflow>=3.0,<4`) and is never imported from
 the runtime/serverless path.
 
 ```bash
-uv pip install -e '.[eval]'                               # install the eval extra once
+uv pip install -e '.[dev]'                                # dev tools and the eval extra (MLflow)
 uv run scripts/eval_local.py --tracking-uri sqlite:///mlflow.db   # run the eval (needs Ollama + OpenSearch)
 uv run mlflow ui --backend-store-uri sqlite:///mlflow.db --port 5001   # browse runs at http://127.0.0.1:5001
 ```

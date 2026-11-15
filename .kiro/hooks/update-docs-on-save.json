@@ -1,0 +1,15 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Update docs after code changes",
+      "description": "After the agent saves a code, config, or env file, updates the matching canonical doc in docs/ (and .env.example) per the documentation rules. Skips docs with no affected behavior.",
+      "trigger": "PostFileSave",
+      "matcher": "^(src/.*\\.py|document_loaders/.*\\.py|scripts/.*\\.py|api_server\\.py|\\.env\\.example)$",
+      "action": {
+        "type": "agent",
+        "prompt": "A code or config file was just saved. Update the documentation to match, in this same turn. Steps: (1) Read the saved file and identify changes to behavior, config or env vars, API endpoints, setup or commands, or tool/skill usage. (2) Map each change to its canonical file using the documentation rules: config/env vars -> docs/GETTING_STARTED.md and .env.example; API endpoints -> docs/API_SERVER.md; setup/commands -> docs/GETTING_STARTED.md and the README quick start; new tool/skill examples -> docs/HOW_TO.md; architecture/runtime flow -> docs/ARCHITECTURE.md; testing -> tests/README.md; evaluation -> docs/EVAL_LOCAL.md. Edit only the canonical file, never duplicate content, and never add markdown to the repo root other than README.md. (3) If the change does not affect documented behavior, make no edits and say so in one sentence. (4) Do not modify the saved code file. Keep edits minimal and factual, and summarize in two sentences or fewer which doc files changed."
+      }
+    }
+  ]
+}

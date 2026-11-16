@@ -8,8 +8,7 @@ from unittest.mock import patch
 import pytest
 from pydantic import ValidationError
 
-from src.agents import rag_routing, strands_graph_agent
-from src.agents.history import condense_question
+from src.agents import rag_routing
 from src.agents.rag_routing import route_rag_query
 from src.agents.strands_graph_agent import create_rag_graph
 from src.config.settings import Settings
@@ -106,18 +105,6 @@ def test_router_join_depth_one_uses_only_last_question() -> None:
     assert text == "question 4 final question"
 
 
-# ---- Condenser fallback -------------------------------------------------
-
-
-def test_condenser_fallback_uses_configured_depth() -> None:
-    def failing(_prompt: str) -> str:
-        raise RuntimeError("model unavailable")
-
-    text = condense_question("final question", _history(5), failing, fallback_turns=4)
-
-    assert text == "question 1 question 2 question 3 question 4 final question"
-
-
 # ---- Graph wiring -------------------------------------------------------
 
 
@@ -154,10 +141,7 @@ def test_graph_passes_configured_join_depth_to_router(monkeypatch: pytest.Monkey
         opensearch_client=OpenSearchClient(settings=settings, client=_FakeOSTransport()),
     )
 
-    with (
-        patch.object(strands_graph_agent, "CONDENSE_FOLLOWUPS", False),
-        patch.object(rag_routing, "route_rag_query", return_value=object()) as route,
-    ):
+    with patch.object(rag_routing, "route_rag_query", return_value=object()) as route:
         graph["shared_route"]("final question", history=_history(2))
 
     assert route.call_args.kwargs["join_turns"] == 7

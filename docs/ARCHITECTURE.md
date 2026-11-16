@@ -29,8 +29,9 @@ The router builds one standalone search text from the most recent
 `FOLLOWUP_USER_TURNS` user questions (default 3) and the current question. That
 text drives the scope check, embedding, and KB search. Follow-ups skip every cache
 layer. Generation sees a transcript of recent turns. A condenser that rewrites
-the follow-up with a model exists but is off by default (`CONDENSE_FOLLOWUPS`);
-see [EVAL_LOCAL.md](EVAL_LOCAL.md#multi-hop-condenser-evaluation). The difference between modes is the backend wiring, not the agent logic itself.
+the follow-up with a model was removed: it did not beat the join on the eval (see
+[EVAL_LOCAL.md](EVAL_LOCAL.md#multi-hop-condenser-evaluation)). The difference
+between modes is the backend wiring, not the agent logic itself.
 The graph uses a vector-store role rather than requiring one vendor's product.
 OpenSearch is the vector engine in both modes — a local OpenSearch container for
 local mode and OpenSearch Serverless for AWS mode; another provider needs a

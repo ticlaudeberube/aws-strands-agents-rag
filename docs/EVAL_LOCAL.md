@@ -242,24 +242,36 @@ Flags:
 Exit codes: `0` on success, `2` if the question file is missing or the `eval`
 extra (mlflow) is not installed.
 
-### Baseline: `llama3.2:1b`
-The default model's first clean deterministic run (`DEPLOYMENT_MODE=local`, empty
-`rag-cache`, no judge, 22 questions, MLflow run `baseline-llama3.2-1b`):
+### Baseline and measured results
+Clean runs follow the procedure above (`DEPLOYMENT_MODE=local`, empty `rag-cache`,
+no judge, 22 questions). Record the Ollama settings with each run (see Latency).
 
-| Metric | Value |
-|---|---|
-| pass_rate | 0.955 |
-| pass_rate (in_scope, out_of_scope, time_sensitive, unanswerable) | 1.000, 1.000, 1.000, 1.000 |
-| pass_rate (competitor) | 0.667 |
-| refusal_rate | 0.455 |
-| caveat_rate | 0.136 |
-| avg_grounding_score | 0.257 |
-| avg_confidence_score | 0.542 |
-| avg_latency_ms | 18786 |
+| Run (MLflow experiment) | Model | Pass rate | Failures | Caveat rate | Grounding | Avg latency |
+|---|---|---|---|---|---|---|
+| `baseline-llama3.2-1b` (`rag-local-eval`) | `llama3.2:1b` | 0.955 | 1 | 0.136 | 0.257 | 18.8 s |
+| `clean-llama3.2-1b` (`clean-eval`) | `llama3.2:1b` | 0.909 | 2 | 0.136 | 0.237 | 13.4 s |
+| `clean-llama3.2-3b` (`clean-eval`) | `llama3.2:3b` | 0.955 | 1 | 0.091 | 0.262 | 23.6 s |
 
-One failure: `competitor-003` expected an answer and the model refused. The run had no
-cache hits and no serverless backends. The latency is high compared with the earlier
-`llama3.2:3b` runs, so compare latency only between runs made under the same load.
+The failures across these runs include `competitor-003`, which expects an answer and
+gets a refusal. The first `llama3.2:1b` run passed one more question than the clean
+rerun, so one question separates the two models. Both runs were single runs.
+
+## Latency
+- **Hardware.** The development Mac has an Intel i9-9980HK. Ollama 0.40.3 runs
+  models on the CPU only (`ollama ps` shows `100% CPU`), so no GPU setting is
+  available on this machine.
+- **Where the time goes.** Each answer is one generation. When the grounding check
+  fails, the router widens the search and generates again, which doubles the time for
+  that question. Answers have no token limit, so length depends on the model.
+- **Server settings.** Record `OLLAMA_KEEP_ALIVE` and `OLLAMA_CONTEXT_LENGTH` with each
+  run. The context length changes the model's memory use and prefill time.
+- **Run-to-run spread.** Runs of the same configuration varied by about 4 seconds
+  (mean 16.2 s, sd 3.8 s over three runs with the retry on). Compare latency only from
+  three or more runs per setting.
+- **Tested settings.** Keeping models loaded (`OLLAMA_KEEP_ALIVE=30m`) showed no
+  measurable effect. Disabling the grounding retry (`GROUNDING_RETRY_ENABLED=false`)
+  gave a mean of 14.9 s over three runs (sd 4.5 s), within the spread above. In one of
+  those runs, grounding fell to 0.167 and caveats rose to 0.318. The retry was kept.
 
 ## Browsing runs in the MLflow UI
 
@@ -416,9 +428,9 @@ Caveats:
 
 `scripts/eval_followup.py` checks whether joining the prior user question to a
 follow-up improves KB retrieval. Each case in `eval/followup_pairs.jsonl` runs one
-KB search per strategy (raw, join_last_turn, join_recent_turns, condensed; top 5,
+KB search per strategy (raw, join_last_turn, join_recent_turns; top 5,
 local OpenSearch `rag-kb`, Ollama `nomic-embed-text`). The first two-strategy
-comparison is recorded below; the script now reports all four.
+comparison is recorded below. The condensed strategy was removed with the condenser.
 A case is a hit when a returned chunk contains one of the case's expected terms.
 
 ```bash
@@ -446,6 +458,10 @@ Caveats:
 - The check measures retrieval only. It does not measure generated answers.
 
 ## Multi-hop condenser evaluation
+This section records why the model-based condenser was removed. Its code is no
+longer in the repo, and its rows are kept as the record. In local mode the
+condenser used `llama3.2:3b` when these runs were done.
+
 
 `scripts/eval_followup.py` also scores four query strategies per case:
 
@@ -453,7 +469,7 @@ Caveats:
 - `join_last_turn`: last user question joined to the question (one hop).
 - `join_recent_turns`: the last N user questions joined, where N is `--join-turns`
   or `FOLLOWUP_USER_TURNS` (code default 3; the local `.env` sets 10).
-- `condensed`: the standalone question from the condenser model, which is `OLLAMA_MODEL` in local mode (`llama3.2:3b` when this run was done; see the note below).
+- `condensed`: the standalone question rewritten by a model (removed).
 
 This run used the 26 cases that existed then: 12 one-hop follow-ups, 5 multi-hop
 follow-ups (two or more prior user turns), and 9 topic switches. Local Ollama and
@@ -472,17 +488,13 @@ It fixed the topic-switch miss `sw-07` on the first run, but on the second run
 three one-hop cases and two topic-switch cases failed. Run-to-run variance is
 not measured, so the gap between v1 and v2 may partly be noise.
 
-Decision: the condenser is not adopted yet. Under the adoption rule in
-`decide_condensed` (beat the last-turn join on multi-hop, no one-hop regression,
-no topic-switch regression against raw), neither prompt version qualifies.
-
-Outcome: the router uses `join_recent_turns` (no model call), with the depth set by
-`FOLLOWUP_USER_TURNS`. The condenser stays off (`CONDENSE_FOLLOWUPS = False`). A
-stronger condenser model, `llama3.1:8b`, was also run on the 26-case set. It scored
-below the join on one-hop follow-ups (83.3%) and on multi-hop follow-ups (80%), so it
-was not adopted either.
-
-The condenser runs on `OLLAMA_MODEL` now. The results above used `llama3.2:3b`.
+Decision: the condenser was not adopted. Neither prompt version beat the last-turn
+join on multi-hop follow-ups without a regression. The router uses
+`join_recent_turns` (no model call), with the depth set by `FOLLOWUP_USER_TURNS`.
+A stronger condenser model, `llama3.1:8b`, was also run on the 26-case set. It scored
+below the join on one-hop follow-ups (83.3%) and on multi-hop follow-ups (80%).
+The condenser was then removed from the code. To test it again, restore it from the
+git history before this removal.
 
 ### Join depth (`--join-turns`)
 

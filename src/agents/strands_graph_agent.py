@@ -45,16 +45,6 @@ from src.tools import (
 
 logger = logging.getLogger(__name__)
 
-# Model that rewrites a follow-up into a standalone question. Local mode uses
-# settings.ollama_model (OLLAMA_MODEL). Serverless uses the Bedrock model that
-# answers already use. Temperature 0 keeps the rewrite repeatable.
-CONDENSE_MODEL_SERVERLESS = "amazon.nova-lite-v1:0"
-CONDENSE_TEMPERATURE = 0.0
-CONDENSE_MAX_TOKENS = 64
-# Off by default. The router joins the last user questions without a model call
-# (see docs/EVAL_LOCAL.md). Set to True to rewrite follow-ups with the condenser.
-CONDENSE_FOLLOWUPS = False
-
 # Global metrics instance for tracking graph execution
 graph_metrics = GraphMetrics()
 node_config_manager = NodeConfigManager()
@@ -559,21 +549,6 @@ def create_rag_graph(
         threshold=settings.resolved_scope_threshold,
     )
 
-    condense_model = (
-        settings.ollama_model if settings.deployment_mode == "local" else CONDENSE_MODEL_SERVERLESS
-    )
-
-    def condenser(prompt: str) -> str:
-        """Rewrite a follow-up prompt with the mode's condenser model."""
-        return str(
-            ollama_client.generate(
-                prompt,
-                model=condense_model,
-                temperature=CONDENSE_TEMPERATURE,
-                max_tokens=CONDENSE_MAX_TOKENS,
-            )
-        )
-
     def shared_route(
         question: str,
         top_k: int = rag_routing.DEFAULT_TOP_K,
@@ -621,7 +596,6 @@ def create_rag_graph(
             metric_emitter=metric_emitter,
             history=history,
             scope_gate=scope_gate.allows,
-            condenser=condenser if CONDENSE_FOLLOWUPS else None,
             join_turns=settings.followup_user_turns,
         )
 

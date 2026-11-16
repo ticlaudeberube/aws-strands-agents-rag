@@ -44,6 +44,7 @@ class LoaderSettings:
     response_cache_collection_name: str
     response_cache_threshold: float
     response_cache_embedding_dim: int
+    response_cache_source: str
     agent_cache_size: int
     embedding_cache_ttl: int
     web_search_timeout: int
@@ -70,6 +71,7 @@ def get_loader_settings() -> LoaderSettings:
         ),
         response_cache_threshold=float(os.getenv("RESPONSE_CACHE_THRESHOLD", "0.99")),
         response_cache_embedding_dim=_get_int("RESPONSE_CACHE_EMBEDDING_DIM", 768),
+        response_cache_source=os.getenv("RESPONSE_CACHE_SOURCE", "data/responses.json"),
         agent_cache_size=_get_int("AGENT_CACHE_SIZE", 500),
         embedding_cache_ttl=_get_int("EMBEDDING_CACHE_TTL", 3600),
         web_search_timeout=_get_int("WEB_SEARCH_TIMEOUT", 10),

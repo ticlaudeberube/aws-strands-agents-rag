@@ -3,6 +3,7 @@
 import logging
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Any
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -236,7 +237,7 @@ class OllamaClient:
         try:
             # Ollama uses 'num_predict' instead of 'max_tokens'
             # num_predict: number of tokens to predict (-1 = infinite, default behavior)
-            payload = {
+            payload: dict[str, Any] = {
                 "prompt": prompt,
                 "model": model,
                 "stream": stream,

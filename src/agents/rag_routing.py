@@ -58,7 +58,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 
 from src.agents.bedrock_guardrails import OutputGuardrailBlocked
-from src.agents.history import FALLBACK_USER_TURNS, condense_question, retrieval_text
+from src.agents.history import FALLBACK_USER_TURNS, retrieval_text
 from src.agents.topic_scope import OUT_OF_SCOPE_ANSWER
 
 logger = logging.getLogger(__name__)
@@ -662,7 +662,6 @@ def route_rag_query(
     metric_emitter: Callable[[str], None] | None = None,
     history: list[dict] | None = None,
     scope_gate: Callable[[str, list[float] | None, list[dict] | None], bool] | None = None,
-    condenser: Callable[[str], str] | None = None,
     join_turns: int = FALLBACK_USER_TURNS,
 ) -> RoutingResult:
     """Route a (validated) query through Cache → KB → Web Search.
@@ -748,7 +747,7 @@ def route_rag_query(
     # the conversation, and every cache layer is skipped so answers never leak
     # across conversations.
     is_follow_up = bool(history)
-    search_question = _search_text(question, history, condenser, join_turns)
+    search_question = _search_text(question, history, join_turns)
 
     # ---- Tier 0: force_web_search bypasses cache AND KB (Req 2.6) ----------
     if force_web_search and scope_gate is not None and not scope_gate(search_question, None, None):
@@ -1015,20 +1014,16 @@ def route_rag_query(
 def _search_text(
     question: str,
     history: list[dict] | None,
-    condenser: Callable[[str], str] | None,
     join_turns: int,
 ) -> str:
-    """Return the standalone text used for scope, embedding, and search.
+    """Return the text used for scope, embedding, and search.
 
-    Without history the question is used as-is. With a condenser, the LLM
-    rewrite is used (falling back to a join of ``join_turns`` questions). Without
-    one, the last ``join_turns`` user questions are joined.
+    Without history the question is used as-is. With history, the last
+    ``join_turns`` user questions are joined to it (see :func:`retrieval_text`).
     """
     if not history:
         return question
-    if condenser is None:
-        return retrieval_text(question, history, turns=join_turns)
-    return condense_question(question, history, condenser, fallback_turns=join_turns)
+    return retrieval_text(question, history, turns=join_turns)
 
 
 def _get_query_embedding(

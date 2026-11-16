@@ -6,9 +6,8 @@ expected terms (case-insensitive). Strategies:
 
 - ``raw``: the question alone.
 - ``join_last_turn``: the last user question joined to the question (one hop).
-- ``join_recent_turns``: the last three user questions joined (multi-hop fallback).
-- ``condensed``: a standalone question rewritten by the local condenser model
-  (``src.agents.history.condense_question``), as used by the router.
+- ``join_recent_turns``: the last user questions joined, as used by the router
+  (``FOLLOWUP_USER_TURNS``).
 
 Hit rates are reported for follow-ups, follow-ups with two or more prior user
 turns (``follow_up_multi``), and topic switches.
@@ -16,7 +15,7 @@ turns (``follow_up_multi``), and topic switches.
     uv run python scripts/eval_followup.py
     uv run python scripts/eval_followup.py --json
 
-Requires Ollama (embedding and condenser models) and the local OpenSearch KB.
+Requires Ollama (embedding model) and the local OpenSearch KB.
 """
 
 from __future__ import annotations
@@ -34,7 +33,6 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.agents.history import (  # noqa: E402
     FALLBACK_USER_TURNS,
-    condense_question,
     normalize_turns,
     retrieval_text,
 )
@@ -49,8 +47,7 @@ MULTI_HOP_MIN_USER_TURNS = 2
 RAW = "raw"
 JOIN_LAST_TURN = "join_last_turn"
 JOIN_RECENT_TURNS = "join_recent_turns"
-CONDENSED = "condensed"
-STRATEGIES = (RAW, JOIN_LAST_TURN, JOIN_RECENT_TURNS, CONDENSED)
+STRATEGIES = (RAW, JOIN_LAST_TURN, JOIN_RECENT_TURNS)
 
 
 @dataclass(frozen=True)
@@ -159,7 +156,6 @@ def prior_user_turns(pair: Pair) -> int:
 def strategy_query(
     pair: Pair,
     strategy: str,
-    condense: Callable[[str, list[dict[str, str]]], str],
     join_turns: int = FALLBACK_USER_TURNS,
 ) -> str:
     """Return the search text for one strategy.
@@ -173,15 +169,12 @@ def strategy_query(
         return retrieval_text(pair.question, pair.history, turns=1)
     if strategy == JOIN_RECENT_TURNS:
         return retrieval_text(pair.question, pair.history, turns=join_turns)
-    if strategy == CONDENSED:
-        return condense(pair.question, pair.history)
     raise ValueError(f"unknown strategy: {strategy}")
 
 
 def evaluate_strategies(
     pairs: list[Pair],
     search: Callable[[str, int, str], list[str]],
-    condense: Callable[[str, list[dict[str, str]]], str],
     top_k: int,
     index: str,
     join_turns: int = FALLBACK_USER_TURNS,
@@ -195,7 +188,7 @@ def evaluate_strategies(
             "prior_user_turns": prior_user_turns(pair),
         }
         for strategy in STRATEGIES:
-            text = strategy_query(pair, strategy, condense, join_turns)
+            text = strategy_query(pair, strategy, join_turns)
             row[f"{strategy}_query"] = text
             row[f"{strategy}_hit"] = is_hit(search(text, top_k, index), pair.expected_terms)
         rows.append(row)
@@ -224,26 +217,6 @@ def summarize_strategies(rows: list[dict[str, Any]]) -> dict[str, dict[str, floa
     return summary
 
 
-def decide_condensed(summary: dict[str, dict[str, float]]) -> str:
-    """Return whether the condenser should replace the last-turn join.
-
-    Adopt the condenser when it beats the last-turn join on multi-hop follow-ups,
-    does not lower one-hop follow-ups, and does not lower topic-switch hits
-    compared with the raw question.
-    """
-    follow_up = summary.get(FOLLOW_UP)
-    multi = summary.get(FOLLOW_UP_MULTI)
-    switch = summary.get(TOPIC_SWITCH)
-    if follow_up is None or multi is None or switch is None:
-        return "insufficient data: follow-up, multi-hop, and topic-switch cases are required"
-    beats_join_on_multi = multi[f"{CONDENSED}_hit_rate"] > multi[f"{JOIN_LAST_TURN}_hit_rate"]
-    keeps_one_hop = follow_up[f"{CONDENSED}_hit_rate"] >= follow_up[f"{JOIN_LAST_TURN}_hit_rate"]
-    keeps_switches = switch[f"{CONDENSED}_hit_rate"] >= switch[f"{RAW}_hit_rate"]
-    if beats_join_on_multi and keeps_one_hop and keeps_switches:
-        return "adopt condenser: beats the last-turn join on multi-hop without regressions"
-    return "keep last-turn join: condenser does not beat it without regressions"
-
-
 def _print_table(rows: list[dict[str, Any]], summary: dict[str, dict[str, float]]) -> None:
     header = f"{'id':8} {'bucket':16} " + " ".join(f"{s:>18}" for s in STRATEGIES)
     print(header)
@@ -254,7 +227,6 @@ def _print_table(rows: list[dict[str, Any]], summary: dict[str, dict[str, float]
     for bucket, stats in summary.items():
         rates = ", ".join(f"{s} {stats[f'{s}_hit_rate']:.2%}" for s in STRATEGIES)
         print(f"{bucket}: {int(stats['cases'])} cases, {rates}")
-    print(f"decision: {decide_condensed(summary)}")
 
 
 def _build_search() -> Callable[[str, int, str], list[str]]:
@@ -275,45 +247,12 @@ def _build_search() -> Callable[[str, int, str], list[str]]:
     return search
 
 
-def _build_condenser(
-    model: str, join_turns: int = FALLBACK_USER_TURNS
-) -> Callable[[str, list[dict[str, str]]], str]:
-    """Create the condenser for ``model`` with the router's temperature and limits.
-
-    ``join_turns`` is the fallback join depth used when the rewrite fails.
-    """
-    from src.agents.strands_graph_agent import CONDENSE_MAX_TOKENS, CONDENSE_TEMPERATURE
-    from src.config.settings import get_settings
-    from src.tools.ollama_client import OllamaClient
-
-    ollama = OllamaClient(host=get_settings().ollama_host)
-
-    def generate(prompt: str) -> str:
-        return ollama.generate(
-            prompt,
-            model=model,
-            temperature=CONDENSE_TEMPERATURE,
-            max_tokens=CONDENSE_MAX_TOKENS,
-        )
-
-    def condense(question: str, history: list[dict[str, str]]) -> str:
-        return condense_question(question, history, generate, fallback_turns=join_turns)
-
-    return condense
-
-
 def main(argv: list[str] | None = None) -> int:
     """Run the follow-up retrieval eval and print the table or JSON."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--pairs", type=Path, default=DEFAULT_PAIRS)
     parser.add_argument("--top-k", type=int, default=DEFAULT_TOP_K)
     parser.add_argument("--index", type=str, default=None)
-    parser.add_argument(
-        "--condense-model",
-        type=str,
-        default=None,
-        help="Ollama model for the condensed strategy (default: the router's CONDENSE_MODEL_LOCAL)",
-    )
     parser.add_argument(
         "--join-turns",
         type=int,
@@ -323,18 +262,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--json", action="store_true", help="Print JSON instead of a table")
     args = parser.parse_args(argv)
 
-    from src.agents.strands_graph_agent import CONDENSE_MODEL_LOCAL
     from src.config.settings import get_settings
 
     settings = get_settings()
     index = args.index or settings.opensearch_kb_index
     join_turns = args.join_turns or settings.followup_user_turns
-    condense_model = args.condense_model or CONDENSE_MODEL_LOCAL
     pairs = load_pairs(args.pairs)
     rows = evaluate_strategies(
         pairs,
         _build_search(),
-        _build_condenser(condense_model, join_turns),
         args.top_k,
         index,
         join_turns,
@@ -344,7 +280,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.json:
         print(
             json.dumps(
-                {"rows": rows, "summary": summary, "decision": decide_condensed(summary)},
+                {"rows": rows, "summary": summary},
                 indent=2,
             )
         )

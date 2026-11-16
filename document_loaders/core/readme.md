@@ -36,6 +36,8 @@ vector_db.index_documents(
 
 - `document_loaders/load_docs_opensearch.py`
 - `document_loaders/sync_responses_cache.py`
+  (reads its Q&A file from `RESPONSE_CACHE_SOURCE`, default `data/responses.json`,
+  and clears `rag-cache` before loading)
 - `document_loaders/load_embeddings_from_json.py`
 - `document_loaders/add_sample_docs.py`
 

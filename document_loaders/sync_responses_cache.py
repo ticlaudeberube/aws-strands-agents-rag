@@ -67,16 +67,29 @@ def _ensure_cache_index(embedding_dim: int) -> None:
     logger.info("Created OpenSearch cache index: %s", cache_index)
 
 
+def _source_path() -> Path:
+    """Return the Q&A file from ``RESPONSE_CACHE_SOURCE``.
+
+    A relative path is resolved against the project root, so the script works from
+    any working directory.
+    """
+    source = Path(settings.response_cache_source)
+    if not source.is_absolute():
+        source = Path(__file__).resolve().parent.parent / source
+    return source
+
+
 def load_responses_cache():
     """Load pre-generated Q&A pairs into the response cache.
 
     Always runs to sync responses into the cache.
     """
+    source = _source_path()
     try:
-        with open("./data/responses.json", encoding="utf-8") as f:
+        with open(source, encoding="utf-8") as f:
             data = json.load(f)
     except FileNotFoundError:
-        print("❌ Error: ./data/responses.json not found")
+        print(f"❌ Error: {source} not found (set RESPONSE_CACHE_SOURCE)")
         print("   Please create with format:")
         print("   {")
         print('     "qa_pairs": [')
@@ -91,7 +104,7 @@ def load_responses_cache():
 
     qa_pairs = data.get("qa_pairs", [])
     if not qa_pairs:
-        print("❌ No Q&A pairs found in responses.json")
+        print(f"❌ No Q&A pairs found in {source}")
         return
 
     print(f"Using cache index: {cache_index}")
@@ -107,7 +120,7 @@ def load_responses_cache():
 
     print(f"\nLoading {len(qa_pairs)} Q&A pairs into {cache_index}...")
     print("=" * 70)
-    logger.info(f"Processing {len(qa_pairs)} Q&A pairs from responses.json")
+    logger.info(f"Processing {len(qa_pairs)} Q&A pairs from {source}")
 
     documents = []
     skipped_count = 0

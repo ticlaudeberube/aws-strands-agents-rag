@@ -184,7 +184,7 @@ tests/
 ├── conftest.py                           # Shared fixtures and configuration
 ├── README.md                             # This file
 ├── unit/                                # Fast, mocked tests
-│   ├── test_agents/                     # Graph, routing, guardrails, history, condenser
+│   ├── test_agents/                     # Graph, routing, guardrails, history
 │   ├── test_api/                        # FastAPI endpoints and chat history
 │   ├── test_config/                     # Settings validation
 │   ├── test_indexing/                   # Indexing pipeline

@@ -172,10 +172,9 @@ route. Live serverless behavior is not validated; it waits on item 8.
 - Follow-up history depth: `FOLLOWUP_USER_TURNS` sets how many recent user
   questions the router joins. Code default 3; local `.env` and
   `.env.serverless-local` set 10, which measured 6 of 6 on long-history cases
-  against 2 of 6 at 3. The multi-hop condenser (`OLLAMA_MODEL` local,
-  `amazon.nova-lite-v1:0` serverless) is off (`CONDENSE_FOLLOWUPS = False`). On the 26-case eval, neither prompt
-  version beat the simpler joins without a regression. Results and the decision
-  are in [EVAL_LOCAL.md](EVAL_LOCAL.md#multi-hop-condenser-evaluation).
+  against 2 of 6 at 3. A model-based condenser was removed: on the 26-case eval
+  neither prompt version beat the join without a regression. Results and the
+  decision are in [EVAL_LOCAL.md](EVAL_LOCAL.md#multi-hop-condenser-evaluation).
 
 ## 10. Strengthen the local eval loop
 **Status:** Not implemented. The LLM judge was removed. It was slow, used a weak
@@ -275,9 +274,8 @@ One run per model. The gap is about one question, which is within run-to-run noi
 Still open:
 - Decide the default: `llama3.2:3b` for pass rate, or `llama3.2:1b` for latency.
   Run each model again to measure the noise.
-- The query condenser uses `OLLAMA_MODEL`. On the 26-case eval, neither prompt
-  version beat the join baseline, so it stays off (`CONDENSE_FOLLOWUPS = False`).
-  See [EVAL_LOCAL.md](EVAL_LOCAL.md#multi-hop-condenser-evaluation). The per-node
+- The model-based query condenser was removed. On the 26-case eval it did not beat
+  the join baseline. See [EVAL_LOCAL.md](EVAL_LOCAL.md#multi-hop-condenser-evaluation). The per-node
   presets in `src/agents/node_config.py` no longer carry a model field, because no
   call path read it.
 - Keep the model choice in settings, so local and serverless can differ.

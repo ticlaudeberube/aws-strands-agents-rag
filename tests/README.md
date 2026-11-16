@@ -372,7 +372,7 @@ def test_security_detection_patterns(strands_agent, malicious_input, expected_de
 def mock_ollama_response():
     """Fixture providing a mock Ollama response."""
     return {
-        "model": "qwen2.5:0.5b",
+        "model": "llama3.2:1b",
         "response": "Milvus is a vector database.",
         "done": True
     }
@@ -391,7 +391,7 @@ def test_ollama_response_parsing(mock_ollama_response):
     parsed = client.parse_response(mock_ollama_response)
 
     # ===== ASSERT =====
-    assert parsed.model == "qwen2.5:0.5b"
+    assert parsed.model == "llama3.2:1b"
     assert "Milvus" in parsed.response
     assert parsed.done == True
 ```

@@ -82,9 +82,7 @@ The two caveats are **mutually exclusive** — a user never sees two stacked
 hedges. The grounding check is a deterministic lexical calculation, not a
 semantic judge or proof that a response is factually correct. It deliberately
 flags-with-a-caveat rather than hard-blocks, because a valid paraphrase can
-score low and unsupported text can share words with a source. (For an
-additional, still imperfect semantic signal, see the optional LLM judge in the
-eval harness below.)
+score low and unsupported text can share words with a source.
 
 **Soft-steer retry (before the caveat).** When a freshly generated KB answer
 fails the grounding check, `route_rag_query` first attempts *one* self-correction
@@ -292,8 +290,8 @@ evaluation harness closes that loop.
   pass/fail per question, and compare runs. Tuning
   `answer_grounding_threshold` from 0.35 → 0.45 becomes a measured
   before/after, not a guess.
-- **It can support a regression gate.** Lexical scoring and grading avoid an
-  LLM judge, but end-to-end runs still depend on model and retrieval behavior
+- **It can support a regression gate.** Lexical scoring and grading make no LLM
+  call, but end-to-end runs still depend on model and retrieval behavior
   and are not guaranteed deterministic. CI only fails on these measures if
   the harness is explicitly wired into a CI workflow.
 - **It's isolated and free.** `mlflow` lives in the `eval` optional-dependency
@@ -306,20 +304,17 @@ evaluation harness closes that loop.
 
 - Turns threshold/prompt tuning into evidence-backed decisions.
 - Can catch anti-hallucination regressions when its checks are run in CI.
-- Separates deterministic lexical scoring from an optional semantic read
-  (LLM judge), so you choose cost vs depth per run.
 - Produces a per-run audit trail (`results.json`) of exactly what the agent did.
 
 ### How to run
 
 Full operational detail — install, flags, question-set schema, grading tags,
-the optional LLM judge, and how to interpret results — is in
+and how to interpret results — is in
 **[EVAL_LOCAL.md](EVAL_LOCAL.md)**. In brief:
 
 ```bash
 uv pip install -e '.[eval]'              # install the eval extra once
-uv run scripts/eval_local.py             # lexical metrics, without an LLM judge
-uv run scripts/eval_local.py --judge --judge-model llama3.1:8b   # add LLM judge
+uv run scripts/eval_local.py             # lexical metrics
 uv run mlflow ui --port 5001             # compare runs at http://127.0.0.1:5001
 ```
 
@@ -327,11 +322,6 @@ uv run mlflow ui --port 5001             # compare runs at http://127.0.0.1:5001
 > 5001`. If the UI shows no runs, the eval and the UI are pointed at different
 > tracking stores — see the store/port notes in **[EVAL_LOCAL.md](EVAL_LOCAL.md)**.
 
-The judge defaults to `settings.ollama_model` (`llama3.2:3b`), which is still
-modest as an evaluator — point `--judge-model` at a larger installed model (e.g.
-`llama3.1:8b`) for meaningful faithfulness scores. Keeping the pipeline's
-generation model small while judging with a larger one is the right split: the
-thing being graded should not also be the grader.
 
 ### What "good" looks like
 
@@ -339,9 +329,6 @@ thing being graded should not also be the grader.
   the gates and the refusal path are working.
 - Low `refusal_rate` on `in_scope` items = retrieval and the grounding threshold
   aren't too aggressive.
-- `avg_grounding_score` (lexical) diverging from `avg_judge_faithfulness`
-  (semantic) usually means heavy paraphrasing — a signal to reconsider
-  `answer_grounding_threshold` rather than trust the lexical number alone.
 
 ## Where each workshop technique landed
 
@@ -352,7 +339,7 @@ thing being graded should not also be the grader.
 | Managed Bedrock Guardrails | Implemented for configured serverless calls | Layer 4c |
 | Agent steering (self-correct) | Implemented — one-shot widened-retrieval retry, then caveat if needed (not a full reflection loop) | Layer 3 |
 | Semantic tool selection | Not implemented (2-tool pipeline; low value) | — |
-| Multi-agent validation | Not implemented; optional LLM judge covers offline eval | eval harness |
+| Multi-agent validation | Not implemented | — |
 
 ## Tests
 

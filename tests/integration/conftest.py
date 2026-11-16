@@ -34,7 +34,7 @@ def integration_settings(test_project_root: Path):
     settings.OPENSEARCH_LOCAL_HOST = os.getenv("OPENSEARCH_LOCAL_HOST", "localhost")
     settings.OPENSEARCH_LOCAL_PORT = int(os.getenv("OPENSEARCH_LOCAL_PORT", "9200"))
     settings.EMBEDDING_MODEL = "nomic-embed-text"
-    settings.FAST_MODEL = "qwen2.5:0.5b"
+    settings.FAST_MODEL = "llama3.2:1b"
     settings.POWERFUL_MODEL = "llama3.1:8b"
     settings.MAX_TOKENS = 2000
     settings.RETRIEVAL_TOP_K = 5

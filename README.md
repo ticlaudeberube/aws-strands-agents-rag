@@ -24,7 +24,7 @@ A dual-mode RAG system that currently supports both local development and AWS se
 ### Local mode
 
 ```bash
-ollama pull llama3.2:3b
+ollama pull llama3.2:1b
 ollama pull nomic-embed-text:v1.5
 docker compose -f docker/docker-compose.yml up -d opensearch
 uv run python api_server.py

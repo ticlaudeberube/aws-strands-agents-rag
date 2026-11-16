@@ -26,7 +26,7 @@ DEPLOYMENT_MODE=local
    which conflicts with `api_server.py`:
 
 ```bash
-ollama pull llama3.2:3b
+ollama pull llama3.2:1b
 ollama pull nomic-embed-text:v1.5
 docker compose -f docker/docker-compose.yml up -d opensearch
 ```
@@ -90,7 +90,7 @@ The settings file is the live source of truth for runtime selection:
 - `src/config/settings.py`
 - `.env.example` (every runtime variable is listed here with its default)
 
-Key defaults in code: `llama3.2:3b` for Ollama generation, `nomic-embed-text:v1.5`
+Key defaults in code: `llama3.2:1b` for Ollama generation, `nomic-embed-text:v1.5`
 for Ollama embeddings, `amazon.nova-lite-v1:0` for Bedrock generation, and
 `FOLLOWUP_USER_TURNS=3`. Local `.env` files may override them.
 

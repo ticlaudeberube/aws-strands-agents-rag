@@ -17,7 +17,7 @@ class TestConfigurationConsistency:
         # Default should come from env var or hardcoded fallback
         settings = Settings()
         assert settings.ollama_embed_model == "nomic-embed-text:v1.5"
-        assert settings.ollama_model == os.getenv("OLLAMA_MODEL", "llama3.2:3b")
+        assert settings.ollama_model == os.getenv("OLLAMA_MODEL", "llama3.2:1b")
 
     def test_settings_loads_from_env_override(self):
         """Verify settings respects OLLAMA_EMBEDDING_MODEL env var."""
@@ -31,7 +31,7 @@ class TestConfigurationConsistency:
         """Verify OllamaClient.embed_text uses config when model not provided."""
         client = OllamaClient()
 
-        # When model=os.getenv("OLLAMA_MODEL", qwen2.5:0.5b), should use settings
+        # When model=os.getenv("OLLAMA_MODEL", llama3.2:1b), should use settings
         with patch.object(client.session, "post") as mock_post:
             mock_post.return_value.json.return_value = {"embedding": [0.1, 0.2, 0.3]}
 
@@ -68,7 +68,7 @@ class TestConfigurationConsistency:
 
             # Verify embed_text was called with config model
             for call in mock_embed.call_args_list:
-                # When model=os.getenv("OLLAMA_MODEL", qwen2.5:0.5b) in embed_texts, it should use settings
+                # When model=os.getenv("OLLAMA_MODEL", llama3.2:1b) in embed_texts, it should use settings
                 # Check that the call was made properly
                 assert "text" in str(call) or call[0]  # Verify text was passed
 

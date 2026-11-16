@@ -1,6 +1,6 @@
 """Wiring tests: the graph's shared route passes a per-mode condenser to the router.
 
-Local mode condenses with ``llama3.2:3b`` through Ollama. Serverless mode
+Local mode condenses with ``settings.ollama_model`` (``OLLAMA_MODEL``) through Ollama. Serverless mode
 condenses with ``amazon.nova-lite-v1:0`` through Bedrock. The router is
 patched, so no live model or service is called.
 """
@@ -13,7 +13,6 @@ from unittest.mock import patch
 from src.agents import rag_routing, strands_graph_agent
 from src.agents.strands_graph_agent import (
     CONDENSE_MAX_TOKENS,
-    CONDENSE_MODEL_LOCAL,
     CONDENSE_MODEL_SERVERLESS,
     CONDENSE_TEMPERATURE,
     create_rag_graph,
@@ -114,7 +113,7 @@ def test_local_mode_condenses_with_llama_model() -> None:
 
     assert rewrite == "Standalone question: Do you recommend Milvus for my project?"
     call = llm.generate_calls[-1]
-    assert call["model"] == CONDENSE_MODEL_LOCAL == "llama3.2:3b"
+    assert call["model"] == Settings().ollama_model
     assert call["temperature"] == CONDENSE_TEMPERATURE
     assert call["max_tokens"] == CONDENSE_MAX_TOKENS
 

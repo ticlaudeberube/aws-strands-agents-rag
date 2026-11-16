@@ -12,7 +12,6 @@ class NodeConfig:
     """Configuration for a single graph node."""
 
     name: str
-    model: str
     timeout_seconds: int
     max_retries: int
     enable_metrics: bool = True
@@ -43,7 +42,6 @@ class NodeConfig:
     def update(self, **kwargs: Any) -> bool:
         """Update configuration at runtime."""
         allowed_fields = {
-            "model",
             "timeout_seconds",
             "max_retries",
             "enable_metrics",
@@ -69,7 +67,6 @@ class NodeConfig:
         """Convert configuration to dictionary."""
         return {
             "name": self.name,
-            "model": self.model,
             "timeout_seconds": self.timeout_seconds,
             "max_retries": self.max_retries,
             "enable_metrics": self.enable_metrics,
@@ -119,7 +116,6 @@ class NodeConfigManager:
 # Preset configurations for common node types
 TOPIC_CHECKER_CONFIG = NodeConfig(
     name="TopicChecker",
-    model="llama3.2:3b",
     timeout_seconds=5,
     max_retries=2,
     enable_circuit_breaker=False,
@@ -130,7 +126,6 @@ TOPIC_CHECKER_CONFIG = NodeConfig(
 
 SECURITY_CHECKER_CONFIG = NodeConfig(
     name="SecurityChecker",
-    model="llama3.2:3b",
     timeout_seconds=5,
     max_retries=2,
     enable_circuit_breaker=False,
@@ -141,7 +136,6 @@ SECURITY_CHECKER_CONFIG = NodeConfig(
 
 RAG_WORKER_CONFIG = NodeConfig(
     name="RAGWorker",
-    model="llama3.2:3b",
     timeout_seconds=30,
     max_retries=3,
     enable_circuit_breaker=True,

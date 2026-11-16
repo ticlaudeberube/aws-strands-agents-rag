@@ -6,7 +6,7 @@ Local Mode pipeline (``LocalOpenSearchAgent``, Ollama + OpenSearch) and logs, pe
 question and in aggregate, the signals the pipeline already produces —
 grounding score, confidence score, tier used, whether it refused, whether a
 caveat fired, latency — plus a pass/fail against each question's
-``expected_behavior``. An optional LLM judge adds a semantic faithfulness score.
+``expected_behavior``.
 
 This is a **dev-loop / CI tool**. It is intentionally isolated from the
 runtime: ``mlflow`` lives in the ``eval`` optional-dependency group and is
@@ -20,8 +20,6 @@ Usage
     # Deterministic run (lexical metrics only — fast, no tokens):
     uv run scripts/eval_local.py
 
-    # Add the LLM-as-judge faithfulness score (slower, uses Ollama):
-    uv run scripts/eval_local.py --judge
 
     # Point at a custom question set / MLflow experiment:
     uv run scripts/eval_local.py --questions eval/questions.jsonl \
@@ -168,7 +166,6 @@ class QuestionResult:
     tier_used: str
     latency_ms: float
     answer_len: int
-    judge_faithfulness: float | None = None
     error: str | None = None
 
 
@@ -189,79 +186,12 @@ def summarize(results: list[QuestionResult]) -> dict[str, float]:
         "avg_confidence_score": sum(r.confidence_score for r in graded) / m,
         "avg_latency_ms": sum(r.latency_ms for r in graded) / m,
     }
-    judged = [r.judge_faithfulness for r in graded if r.judge_faithfulness is not None]
-    if judged:
-        agg["avg_judge_faithfulness"] = sum(judged) / len(judged)
     # Per-category pass rate.
     cats = {r.category for r in graded}
     for cat in sorted(cats):
         rows = [r for r in graded if r.category == cat]
         agg[f"pass_rate/{cat}"] = sum(1 for r in rows if r.passed) / len(rows)
     return agg
-
-
-# ---------------------------------------------------------------------------
-# LLM judge (optional)
-# ---------------------------------------------------------------------------
-
-_JUDGE_PROMPT = """You are a strict evaluator of a retrieval-augmented answer.
-
-Given the QUESTION, the retrieved CONTEXT, and the ANSWER, rate how faithful the
-answer is to the context on a scale of 0.0 to 1.0, where:
-- 1.0 = every claim in the answer is directly supported by the context
-- 0.5 = partially supported; some claims are not in the context
-- 0.0 = the answer makes claims absent from or contradicted by the context
-
-An honest refusal ("I don't have information about that...") when the context is
-empty or irrelevant should score 1.0 (it is faithful — it does not fabricate).
-
-Respond with ONLY a single number between 0.0 and 1.0.
-
-QUESTION:
-{question}
-
-CONTEXT:
-{context}
-
-ANSWER:
-{answer}
-
-Faithfulness score (0.0-1.0):"""
-
-
-def judge_faithfulness(
-    ollama_client: Any, model: str, question: str, answer: str, sources: list[dict]
-) -> float | None:
-    """Return an LLM faithfulness score in [0,1], or ``None`` on any failure.
-
-    Deliberately best-effort: the judge must never break an eval run, so any
-    exception or unparseable response yields ``None`` (excluded from the mean).
-    """
-    context = (
-        "\n".join(str(s.get("text") or s.get("snippet") or "") for s in sources).strip()
-        or "(no context retrieved)"
-    )
-    prompt = _JUDGE_PROMPT.format(question=question, context=context[:4000], answer=answer)
-    try:
-        raw = ollama_client.generate(prompt=prompt, model=model, temperature=0.0)
-        return _parse_score(str(raw))
-    except Exception as exc:  # noqa: BLE001 - judge is best-effort
-        logger.warning("Judge call failed for %r: %s", question[:40], exc)
-        return None
-
-
-def _parse_score(raw: str) -> float | None:
-    """Extract the first float in [0,1] from the judge's raw response."""
-    import re
-
-    match = re.search(r"\d*\.?\d+", raw)
-    if not match:
-        return None
-    try:
-        value = float(match.group(0))
-    except ValueError:
-        return None
-    return max(0.0, min(1.0, value))
 
 
 # ---------------------------------------------------------------------------
@@ -274,8 +204,6 @@ class EvalConfig:
     questions_path: Path
     experiment: str
     run_name: str | None
-    use_judge: bool
-    judge_model: str | None
     top_k: int
     tracking_uri: str | None = None
     search_ef: int | None = None
@@ -319,7 +247,7 @@ async def _answer_with_trace(agent: Any, question: str, top_k: int) -> tuple[str
         return answer, sources
 
 
-async def _run_one(agent: Any, item: dict, cfg: EvalConfig, judge_client: Any) -> QuestionResult:
+async def _run_one(agent: Any, item: dict, cfg: EvalConfig) -> QuestionResult:
     """Run a single question through the local agent and build its record."""
     question = item["question"]
     start = time.time()
@@ -343,12 +271,6 @@ async def _run_one(agent: Any, item: dict, cfg: EvalConfig, judge_client: Any) -
     signals = classify_answer(answer, sources)
     passed = error is None and grade(item["expected_behavior"], signals)
 
-    judge_score: float | None = None
-    if cfg.use_judge and error is None and judge_client is not None:
-        judge_score = judge_faithfulness(
-            judge_client, cfg.judge_model or "", question, answer, sources
-        )
-
     return QuestionResult(
         id=str(item.get("id", "")),
         category=str(item.get("category", "uncategorized")),
@@ -361,7 +283,6 @@ async def _run_one(agent: Any, item: dict, cfg: EvalConfig, judge_client: Any) -
         tier_used=tier,
         latency_ms=latency_ms,
         answer_len=signals.answer_len,
-        judge_faithfulness=judge_score,
         error=error,
     )
 
@@ -413,22 +334,6 @@ async def run_eval(cfg: EvalConfig) -> dict[str, float]:
     logger.info("Loaded %d questions from %s", len(items), cfg.questions_path)
 
     agent = _build_agent(settings)
-    judge_client = agent.ollama_client if cfg.use_judge else None
-    judge_model = cfg.judge_model or getattr(settings, "ollama_model", None)
-    cfg.judge_model = judge_model
-
-    # A judge no stronger than the generator cannot meaningfully grade it (the
-    # thing being graded should not also be the grader). Warn when the judge is
-    # enabled but falls back to the pipeline's own generation model, and point
-    # the operator at a larger model via --judge-model.
-    if cfg.use_judge and judge_model == getattr(settings, "ollama_model", None):
-        logger.warning(
-            "LLM judge is using the pipeline's generation model (%s); scores will be "
-            "weak. Pass a larger model, e.g. --judge-model llama3.1:8b, for a "
-            "meaningful faithfulness grade.",
-            judge_model,
-        )
-
     tracking_uri = _resolve_tracking_uri(cfg.tracking_uri)
     if tracking_uri:
         mlflow.set_tracking_uri(tracking_uri)
@@ -442,8 +347,6 @@ async def run_eval(cfg: EvalConfig) -> dict[str, float]:
             {
                 "questions": cfg.questions_path.name,
                 "num_questions": len(items),
-                "use_judge": cfg.use_judge,
-                "judge_model": judge_model if cfg.use_judge else "none",
                 "top_k": cfg.top_k,
                 "vectordb_search_ef": settings.vectordb_search_ef,
                 "grounding_threshold": settings.answer_grounding_threshold,
@@ -454,23 +357,18 @@ async def run_eval(cfg: EvalConfig) -> dict[str, float]:
         )
 
         for item in items:
-            res = await _run_one(agent, item, cfg, judge_client)
+            res = await _run_one(agent, item, cfg)
             results.append(res)
             # Per-question metric (step-indexed) for drill-down in the UI.
             mlflow.log_metric("passed", 1.0 if res.passed else 0.0, step=len(results))
             logger.info(
-                "[%s] %s pass=%s refused=%s caveat=%s ground=%.2f%s",
+                "[%s] %s pass=%s refused=%s caveat=%s ground=%.2f",
                 res.category,
                 res.id,
                 res.passed,
                 res.refused,
                 res.caveated,
                 res.grounding_score,
-                (
-                    f" judge={res.judge_faithfulness:.2f}"
-                    if res.judge_faithfulness is not None
-                    else ""
-                ),
             )
 
         agg = summarize(results)
@@ -517,20 +415,6 @@ def _parse_args(argv: list[str] | None = None) -> EvalConfig:
     )
     parser.add_argument("--experiment", default="rag-local-eval", help="MLflow experiment name.")
     parser.add_argument("--run-name", default=None, help="Optional MLflow run name.")
-    parser.add_argument(
-        "--judge",
-        action="store_true",
-        help="Enable the optional LLM-as-judge faithfulness score (slower, uses Ollama).",
-    )
-    parser.add_argument(
-        "--judge-model",
-        default=None,
-        help=(
-            "Model id for the judge (defaults to settings.ollama_model). For a "
-            "meaningful grade, pass a model larger than the pipeline's generation "
-            "model, e.g. llama3.1:8b."
-        ),
-    )
     parser.add_argument("--top-k", type=int, default=5, help="Retrieval top-k per question.")
     parser.add_argument(
         "--sweep-ef",
@@ -567,8 +451,6 @@ def _parse_args(argv: list[str] | None = None) -> EvalConfig:
         questions_path=args.questions,
         experiment=args.experiment,
         run_name=args.run_name,
-        use_judge=args.judge,
-        judge_model=args.judge_model,
         top_k=args.top_k,
         tracking_uri=args.tracking_uri,
         _extra={"sweep_ef": sweep_ef},
@@ -614,8 +496,6 @@ def _run_ef_sweep(base_cfg: EvalConfig, ef_values: list[int]) -> None:
             questions_path=base_cfg.questions_path,
             experiment=base_cfg.experiment,
             run_name=(base_cfg.run_name or "ef-sweep") + f"-ef{ef}",
-            use_judge=base_cfg.use_judge,
-            judge_model=base_cfg.judge_model,
             top_k=base_cfg.top_k,
             tracking_uri=base_cfg.tracking_uri,
             search_ef=ef,

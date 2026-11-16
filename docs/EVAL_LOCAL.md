@@ -35,12 +35,11 @@ is needed to run the eval.
    ```
 
    The startup log prints the resolved store (`MLflow tracking store:
-   http://127.0.0.1:5000`) and the run URL.
+   sqlite:///mlflow.db`).
 
-4. **View results** at `http://127.0.0.1:5000`:
+4. **View results** in the UI started in the quick reference (port 5001):
    - **Experiments → rag-local-eval** → run rows with metrics/params.
-   - **Traces** tab (`/experiments/<id>/traces?workflowType=genai`) → one
-     GenAI trace per question.
+   - **Traces** tab → one GenAI trace per question.
 
 To override for a single run (e.g. a throwaway file store) pass
 `--tracking-uri ...`; the flag always wins over `.env`.
@@ -59,7 +58,6 @@ Per question and in aggregate:
 - **avg_grounding_score** — the shared lexical grounding score.
 - **avg_confidence_score** — the pipeline's heuristic confidence.
 - **avg_latency_ms**.
-- **avg_judge_faithfulness** — only when `--judge` is used (see below).
 
 The thresholds in effect (`answer_grounding_threshold`,
 `answer_confidence_threshold`, `web_search_fallback_threshold`), the
@@ -107,35 +105,30 @@ is not the bottleneck.
   store the other major refuses to open.
 
 ## MLflow stores: pick one and stay consistent
+MLflow runs and traces are written to a **tracking store**, and the eval script and
+the UI must point at the **same** store, or the UI shows nothing.
 
-MLflow runs and traces are written to a **tracking store**, and the eval script
-and the UI/server must point at the **same** store or the UI will show nothing.
 The harness resolves the store in this order (first match wins):
-
 1. `--tracking-uri` flag
-2. `MLFLOW_TRACKING_URI` — set in `.env` (the configured default) or exported
+2. `MLFLOW_TRACKING_URI`, set in `.env` (the configured default: `sqlite:///mlflow.db`)
 3. fallback: local `./mlruns` file store
 
-The resolved store is logged at startup (`MLflow tracking store: ...`), so you
-can always see where a run went. Three stores are in play in this repo:
+The resolved store is logged at startup (`MLflow tracking store: ...`). Three options
+apply to this repo:
 
-- **Tracking server (`http://127.0.0.1:5000`)** — the configured default via
-  `.env`. Started with `uv run mlflow ui` (which also serves the web UI at the
-  same address). This is the only store that powers the **GenAI Traces** view
-  (`/experiments/<id>/traces?workflowType=genai`). The harness and the UI are
-  the same address, so they can't drift apart.
-- **File store (`./mlruns`)** — the fallback when `MLFLOW_TRACKING_URI` is unset.
-  Simplest for a quick offline loop; browse with `uv run mlflow ui` launched
-  from the project root (so it reads the same `./mlruns`).
-- **SQLite store (`sqlite:///mlflow.db`)** — a single `mlflow.db` file in the
-  project root; easy to reset (delete the file). Use it for both the run
-  (`--tracking-uri sqlite:///mlflow.db`) and the UI
-  (`uv run mlflow ui --backend-store-uri sqlite:///mlflow.db`).
+- **SQLite store (`sqlite:///mlflow.db`)**, the default. One file in the project root.
+  The eval writes runs, metrics, and GenAI traces here. Read it with
+  `uv run mlflow ui --port 5001 --backend-store-uri sqlite:///mlflow.db`. To reset,
+  delete the file.
+- **File store (`./mlruns`)**, the fallback when `MLFLOW_TRACKING_URI` is unset. Read
+  it with `uv run mlflow ui` from the project root.
+- **Tracking server (`http://127.0.0.1:<port>`)**, optional. Use it only if you run
+  `mlflow server` yourself and point `--tracking-uri` at it. Do not use port 5000 on
+  macOS (AirPlay Receiver).
 
-Whichever you choose, the run and whatever serves the UI must agree. Mixing them
-(e.g. a run written to `./mlruns` but a UI reading `mlflow.db`) is the most
-common reason runs "disappear." Pointing both at the server sidesteps this
-because there's a single address.
+The most common reason runs "disappear" is a mismatch: a run written to `./mlruns`
+while the UI reads `mlflow.db`. Check the startup line of the eval and the `--backend-store-uri`
+of the UI.
 
 ## GenAI traces
 
@@ -148,28 +141,92 @@ unavailable the eval falls back to a plain call and still runs. The file and
 SQLite stores record runs/metrics but the GenAI Traces UI is a server feature.
 
 ## Running the evaluation
+`scripts/eval_local.py` runs the question set in `eval/questions.jsonl` through the
+local pipeline (Ollama for generation and embeddings, local OpenSearch for retrieval)
+and logs each run to MLflow. The generation model is `OLLAMA_MODEL` (`.env`, default
+`llama3.2:1b`). Set it on the command line to compare models.
 
+### Clean run from scratch
+A result is only comparable to another if both started from the same state. Three
+things can change a result without any code change:
+
+- **A serverless shell.** A value such as `DEPLOYMENT_MODE=serverless` left by
+  `source .env.serverless-local` sends answers to Bedrock. The log then shows
+  `Serverless backends resolved`.
+- **The semantic cache.** Answers are cached in `rag-cache`. A cache hit replays an
+  earlier answer, possibly from another model.
+- **The corpus.** The local `rag-kb` index must hold the same documents each time.
+
+Procedure:
+
+1. **Clean shell.** Open a new terminal, or clear the variables a previous session
+   may have set:
+   ```bash
+   unset DEPLOYMENT_MODE BEDROCK_MODEL_OVERRIDE OPENSEARCH_ENDPOINT REDIS_ENDPOINT OLLAMA_MODEL
+   ```
+2. **Services.** Start OpenSearch and Redis, and check that OpenSearch answers:
+   ```bash
+   docker compose -f docker/docker-compose.yml up -d opensearch redis
+   curl -s localhost:9200/_cluster/health
+   ```
+3. **Models.** Pull the models the run uses:
+   ```bash
+   ollama pull llama3.2:1b
+   ollama pull nomic-embed-text:v1.5
+   ```
+4. **Reset the indexes.** This deletes the knowledge base and the cache:
+   ```bash
+   curl -s -X DELETE localhost:9200/rag-kb,rag-cache
+   ```
+5. **Reload the corpus.** This recreates `rag-kb` from the precomputed embeddings, with
+   6,878 documents:
+   ```bash
+   uv run python document_loaders/load_embeddings_from_json.py
+   ```
+6. **Run the eval.** Clear the cache before every run, and give each run a name that
+   says which model it used. Use a new experiment name for a new comparison so the
+   runs stay together in MLflow:
+   ```bash
+   curl -s -X DELETE localhost:9200/rag-cache
+   DEPLOYMENT_MODE=local OLLAMA_MODEL=llama3.2:1b uv run scripts/eval_local.py \
+     --experiment clean-eval --run-name clean-llama3.2-1b
+   ```
+7. **Check the log.** It must contain no `Serverless backends resolved` line, no
+   `Semantic cache hit` line, and no traceback. Then read the `RAG LOCAL EVAL SUMMARY`
+   block at the end.
+
+### Comparing two models
+Repeat steps 4 and 6 for each model, with the same experiment name and a different
+run name. Pull the second model first:
 ```bash
-# Deterministic run — lexical metrics only (fast, no extra tokens):
+ollama pull qwen2.5:0.5b
+curl -s -X DELETE localhost:9200/rag-cache
+DEPLOYMENT_MODE=local OLLAMA_MODEL=qwen2.5:0.5b uv run scripts/eval_local.py \
+  --experiment clean-eval --run-name clean-qwen2.5-0.5b
+```
+Do not skip step 4 between models. The cache from one model would otherwise answer
+questions for the other.
+
+### Viewing results in MLflow
+The eval writes to `sqlite:///mlflow.db` (set in `.env`). Start the UI on port 5001,
+because macOS uses port 5000 for AirPlay Receiver:
+```bash
+uv run mlflow ui --port 5001 --backend-store-uri sqlite:///mlflow.db
+```
+Open http://127.0.0.1:5001. Pick the experiment (for example `clean-eval`) and compare
+the runs in the table. Each run records its parameters, including `ollama_model`, and
+its metrics, including `pass_rate` and `avg_grounding_score`. The run list shows the
+GenAI traces for each question.
+
+### Command reference
+```bash
+# Deterministic run with the default model, logged to the configured store:
 uv run scripts/eval_local.py
-
-# Add the optional LLM-as-judge faithfulness score (slower, uses Ollama).
-# Judge with a model LARGER than the pipeline's generation model, otherwise the
-# grader is no stronger than the thing it grades and the score is meaningless:
-uv run scripts/eval_local.py --judge --judge-model llama3.1:8b
-
-# Custom question set / experiment name / run label:
+# Choose the questions, experiment, and run name:
 uv run scripts/eval_local.py --questions eval/questions.jsonl \
     --experiment my-eval --run-name baseline
-
-# Log into the SQLite store (so the SQLite-backed UI shows it):
-uv run scripts/eval_local.py --tracking-uri sqlite:///mlflow.db
-
-# Log runs AND GenAI traces into a running tracking server:
-uv run scripts/eval_local.py --tracking-uri http://127.0.0.1:5000
-# ...or set it once for the shell:
-export MLFLOW_TRACKING_URI=http://127.0.0.1:5000
-uv run scripts/eval_local.py
+# Log to a different store for one run:
+uv run scripts/eval_local.py --tracking-uri sqlite:///other.db
 ```
 
 Flags:
@@ -179,13 +236,30 @@ Flags:
 | `--questions`    | `eval/questions.jsonl`| Path to the JSONL question set.                      |
 | `--experiment`   | `rag-local-eval`      | MLflow experiment name.                              |
 | `--run-name`     | auto                  | Label the run so it's easy to find in the UI.        |
-| `--judge`        | off                   | Add the LLM-as-judge faithfulness score (uses Ollama)|
-| `--judge-model`  | `settings.ollama_model`| Override the judge model. Use a model larger than the generation model (e.g. `llama3.1:8b`); defaulting to the generation model logs a warning. |
 | `--top-k`        | `5`                   | Retrieval depth per question.                        |
-| `--tracking-uri` | flag → `MLFLOW_TRACKING_URI` → `./mlruns` | Where to log. Use `http://127.0.0.1:5000` for a server (needed for GenAI traces), or `sqlite:///mlflow.db`. |
+| `--tracking-uri` | flag → `MLFLOW_TRACKING_URI` → `./mlruns` | Where to log. `sqlite:///mlflow.db` is the default in `.env`. Do not use port 5000 on macOS. |
 
 Exit codes: `0` on success, `2` if the question file is missing or the `eval`
 extra (mlflow) is not installed.
+
+### Baseline: `llama3.2:1b`
+The default model's first clean deterministic run (`DEPLOYMENT_MODE=local`, empty
+`rag-cache`, no judge, 22 questions, MLflow run `baseline-llama3.2-1b`):
+
+| Metric | Value |
+|---|---|
+| pass_rate | 0.955 |
+| pass_rate (in_scope, out_of_scope, time_sensitive, unanswerable) | 1.000, 1.000, 1.000, 1.000 |
+| pass_rate (competitor) | 0.667 |
+| refusal_rate | 0.455 |
+| caveat_rate | 0.136 |
+| avg_grounding_score | 0.257 |
+| avg_confidence_score | 0.542 |
+| avg_latency_ms | 18786 |
+
+One failure: `competitor-003` expected an answer and the model refused. The run had no
+cache hits and no serverless backends. The latency is high compared with the earlier
+`llama3.2:3b` runs, so compare latency only between runs made under the same load.
 
 ## Browsing runs in the MLflow UI
 
@@ -202,11 +276,11 @@ uv run mlflow ui --backend-store-uri sqlite:///mlflow.db
 
 The server is long-running and blocks the terminal — start it in its own
 terminal and stop it with Ctrl-C. It is ready once it logs
-`Listening at: http://127.0.0.1:5000`. Earlier startup lines about security
+`Listening at: http://127.0.0.1:5001`. Earlier startup lines about security
 middleware and the job executor backend (`online_scoring_scheduler`,
 `trace_archival_scheduler`, etc.) are normal MLflow-3 messages, not errors.
 
-In the UI (`http://127.0.0.1:<port>`):
+In the UI (`http://127.0.0.1:5001`):
 
 1. Select the experiment (`rag-local-eval`) in the left sidebar.
 2. Each eval invocation is one **run** row — columns show the logged metrics
@@ -220,9 +294,9 @@ In the UI (`http://127.0.0.1:<port>`):
 | Symptom                                   | Cause / fix                                                                                     |
 |-------------------------------------------|-------------------------------------------------------------------------------------------------|
 | `[Errno 48] Address already in use`       | Port 5000 is taken — on macOS usually the AirPlay Receiver (Control Center). Use another port: `uv run mlflow ui --backend-store-uri sqlite:///mlflow.db --port 5001`, or disable System Settings → General → AirDrop & Handoff → AirPlay Receiver. |
-| UI opens but shows no runs                | UI and eval pointed at different stores. Point both at the same place, or point the eval at your server with `--tracking-uri http://127.0.0.1:5000`. The eval logs its resolved store at startup. |
-| Traces tab is empty / no GenAI traces     | Traces need a tracking **server**. Run with `--tracking-uri http://127.0.0.1:5000` (or `MLFLOW_TRACKING_URI`); file/SQLite stores don't serve the GenAI Traces view. |
-| Connection refused to `127.0.0.1:5000`    | No server is running there. Start one (`mlflow server --host 127.0.0.1 --port 5000 ...`) before pointing the eval at it, or use a file/SQLite store instead. On macOS, port 5000 may be AirPlay — use another port. |
+| UI opens but shows no runs                | UI and eval read different stores. Start the UI with `--backend-store-uri sqlite:///mlflow.db`, the file the eval writes to. The eval logs its resolved store at startup. |
+| Traces tab is empty                       | The UI must read the same store as the eval (`sqlite:///mlflow.db`). Confirm the eval run finished without errors. |
+| Connection refused to `127.0.0.1:5001`    | The UI is not running. Start it with the command in the quick reference. |
 | `mlflow is not installed`                 | Install the eval extra: `uv pip install -e '.[eval]'`.                                           |
 | DB/schema or alembic revision error on UI start | The `mlflow.db` was created by a different MLflow major. Stay on the pinned 3.x, or archive/delete `mlflow.db` to start fresh (loses prior runs). |
 | `Errored questions` in the summary        | Ollama/OpenSearch unreachable. Start Local Mode backends (see `docs/GETTING_STARTED.md`).       |
@@ -269,24 +343,12 @@ the substring-matching fixes (e.g. "renew", "storage", "dragon").
 numbers are only as meaningful as the questions. Add items that reflect real
 usage and known failure modes.
 
-## The LLM judge (`--judge`)
-
-Off by default. When enabled, each answer is scored for faithfulness to its
-retrieved context (0.0–1.0) by the configured Ollama model. It is the semantic
-counterpart to the cheap lexical grounding score. The judge is best-effort: any
-failure or unparseable response yields no score for that question (excluded from
-the mean) and never breaks the run. Keep deterministic (no-judge) runs for CI
-gates; use `--judge` for periodic deeper reads.
-
 ## Interpreting results
 
 - A drop in `pass_rate/out_of_scope` after a change means the topic gate got
   looser (more off-topic leakage).
 - A rise in `refusal_rate` on `in_scope` questions means retrieval or the
   grounding threshold is too aggressive.
-- `avg_grounding_score` vs `avg_judge_faithfulness` divergence indicates the
-  lexical check is mis-estimating (usually heavy paraphrasing) — useful when
-  deciding whether to raise/lower `answer_grounding_threshold`.
 
 ## Scope classifier comparison
 
@@ -391,7 +453,7 @@ Caveats:
 - `join_last_turn`: last user question joined to the question (one hop).
 - `join_recent_turns`: the last N user questions joined, where N is `--join-turns`
   or `FOLLOWUP_USER_TURNS` (code default 3; the local `.env` sets 10).
-- `condensed`: the standalone question from `llama3.2:3b` (the router's condenser).
+- `condensed`: the standalone question from the condenser model, which is `OLLAMA_MODEL` in local mode (`llama3.2:3b` when this run was done; see the note below).
 
 This run used the 26 cases that existed then: 12 one-hop follow-ups, 5 multi-hop
 follow-ups (two or more prior user turns), and 9 topic switches. Local Ollama and
@@ -420,8 +482,7 @@ stronger condenser model, `llama3.1:8b`, was also run on the 26-case set. It sco
 below the join on one-hop follow-ups (83.3%) and on multi-hop follow-ups (80%), so it
 was not adopted either.
 
-Caveats: the cases are hand-written and small. One case moves a rate by 4 to 11
-points. Results come from one run per prompt version.
+The condenser runs on `OLLAMA_MODEL` now. The results above used `llama3.2:3b`.
 
 ### Join depth (`--join-turns`)
 

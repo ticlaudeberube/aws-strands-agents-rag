@@ -175,7 +175,6 @@ class TestNodeConfig:
         """Test config validation."""
         config = NodeConfig(
             name="TopicChecker",
-            model="qwen2.5:0.5b",
             timeout_seconds=5,
             max_retries=2,
         )
@@ -183,7 +182,7 @@ class TestNodeConfig:
 
     def test_validate_config_fails_negative_timeout(self):
         """Test config validation fails with negative timeout."""
-        config = NodeConfig(name="Test", model="test", timeout_seconds=-1, max_retries=2)
+        config = NodeConfig(name="Test", timeout_seconds=-1, max_retries=2)
         assert config.validate() is False
 
     def test_update_config(self):

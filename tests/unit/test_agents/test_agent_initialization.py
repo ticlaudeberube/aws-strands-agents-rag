@@ -22,7 +22,7 @@ def settings():
     """Fixture providing test settings."""
     return Settings(
         ollama_host="http://localhost:11434",
-        ollama_model="qwen2.5:0.5b",
+        ollama_model="llama3.2:1b",
         ollama_embed_model="nomic-embed-text",
     )
 

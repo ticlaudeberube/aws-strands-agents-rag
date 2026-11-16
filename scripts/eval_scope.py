@@ -12,7 +12,8 @@ Methods:
 Usage:
     uv run python scripts/eval_scope.py --method keyword
     uv run python scripts/eval_scope.py --method all --embed-model all-minilm \
-        --llm-model llama3.2:1b --thresholds 0.3,0.35,0.4,0.45,0.5
+        --thresholds 0.3,0.35,0.4,0.45,0.5
+    # --llm-model defaults to OLLAMA_MODEL (fallback llama3.2:1b)
 
 The embedding threshold is swept on the same labeled set. Treat the best value
 as a starting point, and re-check it on a held-out set before changing the
@@ -220,9 +221,17 @@ def main() -> int:
         choices=["ollama", "bedrock", "ollama-client", "bedrock-client"],
         default="ollama",
     )
-    parser.add_argument("--llm-model", default="llama3.2:1b")
+    parser.add_argument(
+        "--llm-model",
+        default=None,
+        help="Ollama model for the LLM method. Defaults to OLLAMA_MODEL.",
+    )
     parser.add_argument("--thresholds", default="0.3,0.35,0.4,0.45,0.5")
     args = parser.parse_args()
+    if args.llm_model is None:
+        from src.config.settings import get_settings
+
+        args.llm_model = get_settings().ollama_model
 
     examples = load_examples(args.labels)
     print(f"{len(examples)} labeled questions from {args.labels.name}")

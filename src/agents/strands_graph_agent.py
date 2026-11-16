@@ -45,10 +45,9 @@ from src.tools import (
 
 logger = logging.getLogger(__name__)
 
-# Model that rewrites a follow-up into a standalone question. Chosen per mode:
-# a stronger local model than the generator, and the Bedrock model serverless
-# already uses for answers. Temperature 0 keeps the rewrite repeatable.
-CONDENSE_MODEL_LOCAL = "llama3.2:3b"
+# Model that rewrites a follow-up into a standalone question. Local mode uses
+# settings.ollama_model (OLLAMA_MODEL). Serverless uses the Bedrock model that
+# answers already use. Temperature 0 keeps the rewrite repeatable.
 CONDENSE_MODEL_SERVERLESS = "amazon.nova-lite-v1:0"
 CONDENSE_TEMPERATURE = 0.0
 CONDENSE_MAX_TOKENS = 64
@@ -561,7 +560,7 @@ def create_rag_graph(
     )
 
     condense_model = (
-        CONDENSE_MODEL_LOCAL if settings.deployment_mode == "local" else CONDENSE_MODEL_SERVERLESS
+        settings.ollama_model if settings.deployment_mode == "local" else CONDENSE_MODEL_SERVERLESS
     )
 
     def condenser(prompt: str) -> str:

@@ -4,21 +4,8 @@ This roadmap tracks follow-up work for PII handling, Bedrock Guardrails, and
 document chunking. It is an implementation checklist, not a claim that the
 system is compliant or that AWS behavior has been validated.
 
-## 1. Cached-answer output checks
-
-**Status:** Implemented and committed (`b6ebb32`).
-
-- Screen each query before semantic-cache lookup.
-- Run cached answers through the OUTPUT Guardrail using the current query and
-  cached source text.
-- Refuse a cache hit when it has no usable source text.
-- Verify Guardrail interventions and failures are surfaced safely.
-
-**Acceptance:** Guardrail tests cover safe cached answers, output interventions,
-missing cached sources, and API errors; targeted tests and lint pass.
-
-See [ANTI_HALLUCINATION.md](ANTI_HALLUCINATION.md) and
-[GETTING_STARTED.md](GETTING_STARTED.md#bedrock-guardrails-serverless).
+Items 1, 5, and 12 were closed or reframed and their numbers are not reused. The
+other numbers stay the same because other docs cite them.
 
 ## 2. Enforce Guardrail use for model inference
 
@@ -87,11 +74,6 @@ appropriate to the data classification.
 **Acceptance:** A repeatable test record identifies the Guardrail version,
 region, tested cases, observed actions, and any known gaps. Do not treat unit
 tests or Terraform validation as evidence of live service behavior.
-
-## 5. Tune denied-topic policy
-**Status:** Superseded. The Bedrock denied topic was removed; topic scope is
-enforced by the embedding scope gate (`src/agents/guardrails.py`, calibrated with
-`scripts/eval_scope.py`).
 
 ## 6. Define document-ingestion PII handling
 
@@ -190,40 +172,30 @@ route. Live serverless behavior is not validated; it waits on item 8.
 - Follow-up history depth: `FOLLOWUP_USER_TURNS` sets how many recent user
   questions the router joins. Code default 3; local `.env` and
   `.env.serverless-local` set 10, which measured 6 of 6 on long-history cases
-  against 2 of 6 at 3. The multi-hop condenser (`llama3.2:3b` local,
+  against 2 of 6 at 3. The multi-hop condenser (`OLLAMA_MODEL` local,
   `amazon.nova-lite-v1:0` serverless) is off (`CONDENSE_FOLLOWUPS = False`). On the 26-case eval, neither prompt
   version beat the simpler joins without a regression. Results and the decision
   are in [EVAL_LOCAL.md](EVAL_LOCAL.md#multi-hop-condenser-evaluation).
 
 ## 10. Strengthen the local eval loop
+**Status:** Not implemented. The LLM judge was removed. It was slow, used a weak
+judge model, and was not needed for the current decisions.
 
-**Status:** Not implemented.
+The local MLflow harness ([EVAL_LOCAL.md](EVAL_LOCAL.md)) works, but nothing runs
+the eval automatically.
 
-The local MLflow harness ([EVAL_LOCAL.md](EVAL_LOCAL.md)) works, but the judge
-defaults to a weak model and nothing runs the eval automatically.
-
-- **Stronger default judge.** `--judge-model` currently falls back to
-  `settings.ollama_model` (`llama3.2:3b` in code; the local `.env` sets
-  `qwen2.5:0.5b`), which is too small to grade
-  faithfulness reliably; the script only warns about it. Default the judge to a
-  larger model (e.g. `llama3.1:8b`), configurable through a setting or env var
-  so the pipeline's generation model can stay small. Document that the default
-  model must be pulled first (`ollama pull llama3.1:8b`).
-- **CI regression gate.** Run the deterministic (no-judge) eval and fail the
-  build when `pass_rate/out_of_scope` falls below a set floor.
+- **CI regression gate.** Run the deterministic eval and fail the build when
+  `pass_rate/out_of_scope` falls below a set floor.
   - Prerequisite: CI ([ci.yml](../.github/workflows/ci.yml)) runs no OpenSearch
-    or Ollama, and the eval needs both even without the judge. Pick one: add
-    OpenSearch and Ollama as CI services (slower, needs a seeded index and a
-    pulled model), run the gate in a separate scheduled or manual workflow, or
-    gate only on the scope check, which doesn't need generation (see
-    `scripts/eval_scope.py`).
+    or Ollama, and the eval needs both. Pick one: add OpenSearch and Ollama as CI
+    services (slower, needs a seeded index and a pulled model), run the gate in a
+    separate scheduled or manual workflow, or gate only on the scope check, which
+    doesn't need generation (see `scripts/eval_scope.py`).
   - Set the floor from a measured baseline run, not a guess, and record the
     baseline in [EVAL_LOCAL.md](EVAL_LOCAL.md).
 
-**Acceptance:** A judge run without `--judge-model` uses the stronger model and
-records it in the MLflow params. A CI or scheduled job fails when the
-out-of-scope pass rate drops below the documented floor, and passes on the
-current baseline.
+**Acceptance:** A CI or scheduled job fails when the out-of-scope pass rate drops
+below the documented floor, and passes on the current baseline.
 
 ## 11. Alert on Guardrail blocks
 **Status:** Metric implemented; no alarm or dashboard widget yet.
@@ -235,17 +207,16 @@ current baseline.
 **Acceptance:** A sustained rise in `answer/guardrail_blocked` raises an alarm,
 and the dashboard shows the block rate next to `answer/low_grounding`.
 
-## 12. Commit and review the scope-gate change
+## 12. Remove the tracked serverless env file that holds a Tavily key
+**Status:** Open. `.env.serverless-local` is tracked by git and contains a live
+`TAVILY_API_KEY`. The scope-gate and eval commits it used to track are done
+(`9a9703a`, `69588c8`).
 
-**Status:** Done. The scope gate and the security screen are committed in
-`9a9703a`. The follow-up history work and the eval scripts are committed in
-`69588c8`. Still modified and not committed: `.kiro/settings/mcp.json` (not part
-of this work) and `.env.serverless-local` (local settings). That file is tracked by git and holds a
-Tavily key: rotate the key and remove the file from git (`git rm --cached`) before
-committing changes to it.
+Removing the file from the index does not remove the key from git history, so the
+key must be rotated.
 
-**Acceptance:** `git log` shows the scope-gate and history commits, and `git status`
-lists only the files left out on purpose.
+**Acceptance:** The Tavily key is rotated. `.env.serverless-local` is ignored by
+`.gitignore` and untracked (`git ls-files .env.serverless-local` prints nothing).
 
 ## 13. Local guardrail parity
 
@@ -288,20 +259,31 @@ Only the command phrases use word boundaries now (`COMMAND_PHRASES` in
 contain `hack` or `disregard` as part of another word are not blocked.
 
 ## 15. Improve the local answer model
+**Status:** Default is `llama3.2:1b`, read from `OLLAMA_MODEL`. The latest clean
+benchmark favors `llama3.2:3b` on pass rate, at about 1.8 times the latency.
 
-**Status:** Not decided.
+Clean runs (`clean-eval` experiment, procedure in [EVAL_LOCAL.md](EVAL_LOCAL.md)),
+22 questions each:
 
-The local `.env` uses `qwen2.5:0.5b` for both fast and RAG generation (the code
-default is `llama3.2:3b`). In the
-end-to-end check, answers were weak: some rambled, and some repeated a citation
-preamble.
+| Model | Pass rate | Failures | Caveat rate | Grounding | Latency |
+|---|---|---|---|---|---|
+| `llama3.2:3b` | 0.955 | 1 (`competitor-003`) | 0.091 | 0.262 | 23.6 s |
+| `llama3.2:1b` | 0.909 | 2 | 0.136 | 0.237 | 13.4 s |
 
-- Compare a larger model (for example `llama3.1:8b` or `qwen2.5:3b`) on the
-  same queries for answer quality and time per answer on the target desktop.
+One run per model. The gap is about one question, which is within run-to-run noise.
+
+Still open:
+- Decide the default: `llama3.2:3b` for pass rate, or `llama3.2:1b` for latency.
+  Run each model again to measure the noise.
+- The query condenser uses `OLLAMA_MODEL`. On the 26-case eval, neither prompt
+  version beat the join baseline, so it stays off (`CONDENSE_FOLLOWUPS = False`).
+  See [EVAL_LOCAL.md](EVAL_LOCAL.md#multi-hop-condenser-evaluation). The per-node
+  presets in `src/agents/node_config.py` no longer carry a model field, because no
+  call path read it.
 - Keep the model choice in settings, so local and serverless can differ.
 
-**Acceptance:** A recorded comparison on the target desktop, with a chosen model
-and its latency per answer.
+**Acceptance:** A chosen default, backed by repeated clean runs, with its latency
+per answer recorded in [EVAL_LOCAL.md](EVAL_LOCAL.md).
 
 ## 16. Screen retrieved chunks for indirect prompt injection
 

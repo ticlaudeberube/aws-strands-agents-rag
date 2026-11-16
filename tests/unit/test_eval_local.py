@@ -2,7 +2,7 @@
 
 These cover the parts that must be correct for the eval numbers to mean
 anything — refusal/caveat detection, grading against expected behaviour, the
-aggregate summary, and the judge score parser — all without needing MLflow,
+aggregate summary — all without needing MLflow,
 Ollama, or Milvus.
 """
 
@@ -162,32 +162,8 @@ def test_summarize_excludes_errored_from_grading() -> None:
     assert agg["pass_rate"] == 1.0
 
 
-def test_summarize_includes_judge_when_present() -> None:
-    results = [
-        _result(id="a", judge_faithfulness=0.8),
-        _result(id="b", judge_faithfulness=0.6),
-    ]
-    agg = eval_local.summarize(results)
-    assert abs(agg["avg_judge_faithfulness"] - 0.7) < 1e-9
-
-
 def test_summarize_empty_is_empty() -> None:
     assert eval_local.summarize([]) == {}
-
-
-# ---- judge score parsing --------------------------------------------------
-
-
-def test_parse_score_variants() -> None:
-    assert eval_local._parse_score("0.8") == 0.8
-    assert eval_local._parse_score("The score is 0.5.") == 0.5
-    assert eval_local._parse_score("1") == 1.0
-    assert eval_local._parse_score("2.5") == 1.0  # clamped to [0,1]
-    # The regex captures the unsigned magnitude ("3" from "-3"), then clamps to
-    # 1.0. A negative judge score is malformed; clamping to the valid range is
-    # an acceptable, non-crashing outcome.
-    assert eval_local._parse_score("-3") == 1.0
-    assert eval_local._parse_score("no number here") is None
 
 
 # ---- tier inference -------------------------------------------------------

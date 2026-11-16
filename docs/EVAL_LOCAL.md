@@ -11,28 +11,24 @@ dependency group and is imported lazily; nothing here is importable from the
 runtime/serverless path.
 
 ## Quick reference (recommended setup)
-
-The project is configured so the eval logs **runs and GenAI traces to a local
-MLflow server by default** — no flags needed.
+The project logs runs and GenAI traces to a local SQLite store by default. No server
+is needed to run the eval.
 
 1. **One-time:** `.env` sets the tracking target (copied from `.env.example`):
-
    ```bash
-   MLFLOW_TRACKING_URI=http://127.0.0.1:5000
+   MLFLOW_TRACKING_URI=sqlite:///mlflow.db
    ```
-
    The harness loads `.env` automatically. Comment this line out to fall back to
    the local `./mlruns` file store instead.
-
-2. **Start the MLflow server** (serves the UI at the same address). Port 5000
-   collides with macOS AirPlay Receiver — use another port if needed:
-
+   Do not use `http://127.0.0.1:5000`. On macOS, port 5000 belongs to the AirPlay
+   Receiver, which answers the eval with HTTP 403 (`get-by-name ... failed with error
+   code 403`).
+2. **View the runs** in the MLflow UI on a free port, reading the same store:
    ```bash
-   uv run mlflow ui --port 5000          # or --port 5001 to avoid AirPlay
-   # for a persistent SQLite-backed store add: --backend-store-uri sqlite:///mlflow.db
+   uv run mlflow ui --port 5001 --backend-store-uri sqlite:///mlflow.db
    ```
 
-3. **Run the eval** (picks up the server from `.env` — no `--tracking-uri`):
+3. **Run the eval** (uses the store set in `.env`; no `--tracking-uri` needed):
 
    ```bash
    uv run scripts/eval_local.py --run-name my-change
